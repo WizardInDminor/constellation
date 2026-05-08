@@ -8,7 +8,7 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "sqlite-vec>=0.1.6",
     "pydantic>=2.10.0",
-    "pydantic-settings>=2.7.0",
+    "pydantic-settings[dotenv]>=2.7.0",
     "anthropic>=0.42.0",
     "voyageai>=0.3.3",
     "httpx>=0.28.0",
@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.8.0",
 ]
 
