@@ -53,7 +53,7 @@ display the response, the DB file is created with all tables present.
 
 ## Phase 1 — Core CRUD
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-08)
 
 **Goal:** Full data layer with no AI involvement yet. Establish the repository
 and Pydantic model patterns that everything else builds on.

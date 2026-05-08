@@ -1,0 +1,85 @@
+import pytest
+
+from app.models import EdgeCreate, FleetingCreate, PermanentCreate
+from app.repositories import edge_repo, node_repo
+
+
+async def _two_nodes(db):
+    a = await node_repo.create_fleeting(db, FleetingCreate(title="A", content="body a"))
+    b = await node_repo.create_fleeting(db, FleetingCreate(title="B", content="body b"))
+    return a, b
+
+
+async def test_create_and_get(db):
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    assert edge.id
+    assert edge.from_id == a.id
+    assert edge.to_id == b.id
+    assert edge.type == "SUPPORTS"
+
+    fetched = await edge_repo.get_by_id(db, edge.id)
+    assert fetched is not None
+    assert fetched.id == edge.id
+
+
+async def test_get_missing_returns_none(db):
+    assert await edge_repo.get_by_id(db, "ghost") is None
+
+
+async def test_delete(db):
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="ELABORATES"))
+    assert await edge_repo.delete(db, edge.id) is True
+    assert await edge_repo.get_by_id(db, edge.id) is None
+
+
+async def test_delete_missing_returns_false(db):
+    assert await edge_repo.delete(db, "ghost") is False
+
+
+async def test_get_neighbors(db):
+    a, b = await _two_nodes(db)
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS", note="why"))
+    neighbors = await edge_repo.get_neighbors(db, a.id)
+    assert len(neighbors) == 1
+    assert neighbors[0].node.id == b.id
+    assert neighbors[0].direction == "outgoing"
+    assert neighbors[0].edge_note == "why"
+
+
+async def test_get_neighbors_incoming(db):
+    a, b = await _two_nodes(db)
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    neighbors = await edge_repo.get_neighbors(db, b.id)
+    assert len(neighbors) == 1
+    assert neighbors[0].direction == "incoming"
+
+
+async def test_get_neighbors_filtered_by_type(db):
+    a, b = await _two_nodes(db)
+    c = await node_repo.create_fleeting(db, FleetingCreate(title="C", content="c"))
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=c.id, type="CONTRADICTS"))
+    neighbors = await edge_repo.get_neighbors(db, a.id, edge_type="SUPPORTS")
+    assert len(neighbors) == 1
+    assert neighbors[0].node.id == b.id
+
+
+async def test_duplicate_edge_raises(db):
+    from sqlite3 import IntegrityError
+
+    a, b = await _two_nodes(db)
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    with pytest.raises(IntegrityError):
+        await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+
+
+async def test_invalid_type_raises(db):
+    from sqlite3 import IntegrityError
+
+    a, b = await _two_nodes(db)
+    # model_construct bypasses Pydantic validation so the DB CHECK constraint is exercised
+    bad = EdgeCreate.model_construct(from_id=a.id, to_id=b.id, type="INVALID")
+    with pytest.raises(IntegrityError):
+        await edge_repo.create(db, bad)

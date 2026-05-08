@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1 import config, edges, nodes, sources, tags
 from app.core.config import get_settings
 from app.core.lifespan import lifespan
 
@@ -19,6 +20,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_v1_prefix = "/api/v1"
+app.include_router(nodes.router, prefix=_v1_prefix)
+app.include_router(edges.router, prefix=_v1_prefix)
+app.include_router(sources.router, prefix=_v1_prefix)
+app.include_router(tags.router, prefix=_v1_prefix)
+app.include_router(config.router, prefix=_v1_prefix)
 
 
 @app.get("/health")
