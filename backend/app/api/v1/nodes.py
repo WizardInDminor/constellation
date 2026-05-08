@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.core.deps import DB
+from app.core.deps import DB, EmbedProvider
 from app.models import (
     FleetingCreate,
     LiteratureCreate,
@@ -16,6 +16,7 @@ from app.models import (
     StructureCreate,
 )
 from app.repositories import edge_repo, node_repo
+from app.services import embedding_service
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
@@ -33,24 +34,31 @@ async def create_fleeting(data: FleetingCreate, db: DB) -> NodeDetail:
 
 
 @router.post("/permanent", status_code=201)
-async def create_permanent(data: PermanentCreate, db: DB) -> NodeDetail:
+async def create_permanent(data: PermanentCreate, db: DB, provider: EmbedProvider) -> NodeDetail:
     try:
-        return await node_repo.create_permanent(db, data)
+        node = await node_repo.create_permanent(db, data)
     except IntegrityError as exc:
         raise HTTPException(422, str(exc))
+    await embedding_service.embed_or_queue(db, node.id, provider)
+    # Re-fetch so the response reflects the embedding_model written by embed_or_queue
+    return await node_repo.get_by_id(db, node.id) or node
 
 
 @router.post("/literature", status_code=201)
-async def create_literature(data: LiteratureCreate, db: DB) -> NodeDetail:
+async def create_literature(data: LiteratureCreate, db: DB, provider: EmbedProvider) -> NodeDetail:
     try:
-        return await node_repo.create_literature(db, data)
+        node = await node_repo.create_literature(db, data)
     except IntegrityError as exc:
         raise HTTPException(422, str(exc))
+    await embedding_service.embed_or_queue(db, node.id, provider)
+    return await node_repo.get_by_id(db, node.id) or node
 
 
 @router.post("/structure", status_code=201)
-async def create_structure(data: StructureCreate, db: DB) -> NodeDetail:
-    return await node_repo.create_structure(db, data)
+async def create_structure(data: StructureCreate, db: DB, provider: EmbedProvider) -> NodeDetail:
+    node = await node_repo.create_structure(db, data)
+    await embedding_service.embed_or_queue(db, node.id, provider)
+    return await node_repo.get_by_id(db, node.id) or node
 
 
 # ── parameterised paths ───────────────────────────────────────────────────────
@@ -91,10 +99,14 @@ async def get_node(node_id: str, db: DB) -> NodeDetail:
 
 
 @router.patch("/{node_id}")
-async def update_node(node_id: str, data: NodeUpdate, db: DB) -> NodeDetail:
+async def update_node(
+    node_id: str, data: NodeUpdate, db: DB, provider: EmbedProvider
+) -> NodeDetail:
     node = await node_repo.update(db, node_id, data)
     if node is None:
         raise HTTPException(404, "Node not found")
+    if {"title", "content"} & data.model_fields_set and node.type != "fleeting":
+        await embedding_service.embed_or_queue(db, node.id, provider)
     return node
 
 

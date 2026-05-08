@@ -17,3 +17,15 @@ async def get(db: aiosqlite.Connection, key: str) -> ConfigEntry | None:
     if row is None:
         return None
     return ConfigEntry(key=row["key"], value=row["value"], updated_at=row["updated_at"])
+
+
+async def set(db: aiosqlite.Connection, key: str, value: str) -> ConfigEntry:
+    await db.execute(
+        """INSERT INTO config(key, value, updated_at) VALUES (?, ?, datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+        (key, value),
+    )
+    await db.commit()
+    entry = await get(db, key)
+    assert entry is not None
+    return entry

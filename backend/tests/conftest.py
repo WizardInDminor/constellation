@@ -3,13 +3,57 @@ import aiosqlite
 from starlette.testclient import TestClient
 
 
+# ---------------------------------------------------------------------------
+# Fake providers — no network calls, deterministic 1024-dim output
+# ---------------------------------------------------------------------------
+
+
+class FakeEmbeddingProvider:
+    model_id = "fake-embed"
+    dimensions = 1024
+
+    async def embed(self, text: str) -> list[float]:
+        return [0.0] * 1024
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 1024 for _ in texts]
+
+
+class FakeGenerationProvider:
+    model_id = "fake-gen"
+
+    async def complete(self, messages, system, max_tokens=1024) -> str:
+        return "fake response"
+
+
+@pytest.fixture
+def fake_embed_provider():
+    return FakeEmbeddingProvider()
+
+
+@pytest.fixture
+def fake_gen_provider():
+    return FakeGenerationProvider()
+
+
+# ---------------------------------------------------------------------------
+# HTTP client fixture — full lifespan, fake providers injected
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     import app.core.config as cfg
+    import app.core.lifespan as lsp
 
     cfg.get_settings.cache_clear()
     monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
     cfg.get_settings.cache_clear()
+
+    async def _fake_load_providers(db, settings):
+        return FakeEmbeddingProvider(), FakeGenerationProvider()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load_providers)
 
     from app.main import app as fastapi_app
 
@@ -19,9 +63,13 @@ def client(tmp_path, monkeypatch):
     cfg.get_settings.cache_clear()
 
 
+# ---------------------------------------------------------------------------
+# Async DB fixture — for repository-level tests, migrations applied, vec loaded
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture
-async def db(tmp_path, monkeypatch) -> aiosqlite.Connection:
-    """Async DB fixture for repository-level tests — migrations applied, vec loaded."""
+async def db(tmp_path, monkeypatch):
     import app.core.config as cfg
 
     cfg.get_settings.cache_clear()

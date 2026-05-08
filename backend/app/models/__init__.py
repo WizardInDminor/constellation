@@ -1,5 +1,5 @@
 from app.models.common import Paginated
-from app.models.config import ConfigEntry
+from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.tag import TagCreate, TagRef, TagUpdate
 from app.models.node import (
     FleetingCreate,
@@ -35,6 +35,7 @@ NodeDetail.model_rebuild()
 __all__ = [
     "Paginated",
     "ConfigEntry",
+    "ConfigUpdate",
     "TagCreate",
     "TagRef",
     "TagUpdate",

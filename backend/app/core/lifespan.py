@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -5,8 +6,9 @@ from pathlib import Path
 import aiosqlite
 from fastapi import FastAPI
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.database import open_database
+from app.providers.base import EmbeddingProvider, GenerationProvider
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,59 @@ async def _run_migrations(db: aiosqlite.Connection) -> None:
         logger.info("Applied migration: %s", sql_file.name)
 
 
+async def _load_providers(
+    db: aiosqlite.Connection,
+    settings: Settings,
+) -> tuple[EmbeddingProvider, GenerationProvider]:
+    """Instantiate the active embedding and generation providers from the config table.
+
+    Fails loud at startup if a cloud provider is configured but its API key is absent.
+    """
+    from app.repositories import config_repo
+    from app.providers.voyage import VoyageEmbeddingProvider
+    from app.providers.anthropic_gen import AnthropicGenerationProvider
+
+    embed_name = (await config_repo.get(db, "embedding_provider")).value
+    embed_model = (await config_repo.get(db, "embedding_model")).value
+    gen_name = (await config_repo.get(db, "generation_provider")).value
+    gen_model = (await config_repo.get(db, "generation_model")).value
+
+    if embed_name == "voyage":
+        if not settings.voyage_api_key:
+            raise RuntimeError(
+                "embedding_provider is 'voyage' but VOYAGE_API_KEY is not set in .env"
+            )
+        embed_provider: EmbeddingProvider = VoyageEmbeddingProvider(
+            api_key=settings.voyage_api_key, model=embed_model
+        )
+    else:
+        raise RuntimeError(f"Unknown embedding_provider: {embed_name!r}")
+
+    if gen_name == "anthropic":
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "generation_provider is 'anthropic' but ANTHROPIC_API_KEY is not set in .env"
+            )
+        gen_provider: GenerationProvider = AnthropicGenerationProvider(
+            api_key=settings.anthropic_api_key, model=gen_model
+        )
+    else:
+        raise RuntimeError(f"Unknown generation_provider: {gen_name!r}")
+
+    return embed_provider, gen_provider
+
+
+async def _embedding_worker(app: FastAPI) -> None:
+    from app.services import embedding_service
+
+    while True:
+        await asyncio.sleep(10)
+        try:
+            await embedding_service.drain_jobs(get_db(), app.state.embedding_provider)
+        except Exception as exc:
+            logger.error("Embedding worker error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _db
@@ -55,6 +110,25 @@ async def lifespan(app: FastAPI):
     _db = await open_database(settings.db_path)
     await _run_migrations(_db)
     logger.info("Database ready: %s", settings.db_path)
+
+    embed_provider, gen_provider = await _load_providers(_db, settings)
+    app.state.embedding_provider = embed_provider
+    app.state.generation_provider = gen_provider
+    logger.info(
+        "Providers loaded: embed=%s gen=%s",
+        embed_provider.model_id,
+        gen_provider.model_id,
+    )
+
+    worker = asyncio.create_task(_embedding_worker(app))
+
     yield
+
+    worker.cancel()
+    try:
+        await worker
+    except asyncio.CancelledError:
+        pass
+
     await _db.close()
     _db = None
