@@ -26,6 +26,9 @@ node_modules/
 # Generated
 frontend/src/lib/api-types.ts
 
+# MkDocs
+site/
+
 # OS
 .DS_Store
 Thumbs.db

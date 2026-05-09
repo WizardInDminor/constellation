@@ -1,0 +1,75 @@
+site_name: Constellation
+site_description: A personal zettelkasten built as a typed knowledge graph with first-class AI integration.
+site_author: Matt Sicard
+repo_url: https://github.com/placeholder/constellation
+repo_name: constellation
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - autorefs
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+docs_dir: docs-site
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+    - Capture: user-guide/capture.md
+    - Processing: user-guide/processing.md
+    - Linking: user-guide/linking.md
+    - Search: user-guide/search.md
+    - Asking Your Notes: user-guide/asking.md
+    - Graph View: user-guide/graph.md
+    - Sources: user-guide/sources.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Decision Log: architecture/decisions.md
+    - Tech Stack: architecture/stack.md
+  - API:
+    - API Reference: api/index.md
