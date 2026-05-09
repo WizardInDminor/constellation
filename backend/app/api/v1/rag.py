@@ -4,10 +4,16 @@ import re
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
-from app.core.deps import DB, GenProvider
-from app.models.rag import SuggestPermanentResponse
+from app.core.deps import DB, EmbedProvider, GenProvider
+from app.models.rag import (
+    LinkSuggestion,
+    RagRequest,
+    RagResponse,
+    SuggestLinksResponse,
+    SuggestPermanentResponse,
+)
 from app.repositories import node_repo
-from app.services import generation_service
+from app.services import embedding_service, generation_service, rag_service
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -70,3 +76,126 @@ async def suggest_permanent(
         import logging
         logging.getLogger(__name__).error("Unparseable AI response: %r", raw)
         raise HTTPException(500, "AI returned unparseable response") from exc
+
+
+_SUGGEST_LINKS_SYSTEM = """\
+You are a zettelkasten assistant. The user will give you a source note and up to 10 \
+candidate notes from their knowledge base. Your job is to identify genuine conceptual \
+connections — not superficial keyword overlap.
+
+For each candidate where a real relationship exists, return it with the most fitting \
+edge type and a one-sentence rationale. Skip candidates where no meaningful connection \
+exists. It is better to return two strong suggestions than eight weak ones.
+
+Edge types:
+  SUPPORTS     — the candidate provides evidence or argument for the source
+  CONTRADICTS  — the candidate is in tension with the source
+  ELABORATES   — the candidate zooms in on one aspect of the source
+  ANALOGOUS_TO — structural similarity across domains
+  QUESTIONS    — the candidate raises a problem with or about the source
+  INSPIRED_BY  — looser creative or associative link
+  COLLECTS     — the source (a structure note) includes the candidate in its map
+
+Return ONLY valid JSON — no markdown fences, no commentary:
+{"suggestions": [{"node_id": "...", "edge_type": "...", "rationale": "..."}, ...]}\
+"""
+
+
+@router.post("/suggest-links/{node_id}")
+async def suggest_links(
+    node_id: str, db: DB, embed_provider: EmbedProvider, gen_provider: GenProvider
+) -> SuggestLinksResponse:
+    node = await node_repo.get_by_id(db, node_id)
+    if node is None:
+        raise HTTPException(404, "Node not found")
+    if node.type == "fleeting":
+        raise HTTPException(
+            422, "Fleeting notes cannot be used as link suggestion sources"
+        )
+
+    # Embed source inline — always fresh so we don't depend on a stored vector
+    vector = await embed_provider.embed(f"{node.title}\n\n{node.content}")
+    candidate_ids = await embedding_service.find_similar(
+        db, vector, exclude_id=node_id, limit=10
+    )
+    if not candidate_ids:
+        return SuggestLinksResponse(source_id=node_id, suggestions=[])
+
+    # Fetch full content for each candidate
+    candidates = []
+    for cid in candidate_ids:
+        c = await node_repo.get_by_id(db, cid)
+        if c is not None:
+            candidates.append(c)
+
+    candidate_blocks = "\n\n".join(
+        f"[{i + 1}] node_id: {c.id}\n    Title: {c.title}\n    Content: {c.content}"
+        for i, c in enumerate(candidates)
+    )
+    user_msg = (
+        f"SOURCE NOTE:\nTitle: {node.title}\nContent: {node.content}"
+        f"\n\nCANDIDATES:\n{candidate_blocks}"
+    )
+
+    raw = await generation_service.complete(
+        gen_provider, [{"role": "user", "content": user_msg}], _SUGGEST_LINKS_SYSTEM, max_tokens=1024
+    )
+
+    try:
+        cleaned = raw.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if match:
+            cleaned = match.group()
+        data = json.loads(cleaned)
+        raw_suggestions = data.get("suggestions", [])
+    except (json.JSONDecodeError, KeyError) as exc:
+        import logging
+        logging.getLogger(__name__).error("Unparseable suggest-links response: %r", raw)
+        raise HTTPException(500, "AI returned unparseable response") from exc
+
+    # Enrich with title/type from the candidates we already have in memory
+    candidates_by_id = {c.id: c for c in candidates}
+    suggestions: list[LinkSuggestion] = []
+    for s in raw_suggestions:
+        cid = s.get("node_id", "")
+        c = candidates_by_id.get(cid)
+        if c is None:
+            continue
+        try:
+            suggestions.append(
+                LinkSuggestion(
+                    node_id=cid,
+                    node_title=c.title,
+                    node_type=c.type,
+                    edge_type=s["edge_type"],
+                    rationale=s.get("rationale", ""),
+                )
+            )
+        except (ValidationError, KeyError):
+            continue
+
+    return SuggestLinksResponse(source_id=node_id, suggestions=suggestions)
+
+
+@router.post("/query")
+async def rag_query(
+    body: RagRequest, db: DB, embed_provider: EmbedProvider, gen_provider: GenProvider
+) -> RagResponse:
+    if not body.query.strip():
+        raise HTTPException(400, "Query cannot be empty")
+    try:
+        return await rag_service.query(
+            db,
+            embed_provider,
+            gen_provider,
+            body.query,
+            expansion_depth=body.depth,
+        )
+    except rag_service.EmbedUnavailableError as exc:
+        raise HTTPException(503, "Embedding service unavailable") from exc
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("RAG query failed: %s", exc)
+        raise HTTPException(500, "RAG query failed") from exc

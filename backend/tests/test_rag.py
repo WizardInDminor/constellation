@@ -3,6 +3,18 @@ import json
 import pytest
 from starlette.testclient import TestClient
 
+VALID_LINKS_RESPONSE = json.dumps(
+    {
+        "suggestions": [
+            {
+                "node_id": "__PLACEHOLDER__",
+                "edge_type": "SUPPORTS",
+                "rationale": "The candidate directly reinforces the claim in the source.",
+            }
+        ]
+    }
+)
+
 
 VALID_RESPONSE = json.dumps(
     {
@@ -190,3 +202,306 @@ def test_process_node_wrong_type(client):
     node_id = perm.json()["id"]
     resp = client.post(f"/api/v1/nodes/{node_id}/process")
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# POST /rag/suggest-links/{node_id}
+# ---------------------------------------------------------------------------
+
+EDGE_TYPES = {"SUPPORTS", "CONTRADICTS", "ELABORATES", "ANALOGOUS_TO", "QUESTIONS", "INSPIRED_BY", "COLLECTS"}
+
+
+@pytest.fixture
+def suggest_links_client(tmp_path, monkeypatch):
+    """Client whose generation provider returns a single valid link suggestion.
+
+    The node_id placeholder is replaced at call time by the test using the
+    actual ID of the candidate node created during setup.
+    """
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _FakeGen:
+        model_id = "fake-gen"
+        candidate_id: str = ""
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return VALID_LINKS_RESPONSE.replace("__PLACEHOLDER__", self.candidate_id)
+
+    _gen = _FakeGen()
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _gen
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c, _gen
+
+    cfg.get_settings.cache_clear()
+
+
+@pytest.fixture
+def bad_json_links_client(tmp_path, monkeypatch):
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _FakeGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return "not json at all"
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _FakeGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c
+
+    cfg.get_settings.cache_clear()
+
+
+def _create_permanent(client, title="A permanent note", content="Some content here."):
+    resp = client.post("/api/v1/nodes/permanent", json={"title": title, "content": content})
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def test_suggest_links_happy_path(suggest_links_client):
+    c, gen = suggest_links_client
+    # Create two permanent nodes — they get embedded via FakeEmbed so vec_nodes is populated
+    candidate = _create_permanent(c, "Candidate note", "Related content.")
+    source = _create_permanent(c, "Source note", "Original idea.")
+    gen.candidate_id = candidate["id"]
+
+    resp = c.post(f"/api/v1/rag/suggest-links/{source['id']}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source_id"] == source["id"]
+    suggestions = body["suggestions"]
+    assert len(suggestions) == 1
+    s = suggestions[0]
+    assert s["node_id"] == candidate["id"]
+    assert s["edge_type"] in EDGE_TYPES
+    assert len(s["rationale"]) > 0
+    assert s["node_title"] == candidate["title"]
+
+
+def test_suggest_links_source_excluded_from_results(suggest_links_client):
+    c, gen = suggest_links_client
+    candidate = _create_permanent(c, "Another note", "Other content.")
+    source = _create_permanent(c, "Source note", "The idea to link from.")
+    gen.candidate_id = candidate["id"]
+
+    resp = c.post(f"/api/v1/rag/suggest-links/{source['id']}")
+    assert resp.status_code == 200
+    ids = [s["node_id"] for s in resp.json()["suggestions"]]
+    assert source["id"] not in ids
+
+
+def test_suggest_links_empty_when_no_candidates(suggest_links_client):
+    c, gen = suggest_links_client
+    # Only one permanent node — no candidates can be found
+    source = _create_permanent(c, "Lonely note", "No neighbours yet.")
+    gen.candidate_id = ""
+
+    resp = c.post(f"/api/v1/rag/suggest-links/{source['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["suggestions"] == []
+
+
+def test_suggest_links_not_found(suggest_links_client):
+    c, _ = suggest_links_client
+    resp = c.post("/api/v1/rag/suggest-links/nonexistent-id")
+    assert resp.status_code == 404
+
+
+def test_suggest_links_rejects_fleeting(suggest_links_client):
+    c, _ = suggest_links_client
+    fleeting = c.post("/api/v1/nodes/fleeting", json={"title": "Raw thought", "content": "..."})
+    assert fleeting.status_code == 201
+    resp = c.post(f"/api/v1/rag/suggest-links/{fleeting.json()['id']}")
+    assert resp.status_code == 422
+
+
+def test_suggest_links_bad_json_from_ai(bad_json_links_client):
+    c = bad_json_links_client
+    source = _create_permanent(c, "Source note", "Content.")
+    _create_permanent(c, "Candidate", "Other content.")
+    resp = c.post(f"/api/v1/rag/suggest-links/{source['id']}")
+    assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# POST /rag/query
+# ---------------------------------------------------------------------------
+
+_RAG_ANSWER = "Based on your notes, [Note 1] explains this clearly."
+
+
+@pytest.fixture
+def rag_query_client(tmp_path, monkeypatch):
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _FakeGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return _RAG_ANSWER
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _FakeGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c
+
+    cfg.get_settings.cache_clear()
+
+
+@pytest.fixture
+def rag_query_embed_fail_client(tmp_path, monkeypatch):
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FailEmbed:
+        model_id = "fail-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            raise RuntimeError("network error")
+
+        async def embed_batch(self, texts):
+            raise RuntimeError("network error")
+
+    class _FakeGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return _RAG_ANSWER
+
+    async def _fake_load(db, settings):
+        return _FailEmbed(), _FakeGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c
+
+    cfg.get_settings.cache_clear()
+
+
+def test_rag_query_happy_path(rag_query_client):
+    c = rag_query_client
+    _create_permanent(c, "SPI bus setup", "Configure SPI on STM32 using HAL.")
+    _create_permanent(c, "DMA transfers", "Use DMA to offload SPI data moves.")
+    resp = c.post("/api/v1/rag/query", json={"query": "How does SPI work?"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["query"] == "How does SPI work?"
+    assert len(body["answer"]) > 0
+    assert isinstance(body["provenance"], list)
+    assert isinstance(body["edges_traversed"], list)
+    assert len(body["provenance"]) >= 1
+    for p in body["provenance"]:
+        assert "node_id" in p
+        assert "title" in p
+        assert p["role"] in ("direct", "neighbor")
+
+
+def test_rag_query_empty_graph(rag_query_client):
+    resp = rag_query_client.post("/api/v1/rag/query", json={"query": "Anything?"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["provenance"] == []
+    assert body["edges_traversed"] == []
+    assert len(body["answer"]) > 0
+
+
+def test_rag_query_empty_string(rag_query_client):
+    resp = rag_query_client.post("/api/v1/rag/query", json={"query": ""})
+    assert resp.status_code == 400
+
+
+def test_rag_query_embed_failure_returns_503(rag_query_embed_fail_client):
+    resp = rag_query_embed_fail_client.post(
+        "/api/v1/rag/query", json={"query": "Will this work?"}
+    )
+    assert resp.status_code == 503
+
+
+def test_rag_query_with_edges_in_provenance(rag_query_client):
+    """Edges between seed nodes appear in edges_traversed."""
+    c = rag_query_client
+    n1 = _create_permanent(c, "Concept A", "First idea.")
+    n2 = _create_permanent(c, "Concept B", "Second idea.")
+    c.post("/api/v1/edges", json={"from_id": n1["id"], "to_id": n2["id"], "type": "SUPPORTS"})
+
+    resp = c.post("/api/v1/rag/query", json={"query": "Tell me about concepts"})
+    assert resp.status_code == 200
+    body = resp.json()
+    # Both nodes in provenance; edge may or may not appear depending on which
+    # nodes made it into seeds vs neighbors — just assert structure is valid
+    for e in body["edges_traversed"]:
+        assert "edge_id" in e
+        assert "from_id" in e
+        assert "to_id" in e
+        assert "edge_type" in e

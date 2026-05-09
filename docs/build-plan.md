@@ -139,9 +139,34 @@ use this for one full week of capture before moving on.
 
 ---
 
+## Phase 3.5 — Capture tooling & process page resilience
+
+**Status:** ✅ Complete (2026-05-09)
+
+**Goal:** Small quality-of-life additions before Phase 4: a terminal capture tool,
+a systemd service so the backend starts automatically, and draft-state persistence
+on the process page so navigating away doesn't lose work.
+
+**Deliverables:**
+
+- `con` CLI tool (`backend/app/cli/capture.py`) — posts fleeting notes from the
+  terminal. Three modes: quick positional arg, explicit `-t`/`-c` flags, interactive
+  prompt. Installed as a `[project.scripts]` entry point. See ADR-017.
+- `backend/constellation.service` — systemd user unit that starts uvicorn on login.
+  `cp constellation.service ~/.config/systemd/user/ && systemctl --user enable --now constellation`.
+- Process page (`/inbox/process/[id]`) persists AI candidate suggestions to
+  `sessionStorage` keyed by node ID. On mount, restores draft if present instead of
+  calling the API again. Cleared on successful acceptance or explicit "Re-generate".
+
+**Definition of done:** `con "test thought"` captures a fleeting note from the
+terminal; the backend starts automatically on login; navigating away from the process
+page and back restores the previous suggestions.
+
+---
+
 ## Phase 4 — Linking (the constellation grows)
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-09)
 
 **Goal:** The graph develops typed structure. AI suggests links you didn't
 think of.

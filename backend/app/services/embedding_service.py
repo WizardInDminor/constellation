@@ -102,6 +102,48 @@ async def queue_reembed_all(db: aiosqlite.Connection, target_model: str) -> int:
     return len(rows)
 
 
+async def find_similar(
+    db: aiosqlite.Connection,
+    vector: list[float],
+    *,
+    exclude_id: str,
+    limit: int = 10,
+) -> list[str]:
+    """Return node IDs of the nearest neighbours, excluding exclude_id."""
+    packed = _pack_vector(vector)
+    cursor = await db.execute(
+        "SELECT node_id FROM vec_nodes"
+        " WHERE embedding MATCH ? AND k = ?"
+        " AND node_id != ?"
+        " ORDER BY distance",
+        (packed, limit + 1, exclude_id),
+    )
+    rows = await cursor.fetchall()
+    return [r["node_id"] for r in rows][:limit]
+
+
+async def search_similar(
+    db: aiosqlite.Connection,
+    vector: list[float],
+    *,
+    limit: int = 10,
+) -> list[str]:
+    """Return node IDs of the nearest neighbours for a query vector.
+
+    Unlike find_similar(), no node is excluded — this is for search queries
+    that have no associated node ID.
+    """
+    packed = _pack_vector(vector)
+    cursor = await db.execute(
+        "SELECT node_id FROM vec_nodes"
+        " WHERE embedding MATCH ? AND k = ?"
+        " ORDER BY distance",
+        (packed, limit),
+    )
+    rows = await cursor.fetchall()
+    return [r["node_id"] for r in rows]
+
+
 async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> None:
     """Drain up to 10 pending embedding jobs. Called by the background worker."""
     cursor = await db.execute(

@@ -47,12 +47,20 @@ export default async function InboxPage() {
                 <span className="font-medium text-sm">{node.title}</span>
                 <span className="text-xs text-gray-400">{timeAgo(node.created_at)}</span>
               </div>
-              <Link
-                href={`/inbox/process/${node.id}`}
-                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-              >
-                Process →
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link
+                  href={`/nodes/${node.id}`}
+                  className="text-sm text-gray-400 hover:text-gray-700"
+                >
+                  Edit
+                </Link>
+                <Link
+                  href={`/inbox/process/${node.id}`}
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  Process →
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

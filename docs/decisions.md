@@ -490,6 +490,312 @@ suggestions to be available for the user. Two UX options: (a) auto-call
 
 ---
 
+## ADR-017 — Terminal CLI capture tool design
+
+**Status:** Accepted
+
+**Context:** Phase 3.5 adds a terminal CLI (`con`) so the user can capture fleeting notes
+without opening the browser. Several design choices were needed: how to install the command,
+how to reach the backend, what to do when the user provides no arguments, and what the
+interactive fallback looks like.
+
+**Decision:**
+
+- Entry point defined as a `[project.scripts]` in `pyproject.toml`:
+  `con = "app.cli.capture:main"`. Installed via `uv sync` into the virtual environment;
+  no separate package needed.
+- Backend URL read from `CONSTELLATION_API_URL` env var, defaulting to
+  `http://localhost:8000`. This matches how `.env` is already used in the project and
+  avoids hard-coding a localhost assumption.
+- Three invocation modes in priority order:
+  1. `-t` / `-c` flags — explicit title and content.
+  2. Positional argument — first argument becomes the title (no content).
+  3. No arguments — interactive: prompt for title, then content (blank line to end).
+- HTTP calls use `httpx` (already a project dependency) in synchronous mode. The CLI
+  is a thin shell tool that doesn't need the async machinery of the application.
+- On connection error or timeout, print a clear message to stderr and exit non-zero.
+  On HTTP error, print the status code and body to stderr.
+- On success, print `<title>  [<id>]` to stdout — enough to confirm capture and copy the
+  ID if needed.
+
+**Rationale:**
+
+- `[project.scripts]` is the idiomatic Python entry point pattern — `uv sync` installs
+  it automatically and the user gets a real PATH binary.
+- `CONSTELLATION_API_URL` as the env var name is explicit and scoped to this project,
+  consistent with other env vars already in `.env.example`.
+- Interactive fallback (no args) makes the tool useful from a keybinding launcher
+  (e.g., rofi, dmenu) where you can't easily type flags.
+- Synchronous `httpx` is appropriate: CLI tools are sequential by nature, and the
+  async startup overhead would be visible on every invocation.
+
+**Consequences:**
+
+- `con` requires the backend to be running. If offline, it prints a clear error rather
+  than queuing locally. A local queue could be added later but is deferred.
+- The binary is only available inside the venv; users who want it globally need to add
+  the venv `bin/` directory to their PATH or use `uv run con`.
+
+---
+
+## ADR-018 — Node picker uses FTS5, not vector search
+
+**Status:** Accepted
+
+**Context:** The edge creation UI needs a node picker: the user types text and sees a
+list of matching notes to connect to. Two options existed: (a) use the vector similarity
+search infrastructure already in place, or (b) use FTS5 full-text search.
+
+**Decision:** FTS5 with prefix matching (`word*`) via a new `GET /nodes/search?q=` route.
+Returns `list[NodeRef]`, excludes fleeting nodes, limited to 50 results.
+
+**Rationale:**
+
+- The full search suite (`/search/semantic`, `/search/hybrid`) belongs to Phase 5 and
+  carries more infrastructure (embedding on the fly, RRF fusion, pagination) than a
+  picker needs.
+- A picker's primary job is label matching — the user typed "SPI" and wants notes whose
+  title contains "SPI". FTS5 excels at this; vector search would return thematically
+  related notes regardless of the typed string, which is wrong UX for a picker.
+- Adding a lightweight FTS5 endpoint keeps Phase 4 self-contained without pulling Phase 5
+  work forward.
+
+**Consequences:**
+
+- The node picker does not find semantically related notes the user can't partially spell.
+  That is acceptable: the AI link suggestion (`suggest-links`) fills the "find connections
+  I didn't think of" role; the picker fills the "I know what I want to connect to" role.
+- The `/nodes/search` route is intentionally narrow (no pagination, NodeRef only). If it
+  needs to grow, the Phase 5 search suite supersedes it.
+
+---
+
+## ADR-019 — Fleeting notes excluded from link targets
+
+**Status:** Accepted
+
+**Context:** When creating edges or using the node picker, should fleeting notes appear
+as valid targets?
+
+**Decision:** No. `GET /nodes/search` filters `type != 'fleeting'`, and `POST /rag/suggest-links`
+returns 422 for fleeting source nodes.
+
+**Rationale:**
+
+- Fleeting notes are transient inbox items. They may be decomposed into multiple permanent
+  notes, discarded entirely, or significantly rewritten during processing.
+- A permanent note linked to a fleeting note would point to a moving target — the link
+  becomes meaningless or misleading once the fleeting note is processed.
+- The value of the graph comes from stable, atomic permanent nodes. Allowing links to
+  fleeting notes would pollute the graph with provisional structure.
+
+**Consequences:**
+
+- Users cannot manually link two permanent notes to a common fleeting note before
+  processing it. This edge case is acceptable — the workflow is: process first, then link.
+- If a user wants to track that a permanent note originated from a specific fleeting note,
+  they can navigate to the fleeting note from the inbox and accept the process workflow.
+
+---
+
+## ADR-020 — Suggest-links results not persisted client-side
+
+**Status:** Accepted
+
+**Context:** The process page (`/inbox/process/[id]`) persists AI candidate suggestions to
+`sessionStorage` because the suggestions take several seconds to generate and navigating
+away would discard them. The same question arose for suggest-links suggestions on the
+node detail page.
+
+**Decision:** Suggest-links results are not persisted. Navigating away from the node detail
+page discards the suggestion list.
+
+**Rationale:**
+
+- `suggest-links` is triggered on-demand by a button click, not auto-called on page load.
+  The user explicitly requested it and is actively reviewing it — they're unlikely to
+  navigate away mid-review.
+- Regenerating link suggestions is fast relative to process suggestions: it's a single
+  API call with no blocking upstream steps. A 3–5 second re-run is not meaningfully
+  disruptive.
+- The process page draft state exists to protect work in a multi-step form flow (edit
+  title, edit content, accept/reject) that takes several minutes. The suggest-links UI
+  is a simple accept/dismiss list with no editing — there is less to lose.
+- `sessionStorage` per node ID would accumulate stale entries as the user browses.
+  The cost of regenerating outweighs the storage management overhead.
+
+**Consequences:**
+
+- Navigating away and back will trigger a new API call if the user clicks "Suggest
+  connections" again. Acceptable at personal tool scale.
+
+---
+
+## ADR-021 — RRF fusion parameters: k=60, N=10 per source, top-8 into context
+
+**Status:** Accepted
+
+**Context:** The hybrid search endpoint and RAG pipeline both need a Reciprocal Rank Fusion
+implementation. Three values needed decisions: the RRF constant k, the number of candidates
+fetched from each retrieval source, and how many candidates flow into the RAG context assembler.
+
+**Decision:**
+- k = 60 (standard RRF constant from Cormack & Clarke 2009)
+- N = 10 results fetched from each of semantic and fulltext paths before fusion
+- Top 8 merged candidates pass into RAG context as "seed" nodes (full content)
+- Up to 12 additional graph-expanded neighbors pass in as "neighbor" nodes (summary only)
+
+**Rationale:**
+- k=60 is empirically well-validated across many IR benchmarks; no domain-specific reason to deviate.
+- N=10 per source gives RRF enough signal to reward nodes that rank well in both channels without
+  over-fetching.
+- 8 seeds × ~200 words + 12 neighbors × ~50 words ≈ 2200 words ≈ 2800 tokens — well inside
+  claude-sonnet-4-6's 200K context window even at personal tool scale.
+
+**Consequences:**
+- RRF is a pure function of rank position (`rrf_merge` in `search_service.py`) — easy to unit-test
+  without DB.
+- If retrieval quality demands it, k can be tuned independently of N or context limits.
+
+---
+
+## ADR-022 — Context assembly: seeds get full content, neighbors get summary-or-excerpt
+
+**Status:** Accepted
+
+**Context:** The RAG context window contains two tiers of nodes: seed candidates (direct search
+hits) and graph-expanded neighbors. Both tiers require different depth of content to be useful
+to the model.
+
+**Decision:** Seed nodes receive their full `content` field. Neighbor nodes receive their `summary`
+field if populated, else the first 200 characters of `content` followed by `…`. Edge annotations
+(type + note) between nodes that both appear in context are appended to the source node's block.
+
+**Rationale:**
+- Seeds are the nodes the query directly matched — full content is warranted.
+- Neighbors provide topological context ("this note connects to that one") not primary retrieval.
+  Summary-or-excerpt conveys enough for the model to mention them in provenance without blowing
+  the context budget.
+- Edge annotations ("→ SUPPORTS Note 3") give the model relationship information without requiring
+  it to infer connectivity from content alone.
+
+**Consequences:**
+- Nodes without a `summary` fall back to a 200-char excerpt; this is fine until the embedding
+  pipeline populates summaries more consistently.
+- Context quality improves as users fill in node summaries over time.
+
+---
+
+## ADR-023 — Non-streaming RAG response
+
+**Status:** Accepted
+
+**Context:** `POST /rag/query` calls `gen_provider.complete()` and returns the full answer at once.
+Streaming (SSE or chunked transfer) would reduce perceived latency for long answers.
+
+**Decision:** Non-streaming for Phase 5. The response is returned in one piece after generation
+completes.
+
+**Rationale:**
+- ADR-013 established that `TestClient` (the test harness) does not handle streaming responses
+  cleanly. Adding streaming would require revisiting the test infrastructure.
+- For a personal tool with short atomic notes, answers are typically 100–300 words — latency
+  is acceptable.
+- Streaming adds frontend complexity (SSE reader, partial-state rendering) that is not warranted
+  until latency becomes a user pain point.
+
+**Consequences:**
+- Revisit in Phase 7 (or when model response times warrant it). The `GenerationProvider` protocol's
+  `complete()` method can be augmented with a `stream()` variant at that point.
+
+---
+
+## ADR-024 — xdg-open via asyncio.create_subprocess_exec, stderr logged, fire-and-forget
+
+**Status:** Accepted
+
+**Context:** `GET /sources/{id}/open` needs to launch the user's default application for a URL
+or `file://` path. The backend must not block indefinitely waiting for the application to close.
+
+**Decision:** Use `asyncio.create_subprocess_exec("xdg-open", url)` with a 5-second
+`wait_for` on `communicate()` to capture stderr. The HTTP response returns 200 as soon as
+xdg-open exits (it exits immediately after spawning the target app). stderr is logged at
+WARNING level. `FileNotFoundError` (xdg-open absent from PATH) returns HTTP 500.
+
+The `_open_url(url)` helper is extracted as a module-level coroutine so tests can monkeypatch it
+without subprocess involvement.
+
+**Rationale:**
+- `xdg-open` is the standard Linux launcher — consistent with the systemd service already in use.
+- A 5-second wait is generous for xdg-open itself (not the target app) and prevents silent hangs.
+- Logging stderr surfaces issues like "no application associated with this file type" without
+  failing the HTTP call — the file still exists, the user can copy the path.
+- The monkeypatching seam keeps tests fast and hermetic.
+
+**Consequences:**
+- Only works on Linux with xdg-open in PATH. Acceptable — this is a Linux-only tool.
+- The HTTP 200 response does not confirm the target application launched successfully, only that
+  xdg-open was invoked. The WARNING log is the observable signal for failures.
+
+---
+
+## ADR-025 — Source creation inline in IntentionalCaptureDialog
+
+**Status:** Accepted
+
+**Context:** When creating a literature note in IntentionalCaptureDialog, the user must associate
+a source. If no matching source exists, they need a way to create one without losing the in-progress
+capture dialog state.
+
+**Decision:** A "New source" collapsible section lives inside IntentionalCaptureDialog. When
+expanded, it shows an inline mini-form (title, type, url). On submit, `POST /sources` is called,
+the new source is added to the picker list, and auto-selected. The full source form (author,
+published_at) is available on the `/sources` page.
+
+**Rationale:**
+- Navigating to `/sources/new` would discard the capture dialog state (title, content, tags
+  already filled in). Inline creation avoids this entirely.
+- The mini-form covers the fields needed at capture time (title, type, url). Author and
+  publication date are optional enrichments that can be added later from the sources list.
+- A collapsible section keeps the dialog compact by default.
+
+**Consequences:**
+- The dialog's source picker must refresh its list after inline creation.
+- The mini-form intentionally omits author and published_at — users who want those fields
+  immediately must use `/sources` directly.
+
+---
+
+## ADR-026 — Citation format: [Note N] notation with frontend-side ID substitution
+
+**Status:** Accepted
+
+**Context:** RAG answers need inline citations that link back to source nodes. Two options:
+(a) the backend parses the AI response and returns structured citation objects, or (b) the
+backend returns the raw answer text and a provenance array; the frontend does the substitution.
+
+**Decision:** The system prompt instructs the model to cite as `[Note N]`, where N matches
+the numbered notes in the context block. The backend returns the raw answer string plus an
+ordered `provenance` array. The frontend regex-replaces `[Note N]` with a markdown link
+`[Note N](/nodes/{provenance[N-1].node_id})` before passing the string to `react-markdown`.
+
+**Rationale:**
+- Backend parsing of AI-generated citation text is fragile — the model may vary its citation
+  format. Delegating substitution to the frontend means a regex at render time, not a parse
+  at generation time.
+- The provenance array is independently useful (the "Sources used" panel) regardless of whether
+  the model cited every note. Decoupling provenance from inline citations means the panel is
+  always complete even if the model omitted some `[Note N]` markers.
+- A regex pre-pass on the markdown string before `react-markdown` is simpler than a custom
+  remark plugin.
+
+**Consequences:**
+- If the model uses `[Note 2]` in the text but provenance has only 1 entry, the regex produces
+  a broken link. This is acceptable — it signals a model formatting issue, not data loss.
+- No custom remark plugin needed; `react-markdown` is used as-is.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

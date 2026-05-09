@@ -1,11 +1,17 @@
 # Constellation
 
-A personal knowledge graph built on Luhmann's slip-box principles, modernized
-as a typed graph with first-class AI integration. Atomic notes, typed edges,
-hybrid retrieval, RAG queries grounded in your own thinking.
+A personal zettelkasten built as a typed knowledge graph with first-class AI
+integration. Notes are atomic. Edges are typed and directional (SUPPORTS,
+CONTRADICTS, ELABORATES, etc.). Every non-fleeting note is embedded at write
+time and indexed in both a vector store (sqlite-vec) and a full-text engine
+(FTS5). From that foundation the system does two things that most note tools
+don't: it finds non-obvious connections between your notes automatically, and
+it lets you ask questions that are answered by synthesizing across your own
+writing — with citations back to the specific notes that contributed.
 
-Single-user. Local-first data. Optional cloud AI providers (Voyage for
-embeddings, Anthropic Claude for generation) with a local Ollama fallback.
+Single-user. Local-first data (one SQLite file). Cloud AI via Voyage
+(embeddings) and Anthropic Claude (generation), with a local Ollama fallback
+planned for Phase 7.
 
 ## What's here
 
@@ -20,6 +26,41 @@ embeddings, Anthropic Claude for generation) with a local Ollama fallback.
 
 If you're orienting yourself, read `CLAUDE.md` first, then skim
 `docs/decisions.md` to understand why things are the way they are.
+
+## Features
+
+**Capture**
+- Quick fleeting-note capture from the browser (Ctrl+K) or terminal (`con "thought"`)
+- Intentional capture dialog (Shift+Ctrl+K) for permanent and literature notes with tag assignment
+- Systemd user service so the backend starts automatically on login
+
+**Process**
+- Inbox view lists unprocessed fleeting notes oldest-first
+- AI-assisted decomposition: Claude suggests 1–3 atomic permanent notes per fleeting note
+- Draft state persisted to `sessionStorage` so navigating away doesn't lose work
+
+**Link**
+- Typed, directional edges with an optional "why this edge exists" note
+- AI link suggestions: semantically similar candidates evaluated by Claude with edge-type reasoning
+- Node detail view shows incoming and outgoing edges grouped by type; click any to walk the graph
+
+**Search**
+- `POST /search/hybrid` — Reciprocal Rank Fusion over vector similarity + FTS5 (default)
+- `POST /search/semantic` — pure vector similarity
+- `POST /search/fulltext` — FTS5 keyword search; works offline, no API call
+- Search UI at `/search` with mode toggle; fulltext is one click from hybrid
+
+**RAG queries**
+- `POST /rag/query` — embeds query → hybrid search → graph expansion (depth-1 BFS) → context assembly → Claude synthesis
+- Answer returned with `[Note N]` citations; frontend renders them as links back to source notes
+- Provenance panel shows which notes contributed and which graph edges were traversed
+- Query UI at `/ask` — the primary payoff of the system
+
+**Source management**
+- Sources (datasheets, books, articles, etc.) linked to literature notes
+- `GET /sources/{id}/open` launches `xdg-open` on the URL/file path
+- Inline source creation inside the capture dialog; no navigation required
+- Sources list at `/sources` with detail panel, "Open file" / "Open in browser" / "Copy path"
 
 ## Prerequisites
 
@@ -45,16 +86,24 @@ cd backend
 uv sync
 uv run uvicorn app.main:app --reload          # serves on :8000; migrations run on first start
 
-# 3. Frontend (in a second terminal)
+# 3. (Optional) Run backend as a systemd user service instead
+cp constellation.service ~/.config/systemd/user/
+systemctl --user enable --now constellation   # starts on login, no manual uvicorn needed
+
+# 4. Frontend (in a second terminal)
 cd frontend
 pnpm install
 pnpm types                                    # requires backend running; generates TS types
 pnpm dev                                      # serves on :3000
 
-# 4. (Optional) Local AI mode
+# 5. (Optional) Terminal capture — available after uv sync
+con "thought to capture"                      # posts a fleeting note from anywhere
+con -t "Title" -c "Content"                   # explicit flags
+# Needs the backend running. Add backend/.venv/bin to PATH or use `uv run con`.
+
+# 6. (Optional) Local AI mode — Phase 7, not yet wired
 ollama pull mxbai-embed-large
 ollama pull llama3.2
-# then toggle providers in the app's settings page
 ```
 
 Open http://localhost:3000 to use the app.
@@ -94,8 +143,24 @@ the same repo as the code.
 
 ## Project status
 
-Currently in Phase 0 of the build plan. See `docs/build-plan.md` for what's
-in scope at each phase and what's deliberately deferred.
+Phases 0–5 complete. 159 backend tests passing.
+
+| Phase | Status | What it delivered |
+|-------|--------|-------------------|
+| 0 — Foundation | ✅ | Repo skeleton, DB, migrations, both dev servers |
+| 1 — Core CRUD | ✅ | Full data layer, all repository and API routes |
+| 2 — Embeddings | ✅ | Provider abstraction, auto-embed on write, embedding job queue |
+| 3 — Capture & process | ✅ | Fleeting capture, inbox, AI-assisted decomposition into permanents |
+| 3.5 — CLI & resilience | ✅ | `con` terminal tool, systemd service, session-draft persistence |
+| 4 — Linking | ✅ | Edge creation UI, AI link suggestions, neighbor browsing |
+| 5 — Search & RAG | ✅ | Hybrid search, `/ask` RAG query UI, source management |
+| 6 — Visualization | ⏳ | Force-directed graph view (`react-force-graph`), node/edge colors, filters |
+| 7 — Local provider | ⏳ | Ollama embedding + generation; offline mode via settings |
+
+**Up next (Phase 6):** a force-directed graph view at `/graph` — see the full constellation,
+filter by tag or edge type, click nodes to open them. Backend will expose `GET /graph/data`
+returning a filtered node/edge payload sized for visualization. The BFS traversal in
+`graph_service.py` is already the engine; the main work is the frontend canvas.
 
 ## License
 

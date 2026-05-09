@@ -23,6 +23,35 @@ type FormValues = {
   candidates: CandidateField[];
 };
 
+function draftKey(nodeId: string) {
+  return `constellation:process-draft:${nodeId}`;
+}
+
+function saveDraft(nodeId: string, candidates: CandidateField[]) {
+  try {
+    sessionStorage.setItem(draftKey(nodeId), JSON.stringify(candidates));
+  } catch {
+    // sessionStorage unavailable — silent fallback
+  }
+}
+
+function loadDraft(nodeId: string): CandidateField[] | null {
+  try {
+    const raw = sessionStorage.getItem(draftKey(nodeId));
+    return raw ? (JSON.parse(raw) as CandidateField[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(nodeId: string) {
+  try {
+    sessionStorage.removeItem(draftKey(nodeId));
+  } catch {
+    // ignore
+  }
+}
+
 export default function ProcessPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -41,22 +70,57 @@ export default function ProcessPage() {
   const watchedCandidates = watch("candidates");
   const acceptedCount = watchedCandidates.filter((c) => c.accepted).length;
 
+  // Persist draft whenever candidates change
+  useEffect(() => {
+    if (watchedCandidates.length > 0) {
+      saveDraft(nodeId, watchedCandidates);
+    }
+  }, [nodeId, watchedCandidates]);
+
+  async function regenerate() {
+    clearDraft(nodeId);
+    setLoading(true);
+    setError(null);
+    try {
+      const suggestions = await suggestPermanent(nodeId);
+      replace(
+        suggestions.candidates.map((c) => ({
+          title: c.title,
+          content: c.content,
+          summary: c.summary ?? "",
+          accepted: true,
+        })),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     async function load() {
       try {
-        const [node, suggestions] = await Promise.all([
-          getNode(nodeId),
-          suggestPermanent(nodeId),
-        ]);
-        setFleeting(node);
-        replace(
-          suggestions.candidates.map((c) => ({
-            title: c.title,
-            content: c.content,
-            summary: c.summary ?? "",
-            accepted: true,
-          })),
-        );
+        const draft = loadDraft(nodeId);
+        if (draft) {
+          const node = await getNode(nodeId);
+          setFleeting(node);
+          replace(draft);
+        } else {
+          const [node, suggestions] = await Promise.all([
+            getNode(nodeId),
+            suggestPermanent(nodeId),
+          ]);
+          setFleeting(node);
+          replace(
+            suggestions.candidates.map((c) => ({
+              title: c.title,
+              content: c.content,
+              summary: c.summary ?? "",
+              accepted: true,
+            })),
+          );
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
@@ -84,6 +148,7 @@ export default function ProcessPage() {
         ),
       );
       await markNodeProcessed(nodeId);
+      clearDraft(nodeId);
       router.push("/inbox");
       router.refresh();
     } catch (err) {
@@ -96,6 +161,7 @@ export default function ProcessPage() {
     setSaving(true);
     try {
       await markNodeProcessed(nodeId);
+      clearDraft(nodeId);
       router.push("/inbox");
       router.refresh();
     } catch (err) {
@@ -133,6 +199,13 @@ export default function ProcessPage() {
           ← Inbox
         </Link>
         <h2 className="text-lg font-semibold">Process note</h2>
+        <button
+          type="button"
+          onClick={regenerate}
+          className="ml-auto text-xs text-gray-400 hover:text-indigo-600"
+        >
+          Re-generate
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

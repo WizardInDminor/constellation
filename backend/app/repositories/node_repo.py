@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,6 +48,27 @@ async def _fetch_full(db: aiosqlite.Connection, node_id: str) -> NodeDetail | No
         incoming_edges=incoming,
         tags=tags,
     )
+
+
+async def _fetch_tags_bulk(
+    db: aiosqlite.Connection, node_ids: list[str]
+) -> dict[str, list[TagRef]]:
+    """Fetch tags for multiple nodes in a single query. Returns {node_id: [TagRef]}."""
+    if not node_ids:
+        return {}
+    placeholders = ",".join("?" * len(node_ids))
+    cursor = await db.execute(
+        f"SELECT nt.node_id, t.id, t.name, t.color"  # noqa: S608
+        f" FROM node_tags nt JOIN tags t ON t.id = nt.tag_id"
+        f" WHERE nt.node_id IN ({placeholders})"
+        f" ORDER BY t.name",
+        node_ids,
+    )
+    rows = await cursor.fetchall()
+    result: dict[str, list[TagRef]] = defaultdict(list)
+    for r in rows:
+        result[r["node_id"]].append(TagRef(id=r["id"], name=r["name"], color=r["color"]))
+    return result
 
 
 async def _create_node(
@@ -143,6 +165,8 @@ async def list_nodes(
         (type_, page_size, offset),
     )
     rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
     items = [
         NodeSummary(
             id=r["id"],
@@ -152,10 +176,62 @@ async def list_nodes(
             created_at=r["created_at"],
             updated_at=r["updated_at"],
             processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
         )
         for r in rows
     ]
     return items, total
+
+
+async def search_nodes(
+    db: aiosqlite.Connection, *, q: str, limit: int = 10
+) -> list["NodeRef"]:
+    from app.models import NodeRef
+
+    # Build FTS5 prefix-match query: each token gets a trailing * for prefix search
+    import re as _re
+    fts_query = " ".join(tok + "*" for tok in _re.findall(r"[A-Za-z0-9]+", q) if tok)
+    if not fts_query:
+        return []
+    cursor = await db.execute(
+        """SELECT n.id, n.title, n.type
+           FROM nodes_fts f
+           JOIN nodes n ON n.rowid = f.rowid
+           WHERE f.nodes_fts MATCH ?
+             AND n.deleted_at IS NULL
+             AND n.type != 'fleeting'
+           ORDER BY f.rank
+           LIMIT ?""",
+        (fts_query, limit),
+    )
+    rows = await cursor.fetchall()
+    return [NodeRef(id=r["id"], title=r["title"], type=r["type"]) for r in rows]
+
+
+async def fts_search(db: aiosqlite.Connection, *, q: str, limit: int = 10) -> list[str]:
+    """Full-text search via FTS5. Returns node IDs ordered by relevance (best first).
+
+    Includes all non-deleted node types, including fleeting — callers that want to
+    exclude a type should filter the returned IDs against a subsequent fetch.
+    """
+    import re as _re
+    # Keep only alphanumeric tokens; strip punctuation that FTS5 treats as syntax
+    tokens = _re.findall(r"[A-Za-z0-9]+", q)
+    fts_query = " ".join(tok + "*" for tok in tokens if tok)
+    if not fts_query:
+        return []
+    cursor = await db.execute(
+        """SELECT n.id
+           FROM nodes_fts f
+           JOIN nodes n ON n.rowid = f.rowid
+           WHERE f.nodes_fts MATCH ?
+             AND n.deleted_at IS NULL
+           ORDER BY f.rank
+           LIMIT ?""",
+        (fts_query, limit),
+    )
+    rows = await cursor.fetchall()
+    return [r["id"] for r in rows]
 
 
 async def list_inbox(db: aiosqlite.Connection) -> list[NodeSummary]:
@@ -166,6 +242,8 @@ async def list_inbox(db: aiosqlite.Connection) -> list[NodeSummary]:
            ORDER BY created_at ASC""",
     )
     rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
     return [
         NodeSummary(
             id=r["id"],
@@ -175,6 +253,7 @@ async def list_inbox(db: aiosqlite.Connection) -> list[NodeSummary]:
             created_at=r["created_at"],
             updated_at=r["updated_at"],
             processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
         )
         for r in rows
     ]

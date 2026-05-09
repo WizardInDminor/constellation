@@ -27,6 +27,7 @@ class NodeSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     processed_at: datetime | None = None
+    tags: list[TagRef] = []
 
 
 class NodeDetail(BaseModel):

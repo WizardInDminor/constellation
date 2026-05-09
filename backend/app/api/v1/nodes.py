@@ -9,6 +9,7 @@ from app.models import (
     LiteratureCreate,
     NeighborResult,
     NodeDetail,
+    NodeRef,
     NodeSummary,
     NodeUpdate,
     Paginated,
@@ -26,6 +27,15 @@ router = APIRouter(prefix="/nodes", tags=["nodes"])
 @router.get("/inbox")
 async def get_inbox(db: DB) -> list[NodeSummary]:
     return await node_repo.list_inbox(db)
+
+
+@router.get("/search")
+async def search_nodes(
+    db: DB,
+    q: Annotated[str, Query(min_length=1)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[NodeRef]:
+    return await node_repo.search_nodes(db, q=q, limit=limit)
 
 
 @router.post("/fleeting", status_code=201)

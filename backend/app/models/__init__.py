@@ -1,5 +1,15 @@
 from app.models.common import Paginated
-from app.models.rag import PermanentCandidate, SuggestPermanentResponse
+from app.models.search import SearchRequest, SearchResponse, SearchResult
+from app.models.rag import (
+    EdgeTraversed,
+    LinkSuggestion,
+    NodeUsed,
+    PermanentCandidate,
+    RagRequest,
+    RagResponse,
+    SuggestLinksResponse,
+    SuggestPermanentResponse,
+)
 from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.tag import TagCreate, TagRef, TagUpdate
 from app.models.node import (
@@ -62,4 +72,13 @@ __all__ = [
     "SourceUpdate",
     "PermanentCandidate",
     "SuggestPermanentResponse",
+    "LinkSuggestion",
+    "SuggestLinksResponse",
+    "RagRequest",
+    "RagResponse",
+    "NodeUsed",
+    "EdgeTraversed",
+    "SearchRequest",
+    "SearchResponse",
+    "SearchResult",
 ]
