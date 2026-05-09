@@ -45,6 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/sources" className="text-sm text-gray-600 hover:text-gray-900">
             Sources
           </Link>
+          <Link href="/ingest" className="text-sm text-gray-600 hover:text-gray-900">
+            Import
+          </Link>
           <Link href="/ask" className="text-sm font-medium text-blue-600 hover:text-blue-800">
             Ask
           </Link>

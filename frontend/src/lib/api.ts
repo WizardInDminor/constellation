@@ -22,6 +22,11 @@ export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
 export type GraphNodeRef = components["schemas"]["GraphNodeRef"];
 export type GraphEdgeRef = components["schemas"]["GraphEdgeRef"];
+export type IngestDocumentResponse = components["schemas"]["IngestDocumentResponse"];
+export type IngestSourceCreate = components["schemas"]["IngestSourceCreate"];
+export type ChunkResult = components["schemas"]["ChunkResult"];
+export type LiteratureCandidate = components["schemas"]["LiteratureCandidate"];
+export type PendingIngestResponse = components["schemas"]["PendingIngestResponse"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -198,6 +203,26 @@ export function searchHybrid(query: string, limit = 20): Promise<SearchResponse>
 // Graph
 export function getGraphData(includeFlecting = true): Promise<GraphData> {
   return request(`/api/v1/graph/data?include_fleeting=${includeFlecting}`);
+}
+
+// Ingest
+export function ingestDocument(body: {
+  content: string;
+  source_id?: string;
+  source?: IngestSourceCreate;
+}): Promise<IngestDocumentResponse> {
+  return request("/api/v1/ingest/document", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getPendingIngest(sourceId: string): Promise<PendingIngestResponse> {
+  return request(`/api/v1/ingest/pending/${sourceId}`);
+}
+
+export function clearPendingIngest(sourceId: string): Promise<void> {
+  return request(`/api/v1/ingest/pending/${sourceId}`, { method: "DELETE" });
 }
 
 // RAG

@@ -1,4 +1,12 @@
 from app.models.common import Paginated
+from app.models.ingest import (
+    ChunkResult,
+    IngestDocumentRequest,
+    IngestDocumentResponse,
+    IngestSourceCreate,
+    LiteratureCandidate,
+    PendingIngestResponse,
+)
 from app.models.graph import GraphData, GraphEdgeRef, GraphNodeRef
 from app.models.search import SearchRequest, SearchResponse, SearchResult
 from app.models.rag import (
@@ -85,4 +93,10 @@ __all__ = [
     "GraphData",
     "GraphEdgeRef",
     "GraphNodeRef",
+    "ChunkResult",
+    "IngestDocumentRequest",
+    "IngestDocumentResponse",
+    "IngestSourceCreate",
+    "LiteratureCandidate",
+    "PendingIngestResponse",
 ]

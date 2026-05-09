@@ -825,6 +825,181 @@ ordered `provenance` array. The frontend regex-replaces `[Note N]` with a markdo
 
 ---
 
+## ADR-028 — Hand-rolled markdown chunker, no library
+
+**Status:** Accepted
+
+**Context:** The document import pipeline needs to split markdown files by heading boundaries
+(H2/H3) with a character-count fallback for oversized sections. Library options include
+`langchain` (text splitters), `mistletoe` (AST-based markdown parser), and `tiktoken`
+(accurate tokenization). All would satisfy the functional requirement.
+
+**Decision:** Hand-rolled regex split on `^#{2,3} `, with `len(text) // 4` as the token
+estimate. No new runtime dependency. Lives in `app/services/doc_chunker.py` as a pure
+synchronous function.
+
+**Rationale:**
+- The splitting requirements are narrow and well-specified: H2/H3 boundaries, paragraph
+  fallback for oversized chunks. A library's generality adds no value here.
+- `len(text) // 4` is a well-established rough approximation. Exactness is not required
+  for a splitting heuristic — we are not billing by token.
+- Keeping it pure and dependency-free makes unit testing trivial and startup instantaneous.
+
+**Consequences:**
+- If splitting requirements grow (e.g., H4 support, table-aware splitting), the function
+  must be extended by hand. That is the correct tradeoff at this scale.
+- The chars/4 estimate will over-split slightly for code-heavy content (where tokens ≈ chars)
+  and under-split for natural language. Acceptable; the 2400-char limit is a heuristic.
+
+---
+
+## ADR-029 — Source record written at ingest time, candidates written at accept time
+
+**Status:** Accepted
+
+**Context:** `POST /api/v1/ingest/document` accepts either an existing `source_id` or
+source metadata to create a new source. A design question arises: should the new source
+record be written immediately (during the ingest call), or deferred until the user accepts
+at least one candidate?
+
+**Decision:** The source record is created during `POST /ingest/document` when `source`
+metadata is provided. Candidate notes are only written when the user clicks "Accept selected"
+in the UI (via individual `POST /nodes/literature` calls). An orphaned source — one with
+no linked literature notes — is an acceptable outcome.
+
+**Rationale:**
+- The source is stable metadata (title, type, url, author). It is not AI-generated output
+  and is not provisional.
+- Deferring source creation to the accept step would require threading the source metadata
+  through the pending_ingests record and re-validating it at accept time — added complexity
+  for no user-visible benefit.
+- Orphaned sources are visible and recoverable from the `/sources` page. The user can
+  delete them if they accept zero candidates.
+
+**Consequences:**
+- A user who runs `con import` and never opens the review UI will have an orphaned source
+  record in the DB.
+- Source cleanup remains a manual operation (or can be automated later as a maintenance
+  sweep).
+
+---
+
+## ADR-030 — Per-chunk generation failure isolation
+
+**Status:** Accepted
+
+**Context:** `POST /ingest/document` processes N chunks sequentially, calling the generation
+provider for each. If one chunk's generation call fails or returns unparseable JSON, two
+options exist: abort the whole request, or continue and mark the failed chunk.
+
+**Decision:** Continue on per-chunk failure. A failed chunk is returned as
+`ChunkResult(candidates=[], error="<message>")`. The overall HTTP response is 200 as long
+as the source resolved and at least one chunk was attempted. The request only returns a
+non-200 if source resolution fails (404/400/422).
+
+**Rationale:**
+- Large documents are expensive to re-ingest. Aborting a 25-chunk request because chunk 3
+  produced garbled JSON would discard all the work done on the other 24 chunks.
+- The user can see which chunks errored in the review UI and decide whether to retry (by
+  pasting the section manually or re-running the import).
+- This mirrors how the RAG pipeline handles empty retrieval results — it returns a valid
+  response rather than aborting.
+
+**Consequences:**
+- A request where all chunks error returns HTTP 200 with `total_candidates=0`. The caller
+  (CLI or UI) should surface this as a warning, not a success.
+- The `error` field on `ChunkResult` is the observable signal for per-chunk failures.
+
+---
+
+## ADR-031 — `con import` as subcommand of `con`, not a separate binary
+
+**Status:** Accepted
+
+**Context:** The import feature could ship as a new `con-import` binary (a separate
+`[project.scripts]` entry point) or as a `con import` subcommand via a dispatcher in the
+existing `capture.py` entry point.
+
+**Decision:** Subcommand dispatcher. Before the existing argparse setup, `main()` checks
+`sys.argv[1] == "import"` and dispatches to `_import_main()`. The existing capture
+behavior is unchanged when no subcommand is detected.
+
+**Rationale:**
+- A single named tool (`con`) is more memorable and consistent than two (`con` + `con-import`).
+- The dispatch check is five lines and adds no complexity to the capture path.
+- Backwards compatible: `con "quick thought"` continues to work.
+
+**Consequences:**
+- If a future subcommand is added (e.g., `con review`, `con search`), the dispatch
+  pattern should be formalized into an argparse `add_subparsers()` call at that point.
+  For now, the `if sys.argv[1] == "import"` check is sufficient.
+
+---
+
+## ADR-032 — /ingest: single-page wizard, candidates in React state only
+
+**Status:** Accepted
+
+**Context:** The two-step ingest UI (upload form → candidate review) could route to
+`/ingest/review/[source_id]` with candidates persisted in sessionStorage (like the
+process page), or stay at `/ingest` with step managed by `useState` and candidates
+in memory only.
+
+**Decision:** Single `/ingest` route. Step state is `useState<"upload" | "review">`.
+Candidate data lives in React state. No sessionStorage, no cross-page navigation.
+
+**Rationale:**
+- The ingest review is a deliberate, uninterrupted session. The user launched it
+  intentionally (either through the UI or via `con import`). They are not in the
+  middle of an inbox sweep where interruptions are expected.
+- Candidates are large (potentially dozens of notes across many chunks). sessionStorage
+  is bounded; for a large datasheet import this could approach or exceed limits.
+- If the user navigates away, the ingest is not lost — the `pending_ingests` record
+  persists, so they can re-open the review URL and the backend will re-serve the candidates.
+
+**Consequences:**
+- A browser refresh on `/ingest?source_id=X` re-fetches candidates from `pending_ingests`
+  rather than restoring from memory. This requires the frontend to check for `source_id`
+  in the query string and load from the API if present.
+- No in-memory edit state is preserved on refresh. Acceptable — the review session is
+  short and deliberate.
+
+---
+
+## ADR-033 — Candidate persistence via `pending_ingests` table with lazy expiry
+
+**Status:** Accepted
+
+**Context:** `POST /ingest/document` generates candidate literature notes but does not write
+them to `nodes`. For the CLI → UI review handoff to work, candidates must be persisted
+somewhere so the frontend can display them at `/ingest?source_id=X` without re-processing
+the document.
+
+**Decision:** A new `pending_ingests` table stores the full candidates payload as a JSON
+blob, keyed by `source_id` with a TTL of 7 days (`expires_at = created_at + 7 days`).
+Lazy expiry: at the start of each `POST /ingest/document` request, delete all rows where
+`expires_at < datetime('now')`. No background job is needed. After the user accepts
+candidates, the pending record is deleted by the accept endpoint.
+
+**Rationale:**
+- The candidates JSON blob is small (a few KB even for large documents). SQLite stores
+  it trivially.
+- Lazy expiry keeps the table perpetually small without adding a background worker or a
+  cron job. At personal tool scale, one ingest call per session means at most a handful
+  of rows exist at any time.
+- Keying by `source_id` makes the frontend's lookup trivial: `GET /ingest/pending/{source_id}`.
+- 7-day TTL gives the user a full work week to return to a pending review without it
+  expiring mid-week.
+
+**Consequences:**
+- If a user re-ingests the same source (same `source_id`), the old pending record is
+  replaced. This is correct behavior — the new ingest supersedes the old one.
+- The `expires_at` column is indexed; the lazy delete is O(small) in practice.
+- If a user never opens the review UI, the record expires silently after 7 days with no
+  user-visible cleanup.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
