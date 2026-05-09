@@ -117,6 +117,15 @@ async def delete_node(node_id: str, db: DB) -> None:
         raise HTTPException(404, "Node not found")
 
 
-@router.post("/{node_id}/process", status_code=501)
-async def process_node(node_id: str) -> None:
-    raise HTTPException(501, "Not implemented — available in Phase 3")
+@router.post("/{node_id}/process")
+async def process_node(node_id: str, db: DB) -> NodeDetail:
+    node = await node_repo.get_by_id(db, node_id)
+    if node is None:
+        raise HTTPException(404, "Node not found")
+    if node.type != "fleeting":
+        raise HTTPException(
+            422, f"Node is type '{node.type}'; only fleeting notes can be marked processed"
+        )
+    result = await node_repo.mark_processed(db, node_id)
+    assert result is not None
+    return result

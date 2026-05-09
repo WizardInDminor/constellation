@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import aiosqlite
@@ -62,10 +63,11 @@ async def get_by_id(db: aiosqlite.Connection, source_id: str) -> SourceDetail | 
 
 async def create(db: aiosqlite.Connection, data: SourceCreate) -> SourceDetail:
     source_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO sources(id, title, author, url, type, published_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))""",
-        (source_id, data.title, data.author, data.url, data.type, data.published_at),
+        "INSERT INTO sources(id, title, author, url, type, published_at, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (source_id, data.title, data.author, data.url, data.type, data.published_at, now),
     )
     await db.commit()
     result = await get_by_id(db, source_id)

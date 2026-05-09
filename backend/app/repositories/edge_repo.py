@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 import aiosqlite
 
@@ -25,10 +26,10 @@ async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None
 
 async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
     edge_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO edges(id, from_id, to_id, type, note, created_at)
-           VALUES (?, ?, ?, ?, ?, datetime('now'))""",
-        (edge_id, data.from_id, data.to_id, data.type, data.note),
+        "INSERT INTO edges(id, from_id, to_id, type, note, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (edge_id, data.from_id, data.to_id, data.type, data.note, now),
     )
     await db.commit()
     result = await get_by_id(db, edge_id)

@@ -22,8 +22,11 @@ class FakeEmbeddingProvider:
 class FakeGenerationProvider:
     model_id = "fake-gen"
 
+    def __init__(self, response: str = "fake response"):
+        self._response = response
+
     async def complete(self, messages, system, max_tokens=1024) -> str:
-        return "fake response"
+        return self._response
 
 
 @pytest.fixture

@@ -118,7 +118,8 @@ def test_get_neighbors(client):
     assert neighbors[0]["direction"] == "outgoing"
 
 
-def test_process_node_returns_501(client):
+def test_process_node_marks_processed(client):
     created = client.post("/api/v1/nodes/fleeting", json={"title": "R", "content": "x"}).json()
     r = client.post(f"/api/v1/nodes/{created['id']}/process")
-    assert r.status_code == 501
+    assert r.status_code == 200
+    assert r.json()["processed_at"] is not None

@@ -1,6 +1,7 @@
 import logging
 import struct
 import uuid
+from datetime import datetime, timezone
 
 import aiosqlite
 
@@ -16,10 +17,11 @@ def _pack_vector(v: list[float]) -> bytes:
 
 
 async def _queue_job(db: aiosqlite.Connection, node_id: str, target_model: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO embedding_jobs(id, node_id, status, target_model, created_at)
-           VALUES (?, ?, 'pending', ?, datetime('now'))""",
-        (str(uuid.uuid4()), node_id, target_model),
+        "INSERT INTO embedding_jobs(id, node_id, status, target_model, created_at) "
+        "VALUES (?, ?, 'pending', ?, ?)",
+        (str(uuid.uuid4()), node_id, target_model, now),
     )
     await db.commit()
 
@@ -54,9 +56,10 @@ async def embed_node(
     )
 
     # Record which model produced the current vector
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        "UPDATE nodes SET embedding_model = ?, updated_at = datetime('now') WHERE id = ?",
-        (provider.model_id, node_id),
+        "UPDATE nodes SET embedding_model = ?, updated_at = ? WHERE id = ?",
+        (provider.model_id, now, node_id),
     )
     await db.commit()
 
@@ -119,9 +122,8 @@ async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> N
         try:
             await embed_node(db, node_id, provider)
             await db.execute(
-                "UPDATE embedding_jobs SET status = 'complete', completed_at = datetime('now') "
-                "WHERE id = ?",
-                (job_id,),
+                "UPDATE embedding_jobs SET status = 'complete', completed_at = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), job_id),
             )
         except Exception as exc:
             logger.error("Embedding job %s failed for node %s: %s", job_id, node_id, exc)

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import aiosqlite
@@ -59,10 +60,11 @@ async def _create_node(
     tag_ids: list[str] | None = None,
 ) -> NodeDetail:
     node_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
         """INSERT INTO nodes(id, type, title, content, summary, source_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
-        (node_id, type_, title, content, summary, source_id),
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (node_id, type_, title, content, summary, source_id, now, now),
     )
     if tag_ids:
         await db.executemany(
@@ -190,11 +192,12 @@ async def update(
         updates["summary"] = data.summary
 
     if updates:
+        now = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         await db.execute(
-            f"UPDATE nodes SET {set_clause}, updated_at = datetime('now') "  # noqa: S608
+            f"UPDATE nodes SET {set_clause}, updated_at = ? "  # noqa: S608
             f"WHERE id = ? AND deleted_at IS NULL",
-            [*updates.values(), node_id],
+            [*updates.values(), now, node_id],
         )
 
     if data.tag_ids is not None:
@@ -210,22 +213,20 @@ async def update(
 
 
 async def soft_delete(db: aiosqlite.Connection, node_id: str) -> bool:
+    now = datetime.now(timezone.utc).isoformat()
     cursor = await db.execute(
-        """UPDATE nodes
-           SET deleted_at = datetime('now'), updated_at = datetime('now')
-           WHERE id = ? AND deleted_at IS NULL""",
-        (node_id,),
+        "UPDATE nodes SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (now, now, node_id),
     )
     await db.commit()
     return cursor.rowcount > 0
 
 
 async def mark_processed(db: aiosqlite.Connection, node_id: str) -> NodeDetail | None:
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """UPDATE nodes
-           SET processed_at = datetime('now'), updated_at = datetime('now')
-           WHERE id = ? AND deleted_at IS NULL""",
-        (node_id,),
+        "UPDATE nodes SET processed_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (now, now, node_id),
     )
     await db.commit()
     return await _fetch_full(db, node_id)

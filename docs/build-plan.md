@@ -79,7 +79,7 @@ by at least one passing test. Schema constraints (FKs, CHECKs) are exercised.
 
 ## Phase 2 — Provider abstraction & embedding pipeline
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-08)
 
 **Goal:** AI infrastructure is in place. New nodes get embedded automatically.
 
@@ -113,7 +113,7 @@ the active model via `PATCH /config` → verify jobs are queued and processed.
 
 ## Phase 3 — Capture & process workflow (the heart of v1)
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-08)
 
 **Goal:** The system is usable for daily knowledge capture. This is the phase
 where you actually start using it.

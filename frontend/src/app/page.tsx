@@ -1,28 +1,19 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import Link from "next/link";
 
-async function getHealth(): Promise<{ status: string } | null> {
-  try {
-    const res = await fetch(`${API_URL}/health`, { cache: "no-store" });
-    return res.json();
-  } catch {
-    return null;
-  }
-}
-
-export default async function Home() {
-  const health = await getHealth();
-
+export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="mb-6 text-3xl font-bold tracking-tight">Constellation</h1>
-      <div className="rounded-lg border px-6 py-4 text-sm">
-        <span className="font-medium">Backend: </span>
-        {health ? (
-          <span className="text-green-600">{health.status}</span>
-        ) : (
-          <span className="text-red-500">unreachable</span>
-        )}
-      </div>
-    </main>
+    <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+      <h1 className="text-3xl font-bold text-gray-900">Constellation</h1>
+      <p className="text-gray-500 max-w-sm">
+        Press{" "}
+        <kbd className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded text-sm font-mono">
+          Ctrl+K
+        </kbd>{" "}
+        to capture a thought. Then process it from the inbox.
+      </p>
+      <Link href="/inbox" className="text-sm text-indigo-600 hover:text-indigo-800 underline">
+        Open inbox →
+      </Link>
+    </div>
   );
 }

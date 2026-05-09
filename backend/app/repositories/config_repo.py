@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import aiosqlite
 
 from app.models import ConfigEntry
@@ -20,10 +22,11 @@ async def get(db: aiosqlite.Connection, key: str) -> ConfigEntry | None:
 
 
 async def set(db: aiosqlite.Connection, key: str, value: str) -> ConfigEntry:
+    now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO config(key, value, updated_at) VALUES (?, ?, datetime('now'))
+        """INSERT INTO config(key, value, updated_at) VALUES (?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
-        (key, value),
+        (key, value, now),
     )
     await db.commit()
     entry = await get(db, key)

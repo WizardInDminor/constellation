@@ -1,4 +1,5 @@
 from app.models.common import Paginated
+from app.models.rag import PermanentCandidate, SuggestPermanentResponse
 from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.tag import TagCreate, TagRef, TagUpdate
 from app.models.node import (
@@ -59,4 +60,6 @@ __all__ = [
     "SourceSummary",
     "SourceType",
     "SourceUpdate",
+    "PermanentCandidate",
+    "SuggestPermanentResponse",
 ]

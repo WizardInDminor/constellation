@@ -401,6 +401,95 @@ requiring the `lifespan` parameter.
 
 ---
 
+## ADR-014 — Embedding worker polls every 10 seconds
+
+**Status:** Accepted
+
+**Context:** The background embedding worker must drain the `embedding_jobs` queue
+periodically. The choice of interval balances responsiveness (jobs processed quickly)
+against unnecessary CPU and DB overhead.
+
+**Decision:** The worker sleeps 10 seconds between drain cycles, processing up to
+10 jobs per cycle.
+
+**Rationale:**
+
+- The inline embed path (`embed_or_queue`) succeeds in the vast majority of cases.
+  The worker is a fallback for transient API failures and the provider-switch re-embed
+  flow, not the primary embedding path.
+- At personal tool scale, 10-second latency before a failed-then-queued embed is
+  retried is unnoticeable.
+- A tighter interval (1–3 s) would spin needlessly against an empty queue.
+
+**Consequences:**
+
+- In the rare event of an inline embed failure, the vector is available approximately
+  10 seconds after the job was queued, not immediately.
+- The re-embed flow after `PATCH /config` takes up to 10 seconds per batch of 10
+  nodes; large collections will take proportionally longer.
+
+---
+
+## ADR-015 — Inline embed failure returns HTTP 201, not 202
+
+**Status:** Accepted
+
+**Context:** When a `permanent`, `literature`, or `structure` node is created and the
+inline embed attempt fails (e.g., transient Voyage API error), two HTTP status codes
+are plausible: `201 Created` (the node exists and is fully usable) or `202 Accepted`
+(created but not yet fully indexed).
+
+**Decision:** Always return `201 Created`. The embedding failure is recorded as a
+`pending` job and retried by the background worker.
+
+**Rationale:**
+
+- The node is immediately usable: it has an ID, content, edges can be added, and it
+  appears in all list/detail views.
+- The only thing missing is vector-based retrieval, which is eventually consistent.
+  This mirrors how other eventually-consistent writes work in the system.
+- `202 Accepted` would require the frontend to understand and communicate a
+  "not yet indexed" state, adding UI complexity for a scenario that rarely occurs in
+  practice.
+
+**Consequences:**
+
+- The API caller cannot distinguish "embedded successfully" from "queued for embed"
+  solely from the status code. The `embedding_model` field on the response node is
+  `null` in the queued case and non-null when embedded — this is the observable
+  signal if the caller needs it.
+
+---
+
+## ADR-016 — Process workflow auto-calls suggestion on page load
+
+**Status:** Accepted
+
+**Context:** The process workflow page (`/inbox/process/[id]`) needs Claude's candidate
+suggestions to be available for the user. Two UX options: (a) auto-call
+`POST /rag/suggest-permanent/{id}` immediately when the page loads, or (b) show a
+"Generate suggestions" button the user must click first.
+
+**Decision:** Auto-call on page load. Show a spinner while the AI is working.
+
+**Rationale:**
+
+- The user already committed to processing the note by navigating to the page. An
+  extra click adds friction without adding information.
+- The inline embed path (Phase 2) established the precedent of doing AI work eagerly
+  rather than lazily.
+- For a personal tool used daily, the latency of the AI call is the UX — surfacing it
+  immediately and showing progress is better than deferring it behind another interaction.
+
+**Consequences:**
+
+- Every page load triggers an API call to Claude, even if the user immediately discards
+  all suggestions. Acceptable at personal tool scale (one user, infrequent use).
+- If the backend is unreachable, the page shows an error state rather than a blank
+  "press generate" prompt.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

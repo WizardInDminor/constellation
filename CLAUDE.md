@@ -112,11 +112,20 @@ ollama pull llama3.2
 - **Do not hard-delete nodes.** All deletes are soft (set `deleted_at`).
 - **Do not skip writing migration files** for schema changes. Migrations live
   in `backend/migrations/` and are applied in lexicographic order.
+- **Record decisions as they are made.** Any design choice made during
+  planning or implementation that involves a tradeoff — timeout values,
+  HTTP status code behavior, polling intervals, error handling strategy,
+  library selection, naming conventions — must be added to
+  `docs/decisions.md` as a new ADR before the phase is marked complete.
+  Do not defer ADR writing to the next session. If a decision is worth
+  making, it is worth recording.
 
 ## Where to look first
 
 - Designing a new feature? → `docs/architecture.md`
 - Starting a coding session? → `docs/build-plan.md` (find current phase)
 - Facing a design choice? → `docs/decisions.md` (it's probably settled)
+- Made a design decision during implementation? → Add an ADR to
+  `docs/decisions.md` immediately. Don't wait until phase end.
 - Recalling a past session decision or env quirk? → `.claude/memory/MEMORY.md` (session-level log; not a substitute for the docs above)
 - None of the above answer the question? → ask the user before deciding.
