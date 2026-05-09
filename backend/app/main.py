@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import config, edges, nodes, rag, search, sources, tags
+from app.api.v1 import config, edges, graph, nodes, rag, search, sources, tags
 from app.core.config import get_settings
 from app.core.lifespan import lifespan
 
@@ -29,6 +29,7 @@ app.include_router(tags.router, prefix=_v1_prefix)
 app.include_router(config.router, prefix=_v1_prefix)
 app.include_router(search.router, prefix=_v1_prefix)
 app.include_router(rag.router, prefix=_v1_prefix)
+app.include_router(graph.router, prefix=_v1_prefix)
 
 
 @app.get("/health")

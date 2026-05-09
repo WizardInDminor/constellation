@@ -19,6 +19,9 @@ export type SearchResult = components["schemas"]["SearchResult"];
 export type RagResponse = components["schemas"]["RagResponse"];
 export type NodeUsed = components["schemas"]["NodeUsed"];
 export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
+export type GraphData = components["schemas"]["GraphData"];
+export type GraphNodeRef = components["schemas"]["GraphNodeRef"];
+export type GraphEdgeRef = components["schemas"]["GraphEdgeRef"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -190,6 +193,11 @@ export function searchHybrid(query: string, limit = 20): Promise<SearchResponse>
     method: "POST",
     body: JSON.stringify({ query, limit }),
   });
+}
+
+// Graph
+export function getGraphData(includeFlecting = true): Promise<GraphData> {
+  return request(`/api/v1/graph/data?include_fleeting=${includeFlecting}`);
 }
 
 // RAG

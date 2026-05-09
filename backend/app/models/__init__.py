@@ -1,4 +1,5 @@
 from app.models.common import Paginated
+from app.models.graph import GraphData, GraphEdgeRef, GraphNodeRef
 from app.models.search import SearchRequest, SearchResponse, SearchResult
 from app.models.rag import (
     EdgeTraversed,
@@ -81,4 +82,7 @@ __all__ = [
     "SearchRequest",
     "SearchResponse",
     "SearchResult",
+    "GraphData",
+    "GraphEdgeRef",
+    "GraphNodeRef",
 ]

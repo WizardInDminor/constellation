@@ -62,6 +62,13 @@ If you're orienting yourself, read `CLAUDE.md` first, then skim
 - Inline source creation inside the capture dialog; no navigation required
 - Sources list at `/sources` with detail panel, "Open file" / "Open in browser" / "Copy path"
 
+**Graph visualization**
+- Force-directed canvas graph at `/graph` via `react-force-graph-2d`
+- Node color by type (fleeting/literature/permanent/structure), edge color by edge type (7 types)
+- Click any node → side panel with summary and "Open note →"; click any edge → panel with type, note, and endpoint links
+- Live client-side filters: node type toggles, edge type toggles, tag filter, hide-isolated toggle, title highlight search
+- Zoom in/out and fit-to-screen controls; auto-fits after the force simulation settles
+
 ## Prerequisites
 
 - **Python** 3.11 or newer
@@ -143,7 +150,7 @@ the same repo as the code.
 
 ## Project status
 
-Phases 0–5 complete. 159 backend tests passing.
+Phases 0–6 complete. Core system is feature-complete and in active daily use. 170 backend tests passing.
 
 | Phase | Status | What it delivered |
 |-------|--------|-------------------|
@@ -154,13 +161,10 @@ Phases 0–5 complete. 159 backend tests passing.
 | 3.5 — CLI & resilience | ✅ | `con` terminal tool, systemd service, session-draft persistence |
 | 4 — Linking | ✅ | Edge creation UI, AI link suggestions, neighbor browsing |
 | 5 — Search & RAG | ✅ | Hybrid search, `/ask` RAG query UI, source management |
-| 6 — Visualization | ⏳ | Force-directed graph view (`react-force-graph`), node/edge colors, filters |
+| 6 — Visualization | ✅ | Force-directed graph at `/graph`, node/edge colors, filters, side panels |
 | 7 — Local provider | ⏳ | Ollama embedding + generation; offline mode via settings |
 
-**Up next (Phase 6):** a force-directed graph view at `/graph` — see the full constellation,
-filter by tag or edge type, click nodes to open them. Backend will expose `GET /graph/data`
-returning a filtered node/edge payload sized for visualization. The BFS traversal in
-`graph_service.py` is already the engine; the main work is the frontend canvas.
+**Up next (Phase 7, optional):** local provider path — swap Voyage and Claude for Ollama models via the settings page, with a re-embedding job that runs in the background. All provider calls already go through the abstraction layer; Phase 7 is adding the Ollama implementations and settings UI.
 
 ## License
 

@@ -219,7 +219,7 @@ clickable provenance.
 
 ## Phase 6 — Visualization
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-09)
 
 **Goal:** See the constellation. The graph view changes how you think about
 what you've built.

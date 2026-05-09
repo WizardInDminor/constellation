@@ -796,6 +796,35 @@ ordered `provenance` array. The frontend regex-replaces `[Note N]` with a markdo
 
 ---
 
+## ADR-027 — Graph visualization: react-force-graph-2d, client-side filtering, dynamic import
+
+**Status:** Accepted
+
+**Context:** Phase 6 requires a graph visualization. Three design questions needed resolution: (1) library choice between `react-force-graph-2d` and `cytoscape.js`, (2) whether filtering happens server-side or client-side, and (3) how to handle SSR with a canvas-based component in Next.js.
+
+**Decision:**
+
+- Library: `react-force-graph-2d` (canvas, force-directed, React-native API).
+- Filtering: all interactive filters (node type, edge type, tag, hide isolated, search highlight) are applied client-side against a single full-graph fetch. The only server-side filter is `include_fleeting` (default `false`), which `GET /graph/data` supports as a query param. The `/graph` page always fetches `include_fleeting=true` and filters fleeting nodes client-side so toggling them is instant.
+- SSR: `GraphCanvas.tsx` is imported via `dynamic(() => import(...), { ssr: false })` because canvas APIs are browser-only. The initial page shell (filter bar, loading state) renders server-side; the canvas hydrates client-side.
+- Auto-fit: `onEngineStop` calls `zoomToFit(400, 20)` once per data change (tracked via a `useRef` flag), not on mount. This ensures the graph is fitted after the force simulation has settled, not before.
+- Ref cast: `ForceGraphMethods<{}, {}>` (the default generic) is not assignable to the inferred `ForceGraphMethods<NodeObject<GraphNodeRef>, ...>` due to TypeScript's covariant constraint propagation. A targeted `as any` cast on the `ref` prop resolves this; the runtime behavior is correct.
+
+**Rationale:**
+
+- `react-force-graph-2d` is purpose-built for force-directed layouts. `cytoscape.js` is a general graph toolkit — more powerful for complex layouts but heavier and less React-idiomatic. For a knowledge graph with force-directed layout, node/edge coloring, and click handlers, `react-force-graph-2d` covers all requirements with less ceremony.
+- Client-side filtering: at personal tool scale, the full graph (hundreds of nodes) loads in a single small payload (~75–100KB JSON). Instant filter response without round trips is better UX than server round trips for each checkbox toggle.
+- `include_fleeting=false` as the server default prevents the API from returning inbox clutter to any caller that doesn't explicitly opt in. The graph page opts in (`include_fleeting=true`) and hides them by default via `initialFilterState()`.
+- `onEngineStop` for auto-fit avoids the jarring zoom to an unsettled graph layout that `zoomToFit` on mount would produce.
+
+**Consequences:**
+
+- The `fittedRef.current = false` reset in the `useEffect([nodes, edges])` hook means every filter change re-fits the viewport after the simulation re-settles. This is intentional: a major filter change significantly reshapes the graph.
+- The `as any` ref cast is isolated to a single line in `GraphCanvas.tsx`. It does not affect the exported API or callers.
+- `react-force-graph-2d` mutates the node objects it receives (adds `x`, `y`, `vx`, `vy`). Nodes are spread (`.map(n => ({ ...n }))`) before passing to `graphData` to prevent mutation of the original `GraphData` state.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
