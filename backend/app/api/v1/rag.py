@@ -5,14 +5,17 @@ from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from app.core.deps import DB, EmbedProvider, GenProvider
+from app.models import EdgeCreate, NodeDetail, PermanentCreate
 from app.models.rag import (
     LinkSuggestion,
     RagRequest,
     RagResponse,
+    SaveAnswerRequest,
+    ScopedRagRequest,
     SuggestLinksResponse,
     SuggestPermanentResponse,
 )
-from app.repositories import node_repo
+from app.repositories import edge_repo, node_repo
 from app.services import embedding_service, generation_service, rag_service
 
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -199,3 +202,88 @@ async def rag_query(
         import logging
         logging.getLogger(__name__).error("RAG query failed: %s", exc)
         raise HTTPException(500, "RAG query failed") from exc
+
+
+@router.post("/scoped")
+async def rag_scoped(
+    body: ScopedRagRequest, db: DB, gen_provider: GenProvider
+) -> RagResponse:
+    """Run RAG against an explicit list of node IDs — no retrieval, no expansion."""
+    if not body.query.strip():
+        raise HTTPException(400, "Query cannot be empty")
+    try:
+        return await rag_service.query_scoped(
+            db,
+            gen_provider,
+            body.query,
+            body.node_ids,
+            custom_prompt=body.custom_prompt,
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Scoped RAG failed: %s", exc)
+        raise HTTPException(500, "Scoped RAG failed") from exc
+
+
+def _derive_title(query: str) -> str:
+    """Title for a saved answer — first 80 chars of the query, trimmed at a word boundary."""
+    q = query.strip()
+    if len(q) <= 80:
+        return q or "Synthesis"
+    cut = q[:80].rsplit(" ", 1)[0] or q[:80]
+    return cut + "…"
+
+
+@router.post("/save-answer")
+async def save_answer(
+    body: SaveAnswerRequest, db: DB, embed_provider: EmbedProvider
+) -> NodeDetail:
+    """Persist a RAG answer as a permanent note with COLLECTS edges to cited sources."""
+    if not body.answer.strip():
+        raise HTTPException(400, "Answer cannot be empty")
+
+    title = (body.title or _derive_title(body.query)).strip() or "Synthesis"
+
+    summary_parts = [f"Synthesis of {len(body.provenance_ids)} notes"]
+    if body.query.strip():
+        q_short = body.query[:120].strip()
+        summary_parts.append(f"query: {q_short}")
+    summary = " — ".join(summary_parts)
+
+    node = await node_repo.create_permanent(
+        db,
+        PermanentCreate(
+            title=title,
+            content=body.answer,
+            summary=summary,
+        ),
+    )
+
+    # Auto-link to each cited source via COLLECTS — silently skip ids that
+    # don't resolve (the citation pass on the frontend may include bad refs).
+    for src_id in body.provenance_ids:
+        if src_id == node.id:
+            continue
+        target = await node_repo.get_by_id(db, src_id)
+        if target is None:
+            continue
+        try:
+            await edge_repo.create(
+                db,
+                EdgeCreate(
+                    from_id=node.id,
+                    to_id=src_id,
+                    type="COLLECTS",
+                    note=None,
+                ),
+            )
+        except Exception:
+            # Edge already exists or other integrity issue — skip
+            continue
+
+    # Embed inline so the saved synthesis is searchable / linkable immediately
+    await embedding_service.embed_or_queue(db, node.id, embed_provider)
+
+    refreshed = await node_repo.get_by_id(db, node.id)
+    assert refreshed is not None
+    return refreshed

@@ -275,3 +275,31 @@ export function ragQuery(query: string, depth = 1): Promise<RagResponse> {
     body: JSON.stringify({ query, depth }),
   });
 }
+
+export function ragScoped(
+  query: string,
+  nodeIds: string[],
+  customPrompt?: string,
+): Promise<RagResponse> {
+  return request("/api/v1/rag/scoped", {
+    method: "POST",
+    body: JSON.stringify({
+      query,
+      node_ids: nodeIds,
+      custom_prompt: customPrompt ?? null,
+    }),
+  });
+}
+
+export function saveAnswer(data: {
+  query: string;
+  answer: string;
+  provenance_ids: string[];
+  custom_prompt?: string;
+  title?: string;
+}): Promise<NodeDetail> {
+  return request("/api/v1/rag/save-answer", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}

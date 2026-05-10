@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ragQuery } from "@/lib/api";
+import { ragQuery, saveAnswer } from "@/lib/api";
+import { resolveCitations } from "@/lib/citations";
 import type { RagResponse, NodeUsed, EdgeTraversed } from "@/lib/api";
 
 const NODE_TYPE_COLORS: Record<string, string> = {
@@ -13,16 +15,6 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   structure: "bg-green-100 text-green-800",
   fleeting: "bg-yellow-100 text-yellow-800",
 };
-
-/** Replace [Note N] tokens with markdown links using the provenance array. */
-function resolveCitations(answer: string, provenance: NodeUsed[]): string {
-  return answer.replace(/\[Note (\d+)\]/g, (match, numStr) => {
-    const idx = parseInt(numStr, 10) - 1;
-    const node = provenance[idx];
-    if (!node) return match;
-    return `[Note ${numStr}](/nodes/${node.node_id})`;
-  });
-}
 
 function ProvenancePanel({
   provenance,
@@ -142,7 +134,9 @@ export default function AskPage() {
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<RagResponse | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(true);
+  const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -173,6 +167,23 @@ export default function AskPage() {
     setResponse(null);
     setError(null);
     setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const handleSaveAsNote = async () => {
+    if (!response || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const note = await saveAnswer({
+        query: response.query,
+        answer: response.answer,
+        provenance_ids: response.provenance.map((p) => p.node_id),
+      });
+      router.push(`/nodes/${note.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+    }
   };
 
   const resolvedAnswer = response
@@ -241,6 +252,17 @@ export default function AskPage() {
         <div className="mt-6">
           <div className="prose prose-sm max-w-none rounded-lg border border-gray-200 bg-white px-6 py-5">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{resolvedAnswer}</ReactMarkdown>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleSaveAsNote}
+              disabled={saving}
+              className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save as note"}
+            </button>
           </div>
 
           <ProvenancePanel

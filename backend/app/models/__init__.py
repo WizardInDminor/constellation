@@ -35,6 +35,8 @@ from app.models.rag import (
     PermanentCandidate,
     RagRequest,
     RagResponse,
+    SaveAnswerRequest,
+    ScopedRagRequest,
     SuggestLinksResponse,
     SuggestPermanentResponse,
 )
@@ -86,6 +88,8 @@ __all__ = [
     "SuggestLinksResponse",
     "RagRequest",
     "RagResponse",
+    "ScopedRagRequest",
+    "SaveAnswerRequest",
     "NodeUsed",
     "EdgeTraversed",
     "SearchRequest",

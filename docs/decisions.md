@@ -1046,6 +1046,109 @@ Pair dedup is done by canonical-ordering the IDs. No new schema, no background w
 
 ---
 
+## ADR-035 — Scoped RAG: no retrieval, no graph expansion (depth=0)
+
+**Status:** Accepted
+
+**Context:** The `/synthesize` workflow lets the user pick an explicit set of notes
+and ask the LLM a guided question against just those. The natural question is
+whether `query_scoped()` should still expand to neighbors via graph traversal
+(as the corpus-wide `/rag/query` does at depth=1), or treat the user's selection
+as the complete context.
+
+**Decision:** No retrieval, no graph expansion. The user-supplied `node_ids` are the
+exhaustive context. The system prompt is augmented with a "scoped instruction"
+clarifying to the model that the provided notes are intentionally the entire scope.
+
+**Rationale:**
+- The user is making an explicit "these are the relevant notes" claim. Pulling in
+  neighbors would silently expand that scope and dilute the synthesis with material
+  the user didn't intend to include.
+- Keeps the contract simple: the artifact's `provenance` exactly matches the input
+  `node_ids` (minus any that fail to resolve). One-to-one mapping is easy to reason
+  about.
+- The workflow that wants graph expansion already exists: `/ask` with the regular
+  `/rag/query` endpoint.
+
+**Consequences:**
+- Forgetting to add a relevant note to the scope means it's truly absent from the
+  answer — there's no "the system found a related note for me" rescue. This is the
+  intended trade-off; the user can iterate.
+- A future `expand_to_neighbors: bool = false` flag could be added if a use case
+  emerges, without breaking the current default.
+- `RagResponse.edges_traversed` is always `[]` for scoped responses. The frontend
+  treats this as "no connections to display."
+
+---
+
+## ADR-036 — Saved syntheses link to sources via `COLLECTS`
+
+**Status:** Accepted
+
+**Context:** When a RAG answer is saved as a permanent note via `POST /rag/save-answer`,
+the new note should record which existing notes it was synthesized from. The edge
+type matters for downstream graph queries and visual styling.
+
+Two candidates were considered:
+
+- `COLLECTS` — semantically "this note gathers these other notes" (already used by
+  structure notes / MOCs to assemble references).
+- `ELABORATES` — "this note zooms in on aspects of these others."
+
+**Decision:** `COLLECTS`, from the synthesis note → each cited source.
+
+**Rationale:**
+- A synthesis IS a collection by construction: it bundles N source notes' content
+  into one distilled artifact. The edge type's existing semantics fit.
+- `ELABORATES` implies the synthesis deepens one specific source — wrong shape
+  for an N-to-1 aggregation.
+- Re-using an existing edge type avoids schema churn (the `CHECK(type IN ...)` constraint).
+- Visualizes consistently in the graph: synthesis nodes show as hubs with many
+  outgoing `COLLECTS` edges, mirroring how MOCs render.
+
+**Consequences:**
+- Filtering the graph by `COLLECTS` will mix structure-note collections with
+  synthesis-note collections. Acceptable — they're conceptually similar.
+- If a future feature distinguishes "human-curated MOC" from "AI-synthesized brief,"
+  a separate edge type (e.g., `SYNTHESIZES`) could be introduced. Schema migration
+  would update the CHECK constraint and a backfill could classify existing edges
+  by inspecting the `from_id` node's metadata.
+
+---
+
+## ADR-037 — Markdown rendering on the node detail view, raw textarea on edit
+
+**Status:** Accepted
+
+**Context:** Saved syntheses (and any user-authored note) often contain markdown:
+headings, lists, bold, code blocks, links. Until now `/nodes/[id]` rendered
+content as plain text in a `whitespace-pre-wrap` div. The save-as-note workflow
+makes a markdown renderer essentially required for the artifacts to be readable.
+
+**Decision:** View mode uses `react-markdown` + `remark-gfm` (already a dep,
+already used on `/ask`). Edit mode keeps the raw `<textarea>`. The mode toggle
+is the existing click-to-edit / blur-to-save flow on `EditableField` — no new
+WYSIWYG, no preview-while-editing.
+
+**Rationale:**
+- Reuses the same renderer already vetted on `/ask` — no new dependency, no styling
+  drift between answer rendering and note rendering.
+- Click-to-edit reveals the raw markdown source, which is the most predictable UX
+  for someone who wrote the markdown by hand.
+- A WYSIWYG editor is a much larger surface (CodeMirror, Lexical, Tiptap) for
+  marginal benefit on a personal tool.
+
+**Consequences:**
+- `EditableField` gains a `markdown?: boolean` prop. View mode renders inside a
+  `prose` container; edit mode is unchanged.
+- Tables, code blocks, and links in note content now render visually rather than
+  as raw text. Existing notes are unaffected at the data layer (content is stored
+  as-is — markdown rendering is purely a view concern).
+- If the user pastes content with HTML or a markdown construct that `remark-gfm`
+  doesn't handle, it falls back to verbatim text, which is the safe default.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
