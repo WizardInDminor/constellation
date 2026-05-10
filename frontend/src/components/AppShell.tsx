@@ -39,6 +39,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/graph" className="text-sm text-gray-600 hover:text-gray-900">
             Graph
           </Link>
+          <Link href="/discover" className="text-sm text-gray-600 hover:text-gray-900">
+            Discover
+          </Link>
           <Link href="/search" className="text-sm text-gray-600 hover:text-gray-900">
             Search
           </Link>

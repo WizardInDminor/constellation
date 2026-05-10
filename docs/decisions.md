@@ -1000,6 +1000,52 @@ candidates, the pending record is deleted by the accept endpoint.
 
 ---
 
+## ADR-034 — Bridge candidates: per-node scan over the 200 most-recent nodes
+
+**Status:** Accepted
+
+**Context:** The `/discover` page surfaces "bridge candidates" — pairs of notes with
+high embedding similarity but no edge between them. sqlite-vec's `vec0` virtual table
+supports query-vector-against-corpus KNN but no native pairwise-similarity operator,
+so we need a strategy to surface these pairs.
+
+Three options were considered:
+
+1. **Per-node scan with cap**: iterate the most-recently-updated N nodes, run the existing
+   `find_similar_to_node` (k=8) for each, collect the union, dedupe pair-wise, filter out
+   pairs that already have an edge, sort by similarity.
+2. **Precomputed bridges table**: a background job runs the per-node scan and writes
+   results to a `bridge_candidates` table, refreshed on a schedule.
+3. **Full corpus scan on demand**: every node × every node, computed in Python from
+   stored vectors at request time.
+
+**Decision:** Option 1. The scan is bounded by `_BRIDGE_SCAN_LIMIT = 200` (most-recently-updated
+non-fleeting nodes). Each iteration is a single sqlite-vec KNN query — fast and indexed.
+Pair dedup is done by canonical-ordering the IDs. No new schema, no background worker.
+
+**Rationale:**
+- A personal zettelkasten at v1 scale has hundreds, not millions, of notes. 200 KNN
+  queries against an indexed virtual table complete in well under a second.
+- The "what's new and adjacent" framing is closer to the user's mental model than
+  "the global top-N most similar pairs ever." Recently-updated notes are likeliest to
+  be in working memory.
+- A precomputed table introduces staleness (last refresh ≠ now) and a background worker;
+  not worth the complexity at this scale.
+- A full N² scan in Python is wasteful when sqlite-vec already indexes vectors.
+
+**Consequences:**
+- A bridge between two old, untouched notes will not surface — by design. The user can
+  bump either node's `updated_at` (e.g., editing summary) to bring the pair into scope.
+  This trade-off is acceptable for v1; revisit if a "scan full corpus" affordance is
+  requested.
+- The 200 cap and `_BRIDGE_NEIGHBORS_PER_NODE = 8` are constants in `discover_service.py`,
+  not config. Tune via code change if corpus characteristics shift.
+- Similarity is reported in [0, 1] via `1 - dist²/2` (cosine equivalent for unit vectors).
+  Voyage and mxbai embeddings ship L2-normalized so this is defensible. If a non-normalized
+  provider is added, this conversion needs revisiting.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

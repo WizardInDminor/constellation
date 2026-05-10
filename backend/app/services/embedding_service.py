@@ -1,7 +1,7 @@
 import logging
 import struct
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -17,7 +17,7 @@ def _pack_vector(v: list[float]) -> bytes:
 
 
 async def _queue_job(db: aiosqlite.Connection, node_id: str, target_model: str) -> None:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         "INSERT INTO embedding_jobs(id, node_id, status, target_model, created_at) "
         "VALUES (?, ?, 'pending', ?, ?)",
@@ -56,7 +56,7 @@ async def embed_node(
     )
 
     # Record which model produced the current vector
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         "UPDATE nodes SET embedding_model = ?, updated_at = ? WHERE id = ?",
         (provider.model_id, now, node_id),
@@ -122,6 +122,37 @@ async def find_similar(
     return [r["node_id"] for r in rows][:limit]
 
 
+async def find_similar_to_node(
+    db: aiosqlite.Connection,
+    node_id: str,
+    *,
+    limit: int = 8,
+) -> list[tuple[str, float]]:
+    """Nearest neighbours to a node, computed from its stored embedding.
+
+    Returns (neighbor_id, distance) tuples, closest first. Distance is the
+    raw vec0 metric (L2 for FLOAT[1024]); lower means more similar. Returns
+    [] when the node has no embedding yet.
+    """
+    cursor = await db.execute(
+        "SELECT embedding FROM vec_nodes WHERE node_id = ?",
+        (node_id,),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return []
+    packed = row["embedding"]
+    cursor = await db.execute(
+        "SELECT node_id, distance FROM vec_nodes"
+        " WHERE embedding MATCH ? AND k = ?"
+        " AND node_id != ?"
+        " ORDER BY distance",
+        (packed, limit + 1, node_id),
+    )
+    rows = await cursor.fetchall()
+    return [(r["node_id"], r["distance"]) for r in rows][:limit]
+
+
 async def search_similar(
     db: aiosqlite.Connection,
     vector: list[float],
@@ -165,7 +196,7 @@ async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> N
             await embed_node(db, node_id, provider)
             await db.execute(
                 "UPDATE embedding_jobs SET status = 'complete', completed_at = ? WHERE id = ?",
-                (datetime.now(timezone.utc).isoformat(), job_id),
+                (datetime.now(UTC).isoformat(), job_id),
             )
         except Exception as exc:
             logger.error("Embedding job %s failed for node %s: %s", job_id, node_id, exc)

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -26,7 +26,7 @@ async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None
 
 async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
     edge_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         "INSERT INTO edges(id, from_id, to_id, type, note, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         (edge_id, data.from_id, data.to_id, data.type, data.note, now),
@@ -41,6 +41,16 @@ async def delete(db: aiosqlite.Connection, edge_id: str) -> bool:
     cursor = await db.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
     await db.commit()
     return cursor.rowcount > 0
+
+
+async def exists_between(db: aiosqlite.Connection, a_id: str, b_id: str) -> bool:
+    cursor = await db.execute(
+        """SELECT 1 FROM edges
+           WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)
+           LIMIT 1""",
+        (a_id, b_id, b_id, a_id),
+    )
+    return await cursor.fetchone() is not None
 
 
 async def get_neighbors(

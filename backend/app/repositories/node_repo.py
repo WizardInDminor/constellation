@@ -1,6 +1,6 @@
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -9,6 +9,7 @@ from app.models import (
     FleetingCreate,
     LiteratureCreate,
     NodeDetail,
+    NodeRef,
     NodeSummary,
     NodeUpdate,
     PermanentCreate,
@@ -82,7 +83,7 @@ async def _create_node(
     tag_ids: list[str] | None = None,
 ) -> NodeDetail:
     node_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         """INSERT INTO nodes(id, type, title, content, summary, source_id, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -185,11 +186,10 @@ async def list_nodes(
 
 async def search_nodes(
     db: aiosqlite.Connection, *, q: str, limit: int = 10
-) -> list["NodeRef"]:
-    from app.models import NodeRef
-
+) -> list[NodeRef]:
     # Build FTS5 prefix-match query: each token gets a trailing * for prefix search
     import re as _re
+
     fts_query = " ".join(tok + "*" for tok in _re.findall(r"[A-Za-z0-9]+", q) if tok)
     if not fts_query:
         return []
@@ -234,6 +234,116 @@ async def fts_search(db: aiosqlite.Connection, *, q: str, limit: int = 10) -> li
     return [r["id"] for r in rows]
 
 
+async def find_orphans(
+    db: aiosqlite.Connection,
+    *,
+    node_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[NodeSummary]:
+    """Permanent/literature/structure notes with zero edges (in or out).
+
+    Fleeting notes are excluded by default since they're inbox material, not
+    forgotten ideas — but a caller can request a specific type.
+    """
+    if node_type is None:
+        type_clause = "AND n.type IN ('permanent', 'literature', 'structure')"
+        params: tuple = (limit, offset)
+    else:
+        type_clause = "AND n.type = ?"
+        params = (node_type, limit, offset)
+
+    cursor = await db.execute(
+        f"""SELECT n.id, n.type, n.title, n.summary, n.created_at, n.updated_at, n.processed_at
+            FROM nodes n
+            WHERE n.deleted_at IS NULL
+              {type_clause}
+              AND NOT EXISTS (
+                  SELECT 1 FROM edges e
+                  WHERE e.from_id = n.id OR e.to_id = n.id
+              )
+            ORDER BY n.updated_at DESC
+            LIMIT ? OFFSET ?""",  # noqa: S608
+        params,
+    )
+    rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
+    return [
+        NodeSummary(
+            id=r["id"],
+            type=r["type"],
+            title=r["title"],
+            summary=r["summary"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
+        )
+        for r in rows
+    ]
+
+
+async def find_stale(
+    db: aiosqlite.Connection,
+    *,
+    node_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    exclude_fleeting: bool = True,
+) -> list[NodeSummary]:
+    """Notes ordered by oldest updated_at first — what the user has touched least recently."""
+    clauses: list[str] = ["deleted_at IS NULL"]
+    params: list = []
+    if node_type is not None:
+        clauses.append("type = ?")
+        params.append(node_type)
+    elif exclude_fleeting:
+        clauses.append("type != 'fleeting'")
+    where = " AND ".join(clauses)
+    params.extend([limit, offset])
+
+    cursor = await db.execute(
+        f"""SELECT id, type, title, summary, created_at, updated_at, processed_at
+            FROM nodes
+            WHERE {where}
+            ORDER BY updated_at ASC
+            LIMIT ? OFFSET ?""",  # noqa: S608
+        params,
+    )
+    rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
+    return [
+        NodeSummary(
+            id=r["id"],
+            type=r["type"],
+            title=r["title"],
+            summary=r["summary"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
+        )
+        for r in rows
+    ]
+
+
+async def list_recent_for_bridge_scan(
+    db: aiosqlite.Connection, *, limit: int = 200
+) -> list[str]:
+    """IDs of the most-recently-updated non-fleeting nodes — bridge scan input set."""
+    cursor = await db.execute(
+        """SELECT id FROM nodes
+           WHERE deleted_at IS NULL AND type != 'fleeting'
+           ORDER BY updated_at DESC
+           LIMIT ?""",
+        (limit,),
+    )
+    rows = await cursor.fetchall()
+    return [r["id"] for r in rows]
+
+
 async def list_inbox(db: aiosqlite.Connection) -> list[NodeSummary]:
     cursor = await db.execute(
         """SELECT id, type, title, summary, created_at, updated_at, processed_at
@@ -271,7 +381,7 @@ async def update(
         updates["summary"] = data.summary
 
     if updates:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         await db.execute(
             f"UPDATE nodes SET {set_clause}, updated_at = ? "  # noqa: S608
@@ -292,7 +402,7 @@ async def update(
 
 
 async def soft_delete(db: aiosqlite.Connection, node_id: str) -> bool:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     cursor = await db.execute(
         "UPDATE nodes SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
         (now, now, node_id),
@@ -302,7 +412,7 @@ async def soft_delete(db: aiosqlite.Connection, node_id: str) -> bool:
 
 
 async def mark_processed(db: aiosqlite.Connection, node_id: str) -> NodeDetail | None:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
         "UPDATE nodes SET processed_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
         (now, now, node_id),
