@@ -165,3 +165,53 @@ async def query(
         provenance=provenance,
         edges_traversed=edges_traversed,
     )
+
+
+_SCOPED_INSTRUCTION = (
+    "The notes below are the complete, intentionally-selected scope. "
+    "Treat them as the authoritative source set; do not speculate beyond them."
+)
+
+
+async def query_scoped(
+    db: aiosqlite.Connection,
+    gen_provider: GenerationProvider,
+    query_text: str,
+    node_ids: list[str],
+    custom_prompt: str | None = None,
+) -> RagResponse:
+    """Run RAG against an explicit list of node IDs — no retrieval, no expansion.
+
+    Used by the /synthesize workflow where the user has already chosen which
+    notes form the context (via tags, date range, or manual selection).
+    """
+    seed_nodes = []
+    for nid in node_ids:
+        node = await node_repo.get_by_id(db, nid)
+        if node is not None:
+            seed_nodes.append(node)
+
+    if not seed_nodes:
+        return RagResponse(
+            answer="(No matching notes were found in the selected scope.)",
+            query=query_text,
+            provenance=[],
+            edges_traversed=[],
+        )
+
+    context_text, provenance = _build_context(seed_nodes, [], [])
+    user_content = f"Question: {query_text}\n\nNotes:\n\n{context_text}"
+
+    system_prompt = _SYSTEM_PROMPT + "\n\n" + _SCOPED_INSTRUCTION
+    if custom_prompt:
+        system_prompt = system_prompt + "\n\nAdditional guidance from the user:\n" + custom_prompt
+
+    messages = [{"role": "user", "content": user_content}]
+    answer = await gen_provider.complete(messages, system_prompt, max_tokens=2048)
+
+    return RagResponse(
+        answer=answer,
+        query=query_text,
+        provenance=provenance,
+        edges_traversed=[],
+    )

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   getNode,
   updateNode,
@@ -51,11 +53,13 @@ function EditableField({
   value,
   onSave,
   multiline = false,
+  markdown = false,
   className = "",
 }: {
   value: string;
   onSave: (v: string) => Promise<void>;
   multiline?: boolean;
+  markdown?: boolean;
   className?: string;
 }) {
   const [editing, setEditing] = useState(false);
@@ -94,7 +98,17 @@ function EditableField({
       title="Click to edit"
       className={`cursor-text rounded px-2 py-1 hover:bg-white hover:shadow-sm transition-colors ${className}`}
     >
-      {value || <span className="text-gray-300 italic">Click to edit</span>}
+      {value ? (
+        markdown ? (
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+          </div>
+        ) : (
+          value
+        )
+      ) : (
+        <span className="text-gray-300 italic">Click to edit</span>
+      )}
     </div>
   );
 }
@@ -652,7 +666,8 @@ export default function NodePage() {
               value={node.content}
               onSave={(v) => saveField("content", v)}
               multiline
-              className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"
+              markdown
+              className="text-sm text-gray-700 leading-relaxed"
             />
           </div>
 

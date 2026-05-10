@@ -505,3 +505,164 @@ def test_rag_query_with_edges_in_provenance(rag_query_client):
         assert "from_id" in e
         assert "to_id" in e
         assert "edge_type" in e
+
+
+# ---------------------------------------------------------------------------
+# Scoped RAG — uses an explicit list of node IDs, no retrieval/expansion
+# ---------------------------------------------------------------------------
+
+
+def test_rag_scoped_uses_only_provided_nodes(rag_query_client):
+    c = rag_query_client
+    in_scope = _create_permanent(c, "Inside scope", "Relevant content.")
+    out_of_scope = _create_permanent(c, "Outside scope", "Should not appear.")
+
+    resp = c.post(
+        "/api/v1/rag/scoped",
+        json={"query": "Summarize", "node_ids": [in_scope["id"]]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    prov_ids = {p["node_id"] for p in body["provenance"]}
+    assert in_scope["id"] in prov_ids
+    assert out_of_scope["id"] not in prov_ids
+    assert body["edges_traversed"] == []  # depth=0 for scoped
+
+
+def test_rag_scoped_handles_missing_node_ids(rag_query_client):
+    c = rag_query_client
+    real = _create_permanent(c, "Real note", "Content.")
+    resp = c.post(
+        "/api/v1/rag/scoped",
+        json={"query": "Anything", "node_ids": [real["id"], "ghost"]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    prov_ids = {p["node_id"] for p in body["provenance"]}
+    assert real["id"] in prov_ids
+    assert "ghost" not in prov_ids
+
+
+def test_rag_scoped_empty_scope_returns_no_provenance(rag_query_client):
+    resp = rag_query_client.post(
+        "/api/v1/rag/scoped",
+        json={"query": "Anything", "node_ids": ["ghost-1", "ghost-2"]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["provenance"] == []
+    assert "No matching notes" in body["answer"]
+
+
+def test_rag_scoped_empty_query_returns_400(rag_query_client):
+    real = _create_permanent(rag_query_client, "Real", "Content")
+    resp = rag_query_client.post(
+        "/api/v1/rag/scoped",
+        json={"query": "", "node_ids": [real["id"]]},
+    )
+    assert resp.status_code == 400
+
+
+def test_rag_scoped_requires_at_least_one_node_id(rag_query_client):
+    resp = rag_query_client.post(
+        "/api/v1/rag/scoped",
+        json={"query": "Q", "node_ids": []},
+    )
+    assert resp.status_code == 422  # Pydantic min_length=1
+
+
+# ---------------------------------------------------------------------------
+# Save answer as note
+# ---------------------------------------------------------------------------
+
+
+def test_save_answer_creates_permanent_with_collects_edges(rag_query_client):
+    c = rag_query_client
+    a = _create_permanent(c, "Source A", "Body A.")
+    b = _create_permanent(c, "Source B", "Body B.")
+
+    resp = c.post(
+        "/api/v1/rag/save-answer",
+        json={
+            "query": "What did I think about the topic?",
+            "answer": "**Synthesis** with markdown.",
+            "provenance_ids": [a["id"], b["id"]],
+        },
+    )
+    assert resp.status_code == 200
+    node = resp.json()
+    assert node["type"] == "permanent"
+    assert node["content"] == "**Synthesis** with markdown."
+    assert node["title"].startswith("What did I think")
+    out = {e["neighbor"]["id"]: e["type"] for e in node["outgoing_edges"]}
+    assert out.get(a["id"]) == "COLLECTS"
+    assert out.get(b["id"]) == "COLLECTS"
+
+
+def test_save_answer_skips_unresolvable_provenance(rag_query_client):
+    c = rag_query_client
+    a = _create_permanent(c, "Real source", "Body.")
+
+    resp = c.post(
+        "/api/v1/rag/save-answer",
+        json={
+            "query": "Q",
+            "answer": "answer",
+            "provenance_ids": [a["id"], "ghost"],
+        },
+    )
+    assert resp.status_code == 200
+    node = resp.json()
+    edge_targets = {e["neighbor"]["id"] for e in node["outgoing_edges"]}
+    assert a["id"] in edge_targets
+    assert "ghost" not in edge_targets
+
+
+def test_save_answer_uses_custom_title_when_provided(rag_query_client):
+    resp = rag_query_client.post(
+        "/api/v1/rag/save-answer",
+        json={
+            "query": "long query " * 20,
+            "answer": "ans",
+            "provenance_ids": [],
+            "title": "My chosen title",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "My chosen title"
+
+
+def test_save_answer_truncates_long_query_into_title(rag_query_client):
+    long_q = "Why does the system behave this way under contention " * 10
+    resp = rag_query_client.post(
+        "/api/v1/rag/save-answer",
+        json={"query": long_q, "answer": "ans", "provenance_ids": []},
+    )
+    assert resp.status_code == 200
+    title = resp.json()["title"]
+    assert len(title) <= 81  # 80 chars + ellipsis
+
+
+def test_save_answer_empty_answer_returns_400(rag_query_client):
+    resp = rag_query_client.post(
+        "/api/v1/rag/save-answer",
+        json={"query": "Q", "answer": "", "provenance_ids": []},
+    )
+    assert resp.status_code == 400
+
+
+def test_save_answer_records_summary(rag_query_client):
+    c = rag_query_client
+    a = _create_permanent(c, "Src", "x")
+    resp = c.post(
+        "/api/v1/rag/save-answer",
+        json={
+            "query": "What is X?",
+            "answer": "X is foo.",
+            "provenance_ids": [a["id"]],
+        },
+    )
+    assert resp.status_code == 200
+    summary = resp.json()["summary"]
+    assert "1 notes" in summary
+    assert "What is X" in summary

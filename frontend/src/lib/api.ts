@@ -27,6 +27,7 @@ export type IngestSourceCreate = components["schemas"]["IngestSourceCreate"];
 export type ChunkResult = components["schemas"]["ChunkResult"];
 export type LiteratureCandidate = components["schemas"]["LiteratureCandidate"];
 export type PendingIngestResponse = components["schemas"]["PendingIngestResponse"];
+export type BridgeCandidate = components["schemas"]["BridgeCandidate"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -229,10 +230,80 @@ export function clearPendingIngest(sourceId: string): Promise<void> {
   return request(`/api/v1/ingest/pending/${sourceId}`, { method: "DELETE" });
 }
 
+// Discover
+export function listOrphans(opts: {
+  limit?: number;
+  offset?: number;
+  nodeType?: string;
+} = {}): Promise<NodeSummary[]> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  if (opts.nodeType) params.set("node_type", opts.nodeType);
+  const qs = params.toString();
+  return request(`/api/v1/discover/orphans${qs ? `?${qs}` : ""}`);
+}
+
+export function listStale(opts: {
+  limit?: number;
+  offset?: number;
+  nodeType?: string;
+  excludeFleeting?: boolean;
+} = {}): Promise<NodeSummary[]> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  if (opts.nodeType) params.set("node_type", opts.nodeType);
+  if (opts.excludeFleeting !== undefined)
+    params.set("exclude_fleeting", String(opts.excludeFleeting));
+  const qs = params.toString();
+  return request(`/api/v1/discover/stale${qs ? `?${qs}` : ""}`);
+}
+
+export function listBridges(opts: {
+  limit?: number;
+  minSimilarity?: number;
+} = {}): Promise<BridgeCandidate[]> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.minSimilarity !== undefined)
+    params.set("min_similarity", String(opts.minSimilarity));
+  const qs = params.toString();
+  return request(`/api/v1/discover/bridges${qs ? `?${qs}` : ""}`);
+}
+
 // RAG
 export function ragQuery(query: string, depth = 1): Promise<RagResponse> {
   return request("/api/v1/rag/query", {
     method: "POST",
     body: JSON.stringify({ query, depth }),
+  });
+}
+
+export function ragScoped(
+  query: string,
+  nodeIds: string[],
+  customPrompt?: string,
+): Promise<RagResponse> {
+  return request("/api/v1/rag/scoped", {
+    method: "POST",
+    body: JSON.stringify({
+      query,
+      node_ids: nodeIds,
+      custom_prompt: customPrompt ?? null,
+    }),
+  });
+}
+
+export function saveAnswer(data: {
+  query: string;
+  answer: string;
+  provenance_ids: string[];
+  custom_prompt?: string;
+  title?: string;
+}): Promise<NodeDetail> {
+  return request("/api/v1/rag/save-answer", {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }

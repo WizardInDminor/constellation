@@ -60,3 +60,27 @@ class RagResponse(BaseModel):
     query: str
     provenance: list[NodeUsed]
     edges_traversed: list[EdgeTraversed]
+
+
+# ---------------------------------------------------------------------------
+# Scoped RAG — answer a query using only a user-selected subset of notes
+# ---------------------------------------------------------------------------
+
+
+class ScopedRagRequest(BaseModel):
+    query: str
+    node_ids: list[str] = Field(min_length=1)
+    custom_prompt: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Save-answer-as-note — persist a RAG answer as a permanent note
+# ---------------------------------------------------------------------------
+
+
+class SaveAnswerRequest(BaseModel):
+    query: str
+    answer: str
+    provenance_ids: list[str] = []
+    custom_prompt: str | None = None
+    title: str | None = None  # if omitted, derived from query

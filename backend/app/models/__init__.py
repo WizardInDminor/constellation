@@ -1,4 +1,14 @@
 from app.models.common import Paginated
+from app.models.config import ConfigEntry, ConfigUpdate
+from app.models.discover import BridgeCandidate
+from app.models.edge import (
+    EdgeCreate,
+    EdgeDetail,
+    EdgeSummary,
+    EdgeType,
+    NeighborResult,
+)
+from app.models.graph import GraphData, GraphEdgeRef, GraphNodeRef
 from app.models.ingest import (
     ChunkResult,
     IngestDocumentRequest,
@@ -7,20 +17,6 @@ from app.models.ingest import (
     LiteratureCandidate,
     PendingIngestResponse,
 )
-from app.models.graph import GraphData, GraphEdgeRef, GraphNodeRef
-from app.models.search import SearchRequest, SearchResponse, SearchResult
-from app.models.rag import (
-    EdgeTraversed,
-    LinkSuggestion,
-    NodeUsed,
-    PermanentCandidate,
-    RagRequest,
-    RagResponse,
-    SuggestLinksResponse,
-    SuggestPermanentResponse,
-)
-from app.models.config import ConfigEntry, ConfigUpdate
-from app.models.tag import TagCreate, TagRef, TagUpdate
 from app.models.node import (
     FleetingCreate,
     LiteratureCreate,
@@ -32,13 +28,19 @@ from app.models.node import (
     PermanentCreate,
     StructureCreate,
 )
-from app.models.edge import (
-    EdgeCreate,
-    EdgeDetail,
-    EdgeSummary,
-    EdgeType,
-    NeighborResult,
+from app.models.rag import (
+    EdgeTraversed,
+    LinkSuggestion,
+    NodeUsed,
+    PermanentCandidate,
+    RagRequest,
+    RagResponse,
+    SaveAnswerRequest,
+    ScopedRagRequest,
+    SuggestLinksResponse,
+    SuggestPermanentResponse,
 )
+from app.models.search import SearchRequest, SearchResponse, SearchResult
 from app.models.source import (
     SourceCreate,
     SourceDetail,
@@ -47,6 +49,7 @@ from app.models.source import (
     SourceType,
     SourceUpdate,
 )
+from app.models.tag import TagCreate, TagRef, TagUpdate
 
 # EdgeSummary is imported under TYPE_CHECKING in node.py to break the mutual
 # dependency at runtime. Now that both modules are loaded, resolve it.
@@ -85,6 +88,8 @@ __all__ = [
     "SuggestLinksResponse",
     "RagRequest",
     "RagResponse",
+    "ScopedRagRequest",
+    "SaveAnswerRequest",
     "NodeUsed",
     "EdgeTraversed",
     "SearchRequest",
@@ -99,4 +104,5 @@ __all__ = [
     "IngestSourceCreate",
     "LiteratureCandidate",
     "PendingIngestResponse",
+    "BridgeCandidate",
 ]
