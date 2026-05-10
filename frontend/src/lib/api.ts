@@ -74,6 +74,10 @@ export function markNodeProcessed(id: string): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}/process`, { method: "POST" });
 }
 
+export function deleteNode(id: string): Promise<void> {
+  return request(`/api/v1/nodes/${id}`, { method: "DELETE" });
+}
+
 export function suggestPermanent(id: string): Promise<SuggestPermanentResponse> {
   return request(`/api/v1/rag/suggest-permanent/${id}`, { method: "POST" });
 }

@@ -21,6 +21,15 @@ const F1: GraphData["nodes"][0] = {
   type: "fleeting",
   tags: [],
 };
+const S1: GraphData["nodes"][0] = {
+  id: "s1",
+  title: "MCP4922 Datasheet",
+  type: "source",
+  tags: [],
+  source_entry_type: "datasheet",
+  source_author: "Microchip",
+  source_url: "file:///datasheets/mcp4922.pdf",
+};
 
 const E_P_L: GraphData["edges"][0] = {
   id: "e1",
@@ -34,10 +43,16 @@ const E_L_F: GraphData["edges"][0] = {
   to_id: "f1",
   type: "ELABORATES",
 };
+const E_L_S: GraphData["edges"][0] = {
+  id: "cites-l1",
+  from_id: "l1",
+  to_id: "s1",
+  type: "CITES",
+};
 
 const DATA: GraphData = {
-  nodes: [P1, L1, F1],
-  edges: [E_P_L, E_L_F],
+  nodes: [P1, L1, F1, S1],
+  edges: [E_P_L, E_L_F, E_L_S],
 };
 
 describe("applyFilters", () => {
@@ -102,5 +117,27 @@ describe("applyFilters", () => {
     });
     expect(withSearch.nodes.length).toBe(base.nodes.length);
     expect(withSearch.edges.length).toBe(base.edges.length);
+  });
+
+  it("initial state shows source nodes", () => {
+    const result = applyFilters(DATA, initialFilterState());
+    expect(result.nodes.map((n) => n.id)).toContain("s1");
+  });
+
+  it("toggling source off hides source nodes and drops CITES edges", () => {
+    const state = {
+      ...initialFilterState(),
+      nodeTypes: new Set(["literature", "permanent", "structure"]),
+    };
+    const result = applyFilters(DATA, state);
+    const ids = result.nodes.map((n) => n.id);
+    expect(ids).not.toContain("s1");
+    const edgeIds = result.edges.map((e) => e.id);
+    expect(edgeIds).not.toContain("cites-l1");
+  });
+
+  it("CITES edges survive when both endpoints are visible", () => {
+    const result = applyFilters(DATA, initialFilterState());
+    expect(result.edges.map((e) => e.id)).toContain("cites-l1");
   });
 });

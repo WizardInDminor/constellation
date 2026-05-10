@@ -5,6 +5,7 @@ export const ALL_NODE_TYPES = [
   "literature",
   "permanent",
   "structure",
+  "source",
 ] as const;
 
 export const ALL_EDGE_TYPES = [
@@ -15,6 +16,7 @@ export const ALL_EDGE_TYPES = [
   "QUESTIONS",
   "INSPIRED_BY",
   "COLLECTS",
+  "CITES",
 ] as const;
 
 export interface FilterState {
@@ -28,7 +30,7 @@ export interface FilterState {
 export function initialFilterState(): FilterState {
   return {
     // fleeting hidden by default — present in payload but not shown initially
-    nodeTypes: new Set(["literature", "permanent", "structure"]),
+    nodeTypes: new Set(["literature", "permanent", "structure", "source"]),
     edgeTypes: new Set(ALL_EDGE_TYPES),
     selectedTag: null,
     hideIsolated: false,

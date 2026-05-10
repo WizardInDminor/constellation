@@ -191,3 +191,91 @@ def test_node_without_tags_has_empty_list(graph_client):
     r = graph_client.get("/api/v1/graph/data")
     node_data = next(n for n in r.json()["nodes"] if n["id"] == node["id"])
     assert node_data["tags"] == []
+
+
+# ---------------------------------------------------------------------------
+# Source nodes
+# ---------------------------------------------------------------------------
+
+
+def _make_source(client, title="Test Source", src_type="datasheet", author=None, url=None):
+    body = {"title": title, "type": src_type}
+    if author:
+        body["author"] = author
+    if url:
+        body["url"] = url
+    r = client.post("/api/v1/sources", json=body)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_source_appears_as_graph_node(graph_client):
+    src = _make_source(graph_client, "MCP4922 Datasheet")
+    r = graph_client.get("/api/v1/graph/data")
+    assert r.status_code == 200
+    ids = [n["id"] for n in r.json()["nodes"]]
+    assert src["id"] in ids
+
+
+def test_source_node_has_correct_type(graph_client):
+    src = _make_source(graph_client, "Some Manual")
+    r = graph_client.get("/api/v1/graph/data")
+    node = next(n for n in r.json()["nodes"] if n["id"] == src["id"])
+    assert node["type"] == "source"
+
+
+def test_source_node_carries_metadata(graph_client):
+    src = _make_source(
+        graph_client,
+        title="Datasheet With Meta",
+        src_type="datasheet",
+        author="Microchip",
+        url="file:///datasheets/mcp4922.pdf",
+    )
+    r = graph_client.get("/api/v1/graph/data")
+    node = next(n for n in r.json()["nodes"] if n["id"] == src["id"])
+    assert node["source_entry_type"] == "datasheet"
+    assert node["source_author"] == "Microchip"
+    assert node["source_url"] == "file:///datasheets/mcp4922.pdf"
+
+
+def test_source_node_has_empty_tags(graph_client):
+    src = _make_source(graph_client, "No Tags Source")
+    r = graph_client.get("/api/v1/graph/data")
+    node = next(n for n in r.json()["nodes"] if n["id"] == src["id"])
+    assert node["tags"] == []
+
+
+def test_cites_edge_appears_for_literature_note(graph_client):
+    src = _make_source(graph_client, "Cited Source")
+    lit = _make_node(graph_client, "literature", "Literature note", source_id=src["id"])
+    r = graph_client.get("/api/v1/graph/data")
+    edges = r.json()["edges"]
+    cites = [e for e in edges if e["type"] == "CITES"]
+    assert any(e["from_id"] == lit["id"] and e["to_id"] == src["id"] for e in cites)
+
+
+def test_cites_edge_id_is_deterministic(graph_client):
+    src = _make_source(graph_client, "Stable Source")
+    lit = _make_node(graph_client, "literature", "Stable Lit", source_id=src["id"])
+    r = graph_client.get("/api/v1/graph/data")
+    edges = r.json()["edges"]
+    cites = next(e for e in edges if e["type"] == "CITES" and e["from_id"] == lit["id"])
+    assert cites["id"] == f"cites-{lit['id']}"
+
+
+def test_source_always_appears_regardless_of_include_fleeting(graph_client):
+    src = _make_source(graph_client, "Persistent Source")
+    for param in ["", "?include_fleeting=false", "?include_fleeting=true"]:
+        r = graph_client.get(f"/api/v1/graph/data{param}")
+        ids = [n["id"] for n in r.json()["nodes"]]
+        assert src["id"] in ids, f"Source missing with param={param!r}"
+
+
+def test_cites_edge_excluded_when_literature_node_deleted(graph_client):
+    src = _make_source(graph_client, "Source For Deleted Lit")
+    lit = _make_node(graph_client, "literature", "Deleted Lit", source_id=src["id"])
+    graph_client.delete(f"/api/v1/nodes/{lit['id']}")
+    r = graph_client.get("/api/v1/graph/data")
+    edges = r.json()["edges"]
+    assert not any(e["from_id"] == lit["id"] for e in edges)

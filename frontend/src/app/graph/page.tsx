@@ -41,9 +41,9 @@ export default function GraphPage() {
       });
   }, []);
 
-  // Lazy-load node detail when a node is selected
+  // Lazy-load node detail when a node is selected (sources have no NodeDetail)
   useEffect(() => {
-    if (!selectedNode) {
+    if (!selectedNode || selectedNode.type === "source") {
       setNodeDetail(null);
       return;
     }
