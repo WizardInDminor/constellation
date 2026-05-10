@@ -76,6 +76,8 @@ def _build_context(
             body = node.summary if node.summary else _excerpt(node.content)
 
         block_lines = [f"[Note {num}] {node.title} ({node.type})"]
+        if node.tags:
+            block_lines.append("Tags: " + ", ".join(t.name for t in node.tags))
         block_lines.append(body)
 
         if node.id in edge_annotations:

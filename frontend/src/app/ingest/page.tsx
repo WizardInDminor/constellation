@@ -8,7 +8,12 @@ import {
   getPendingIngest,
   clearPendingIngest,
   createLiteratureNode,
+  createStructureNode,
+  createEdge,
+  getSource,
   listSources,
+  listTags,
+  createTag,
 } from "@/lib/api";
 import type {
   ChunkResult,
@@ -284,6 +289,23 @@ function ReviewPage({
   const [progress, setProgress] = useState<Record<string, "pending" | "done" | "error">>({});
   const [error, setError] = useState<string | null>(null);
 
+  // Import options state
+  const [sourceTitle, setSourceTitle] = useState("");
+  const [autoTag, setAutoTag] = useState("");
+  const [createHub, setCreateHub] = useState(true);
+  const [hubTitle, setHubTitle] = useState("");
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  // Fetch source title on mount to pre-fill hub note title
+  useEffect(() => {
+    getSource(sourceId)
+      .then((s) => {
+        setSourceTitle(s.title);
+        setHubTitle(s.title);
+      })
+      .catch(() => {});
+  }, [sourceId]);
+
   const totalChecked = chunks.reduce(
     (sum, c) => sum + c.candidates.filter((cand) => cand.checked).length,
     0
@@ -338,6 +360,22 @@ function ReviewPage({
     setAccepting(true);
     setError(null);
 
+    // 1. Resolve or create the auto-tag (non-fatal if it fails)
+    let autoTagId: string | undefined;
+    const tagName = autoTag.trim();
+    if (tagName) {
+      try {
+        const allTags = await listTags();
+        const existing = allTags.find(
+          (t) => t.name.toLowerCase() === tagName.toLowerCase()
+        );
+        autoTagId = existing ? existing.id : (await createTag(tagName)).id;
+      } catch {
+        // proceed without the tag
+      }
+    }
+
+    // 2. Build the accept list and create literature notes
     const toAccept: { key: string; title: string; content: string; summary: string }[] = [];
     for (const chunk of chunks) {
       for (const cand of chunk.candidates) {
@@ -355,14 +393,17 @@ function ReviewPage({
     }
 
     let anyError = false;
+    const acceptedIds: string[] = [];
     for (const item of toAccept) {
       try {
-        await createLiteratureNode({
+        const node = await createLiteratureNode({
           title: item.title,
           content: item.content,
           summary: item.summary,
           source_id: sourceId,
+          tag_ids: autoTagId ? [autoTagId] : undefined,
         });
+        acceptedIds.push(node.id);
         setProgress((p) => ({ ...p, [item.key]: "done" }));
       } catch {
         setProgress((p) => ({ ...p, [item.key]: "error" }));
@@ -370,13 +411,33 @@ function ReviewPage({
       }
     }
 
-    if (!anyError) {
-      await clearPendingIngest(sourceId).catch(() => {});
-      router.push(`/sources/${sourceId}`);
-    } else {
+    if (anyError) {
       setError("Some notes failed to save. Check the errors above and try again.");
       setAccepting(false);
+      return;
     }
+
+    // 3. Create hub structure note + COLLECTS edges (non-fatal)
+    if (createHub && hubTitle.trim() && acceptedIds.length > 0) {
+      try {
+        const hub = await createStructureNode({
+          title: hubTitle.trim(),
+          content: `Notes imported from: ${sourceTitle}`,
+        });
+        for (const nodeId of acceptedIds) {
+          await createEdge({
+            from_id: hub.id,
+            to_id: nodeId,
+            type: "COLLECTS",
+          }).catch(() => {});
+        }
+      } catch {
+        // hub creation failure is non-fatal; literature notes are already saved
+      }
+    }
+
+    await clearPendingIngest(sourceId).catch(() => {});
+    router.push(`/sources/${sourceId}`);
   };
 
   const totalCandidates = chunks.reduce((s, c) => s + c.candidates.length, 0);
@@ -479,6 +540,62 @@ function ReviewPage({
             )}
           </div>
         ))}
+      </div>
+
+      {/* Import options */}
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setOptionsOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          disabled={accepting}
+        >
+          <span>Import options</span>
+          <span className="text-gray-400">{optionsOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {optionsOpen && (
+          <div className="px-4 py-4 space-y-4 bg-white border-t border-gray-200">
+            {/* Auto-tag */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-700 whitespace-nowrap shrink-0">
+                Tag all accepted notes with:
+              </label>
+              <input
+                type="text"
+                value={autoTag}
+                onChange={(e) => setAutoTag(e.target.value)}
+                disabled={accepting}
+                placeholder="e.g. mcp4922"
+                className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* Hub note */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={createHub}
+                  onChange={(e) => setCreateHub(e.target.checked)}
+                  disabled={accepting}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                />
+                <span className="text-sm text-gray-700">Create a hub note for this import</span>
+              </label>
+              {createHub && (
+                <input
+                  type="text"
+                  value={hubTitle}
+                  onChange={(e) => setHubTitle(e.target.value)}
+                  disabled={accepting}
+                  placeholder="Hub note title"
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

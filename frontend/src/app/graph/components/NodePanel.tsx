@@ -36,6 +36,62 @@ export function NodePanel({ node, detail, loadingDetail, onClose }: Props) {
         </button>
       </div>
 
+      {node.type === "source" ? (
+        <SourcePanel node={node} />
+      ) : (
+        <NotePanel node={node} detail={detail} loadingDetail={loadingDetail} />
+      )}
+    </div>
+  );
+}
+
+function SourcePanel({ node }: { node: GraphNodeRef }) {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {node.source_entry_type && (
+          <div>
+            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Type</div>
+            <span className="text-sm text-gray-300">{node.source_entry_type}</span>
+          </div>
+        )}
+        {node.source_author && (
+          <div>
+            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Author</div>
+            <span className="text-sm text-gray-300">{node.source_author}</span>
+          </div>
+        )}
+        {node.source_url && (
+          <div>
+            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">URL</div>
+            <span className="text-xs text-gray-400 break-all">{node.source_url}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 border-t border-gray-700">
+        <Link
+          href={`/sources/${node.id}`}
+          className="block w-full text-center text-sm bg-teal-700 hover:bg-teal-600 text-white rounded px-3 py-1.5 transition-colors"
+        >
+          Open source →
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function NotePanel({
+  node,
+  detail,
+  loadingDetail,
+}: {
+  node: GraphNodeRef;
+  detail: NodeDetail | null;
+  loadingDetail: boolean;
+}) {
+  return (
+    <>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {node.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -70,6 +126,6 @@ export function NodePanel({ node, detail, loadingDetail, onClose }: Props) {
           Open note →
         </Link>
       </div>
-    </div>
+    </>
   );
 }

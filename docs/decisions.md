@@ -1000,6 +1000,84 @@ candidates, the pending record is deleted by the accept endpoint.
 
 ---
 
+## ADR-034 — Virtual source nodes in the graph visualization
+
+**Status:** Accepted
+
+**Context:** Sources should appear in the graph so that imported document clusters are
+visibly connected to a hub node. However, the `edges` table has FK constraints to the
+`nodes` table, making it impossible to insert edges whose `to_id` points to a source ID
+without schema changes. Inserting sources into `nodes` would conflate two distinct entity
+types, pollute the `NodeType` enum, break the embedding pipeline (sources are metadata,
+not content), and require a migration.
+
+**Decision:** Source records and synthetic `CITES` edges are materialized in
+`GET /graph/data` by querying the `sources` table and the `nodes.source_id` FK.
+Sources appear in `GraphData.nodes` with `type="source"`. CITES edges appear in
+`GraphData.edges` with synthetic IDs (`cites-{node_id}`). No schema changes to the
+`nodes`, `edges`, or `sources` tables.
+
+The graph layer defines its own Literals (`GraphNodeType`, `GraphEdgeType`) that are
+strict supersets of the DB-level `NodeType`/`EdgeType`. This keeps TypeScript types tight
+while allowing the graph view to model computed entities that don't exist in the DB schema.
+
+**Rationale:**
+
+- Sources are metadata (title, author, URL), not knowledge-graph content. Keeping them
+  in a separate table preserves the conceptual distinction.
+- The graph endpoint is the correct abstraction boundary for computed views — it already
+  returns refs, not full records.
+- No new migration needed. No change to the embedding pipeline.
+- Virtual CITES edges are scoped to the graph visualization; they don't need persistence,
+  user-written notes, or edge-type-filter semantics beyond the graph view.
+
+**Consequences:**
+
+- CITES edges don't persist in the `edges` table and can't carry a user-written `note`.
+- Source nodes can't be targeted by manual edge creation from the note detail UI
+  (the node picker uses `/nodes/search` which only returns `nodes` table records).
+- If a literature note is soft-deleted, its CITES edge disappears from the graph
+  because the repo query filters `deleted_at IS NULL`.
+- Clicking a source node in the graph navigates to `/sources/{id}` (in-app) rather than
+  opening the source's file/URL directly — consistent with the "Open note →" pattern.
+
+---
+
+## ADR-035 — Auto-tag and auto-hub note on import acceptance are frontend-only, non-atomic
+
+**Status:** Accepted
+
+**Context:** The ingest review page ("Accept selected") gains two optional additions:
+auto-tagging all accepted notes with a user-supplied tag, and creating a hub structure
+note that COLLECTS all accepted notes. These could be implemented as a new server-side
+batch endpoint (`POST /ingest/accept-batch`) or as sequential frontend API calls.
+
+**Decision:** Both features are implemented entirely in the frontend as sequential API
+calls within the existing `handleAccept` function. The auto-tag call resolves/creates the
+tag before the literature note loop and passes `tag_ids` to each `createLiteratureNode`.
+The hub note and its COLLECTS edges are created after all literature notes succeed, using
+existing `POST /nodes/structure` and `POST /edges` routes. Edge failures are non-fatal:
+the hub note persists, and the user can create missing edges manually.
+
+**Rationale:**
+
+- A server-side batch endpoint would require a new route, new service logic, a migration
+  to thread tag IDs through the accept flow, and new tests — significant scope for an
+  improvement to a single-user personal tool.
+- The failure modes (network blip mid-accept) are rare and manually recoverable.
+- The existing routes (`POST /nodes/structure`, `POST /edges`) already do exactly what
+  is needed; reuse is better than duplication.
+
+**Consequences:**
+
+- If the browser closes mid-accept (between literature note creation and hub note
+  creation), the hub note won't exist. The literature notes and tag are already saved.
+  Acceptable at personal tool scale.
+- If a COLLECTS edge fails for a specific note, the hub note exists but is missing that
+  connection. The user can add it from the hub note detail view.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

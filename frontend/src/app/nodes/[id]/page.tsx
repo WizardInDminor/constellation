@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   getNode,
   updateNode,
+  deleteNode,
   listTags,
   createTag,
   createEdge,
@@ -549,10 +550,13 @@ function SuggestLinksPanel({
 export default function NodePage() {
   const params = useParams<{ id: string }>();
   const nodeId = params.id;
+  const router = useRouter();
 
   const [node, setNode] = useState<NodeDetail | null>(null);
   const [allTags, setAllTags] = useState<TagRef[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const reload = useCallback(() => {
     getNode(nodeId)
@@ -576,6 +580,17 @@ export default function NodePage() {
     listTags().then(setAllTags).catch(() => {});
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteNode(nodeId);
+      router.push("/notes");
+    } catch {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="flex flex-col gap-3">
@@ -589,11 +604,39 @@ export default function NodePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Link href="/notes" className="text-sm text-gray-400 hover:text-gray-700">← Notes</Link>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
-          {node.type}
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/notes" className="text-sm text-gray-400 hover:text-gray-700">← Notes</Link>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {node.type}
+          </span>
+        </div>
+        {showDeleteConfirm ? (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Delete this note? This cannot be undone.</span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="text-sm text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Yes, delete"}
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+              className="text-sm text-gray-400 hover:text-gray-700"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-sm text-gray-400 hover:text-red-500"
+          >
+            Delete note
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
