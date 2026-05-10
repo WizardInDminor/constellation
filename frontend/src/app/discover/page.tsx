@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { listBridges, listOrphans, listStale } from "@/lib/api";
-import type { BridgeCandidate, NodeSummary, TagRef } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { listBridges, listOrphans, listStale, createEdge, getNode } from "@/lib/api";
+import type { BridgeCandidate, NodeDetail, NodeSummary, TagRef, EdgeType, NodeRef } from "@/lib/api";
+import { NodePicker } from "@/components/NodePicker";
+import { NotePreviewPopover } from "@/components/NotePreviewPopover";
 
 type Tab = "orphans" | "stale" | "bridges";
 
@@ -27,6 +30,16 @@ const TYPE_COLORS: Record<string, string> = {
   fleeting: "bg-amber-100 text-amber-700",
 };
 
+const EDGE_TYPES: EdgeType[] = [
+  "SUPPORTS",
+  "CONTRADICTS",
+  "ELABORATES",
+  "ANALOGOUS_TO",
+  "QUESTIONS",
+  "INSPIRED_BY",
+  "COLLECTS",
+];
+
 function TagChip({ tag }: { tag: TagRef }) {
   return (
     <span
@@ -35,76 +48,6 @@ function TagChip({ tag }: { tag: TagRef }) {
     >
       {tag.name}
     </span>
-  );
-}
-
-function NoteCard({ node, hint }: { node: NodeSummary; hint?: string }) {
-  return (
-    <li>
-      <Link
-        href={`/nodes/${node.id}`}
-        className="flex items-start justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-indigo-300 hover:shadow-sm transition-all"
-      >
-        <div className="flex flex-col gap-1 min-w-0 pr-4">
-          <span className="font-medium text-sm truncate">{node.title}</span>
-          {node.summary && (
-            <span className="text-xs text-gray-500 line-clamp-2">{node.summary}</span>
-          )}
-          {hint && <span className="text-xs text-gray-400">{hint}</span>}
-          {node.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {node.tags.map((t) => (
-                <TagChip key={t.id} tag={t} />
-              ))}
-            </div>
-          )}
-        </div>
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
-        >
-          {node.type}
-        </span>
-      </Link>
-    </li>
-  );
-}
-
-function BridgeCard({ pair }: { pair: BridgeCandidate }) {
-  const pct = Math.round(pair.similarity * 100);
-  return (
-    <li className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-500">Similarity</span>
-        <span className="text-xs font-mono text-indigo-600">{pct}%</span>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Link
-          href={`/nodes/${pair.node_a.id}`}
-          className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded hover:border-indigo-300 hover:bg-indigo-50/30 transition-all"
-        >
-          <span className="font-medium text-sm truncate">{pair.node_a.title}</span>
-          <span
-            className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}
-          >
-            {pair.node_a.type}
-          </span>
-        </Link>
-        <Link
-          href={`/nodes/${pair.node_b.id}`}
-          className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded hover:border-indigo-300 hover:bg-indigo-50/30 transition-all"
-        >
-          <span className="font-medium text-sm truncate">{pair.node_b.title}</span>
-          <span
-            className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}
-          >
-            {pair.node_b.type}
-          </span>
-        </Link>
-      </div>
-      <p className="text-xs text-gray-500 mt-3">
-        Open either note to add an edge between them via the link picker.
-      </p>
-    </li>
   );
 }
 
@@ -121,6 +64,287 @@ function fmtAge(iso: string): string {
   return years === 1 ? "1 year ago" : `${years} years ago`;
 }
 
+// ── Edge creation form ────────────────────────────────────────────────────────
+
+function EdgeForm({
+  fromId,
+  toId,
+  excludeIds,
+  onPickTarget,
+  onSuccess,
+}: {
+  fromId: string;
+  toId: string | null;
+  excludeIds: string[];
+  onPickTarget?: (node: NodeRef) => void;
+  onSuccess: () => void;
+}) {
+  const [edgeType, setEdgeType] = useState<EdgeType>("SUPPORTS");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [edgeError, setEdgeError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!toId) return;
+    setSaving(true);
+    setEdgeError(null);
+    try {
+      await createEdge({ from_id: fromId, to_id: toId, type: edgeType, note: note || undefined });
+      onSuccess();
+    } catch (e: unknown) {
+      if (e instanceof Response && e.status === 409) {
+        setEdgeError("Already connected with this edge type.");
+      } else if (e && typeof e === "object" && "status" in e && (e as { status: number }).status === 409) {
+        setEdgeError("Already connected with this edge type.");
+      } else {
+        setEdgeError("Failed to create connection.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {onPickTarget && (
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Connect to</label>
+          <NodePicker onSelect={onPickTarget} exclude={excludeIds} placeholder="Search for a note to link…" />
+        </div>
+      )}
+      <div>
+        <label className="text-xs text-gray-500 block mb-1">Connection type</label>
+        <select
+          value={edgeType}
+          onChange={(e) => setEdgeType(e.target.value as EdgeType)}
+          className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+        >
+          {EDGE_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 block mb-1">Note (optional)</label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Why does this connection exist?"
+          rows={2}
+          className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300 resize-none"
+        />
+      </div>
+      {edgeError && <p className="text-xs text-red-600">{edgeError}</p>}
+      <button
+        onClick={submit}
+        disabled={saving || !toId}
+        className="w-full text-sm bg-indigo-600 text-white rounded px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-40"
+      >
+        {saving ? "Creating…" : "Create connection"}
+      </button>
+    </div>
+  );
+}
+
+// ── Slide-out panel ───────────────────────────────────────────────────────────
+
+function SlideOutPanel({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <>
+      {/* backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 z-20"
+        onClick={onClose}
+      />
+      {/* drawer */}
+      <div className="fixed right-0 top-12 bottom-0 w-80 bg-white border-l border-gray-200 shadow-lg z-30 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+          <span className="font-medium text-sm">{title}</span>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
+          {children}
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+// ── Node mini-card (used inside slide-out) ────────────────────────────────────
+
+function NodeMiniCard({ node }: { node: { id: string; title: string; type: string } }) {
+  return (
+    <div className="flex items-start justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+      <span className="text-sm font-medium">{node.title}</span>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`text-xs px-1.5 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+          {node.type}
+        </span>
+        <Link
+          href={`/nodes/${node.id}`}
+          className="text-xs text-indigo-600 hover:underline"
+          target="_blank"
+        >
+          open ↗
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── BridgeNoteSection — full note display inside bridge slide-out ─────────────
+
+function BridgeNoteSection({
+  node,
+  detail,
+}: {
+  node: { id: string; title: string; type: string };
+  detail: NodeDetail | null;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-medium text-sm leading-snug">{node.title}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-xs px-1.5 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {node.type}
+          </span>
+          <Link
+            href={`/nodes/${node.id}`}
+            className="text-xs text-indigo-600 hover:underline"
+            target="_blank"
+          >
+            open ↗
+          </Link>
+        </div>
+      </div>
+
+      {detail?.tags && detail.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {detail.tags.map((t) => (
+            <span
+              key={t.id}
+              className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500"
+              style={t.color ? { backgroundColor: t.color + "33", color: t.color } : undefined}
+            >
+              {t.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {detail ? (
+        <div className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto pr-1 whitespace-pre-wrap">
+          {detail.content || detail.summary || <span className="italic text-gray-400">No content</span>}
+        </div>
+      ) : (
+        <div className="text-xs text-gray-400 italic">Could not load note content.</div>
+      )}
+    </div>
+  );
+}
+
+// ── BridgeCard ────────────────────────────────────────────────────────────────
+
+function BridgeCard({
+  pair,
+  onClick,
+}: {
+  pair: BridgeCandidate;
+  onClick: () => void;
+}) {
+  const pct = Math.round(pair.similarity * 100);
+  return (
+    <li
+      className="bg-white border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all"
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-gray-500">Similarity</span>
+        <span className="text-xs font-mono text-indigo-600">{pct}%</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
+          <span className="font-medium text-sm truncate">{pair.node_a.title}</span>
+          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {pair.node_a.type}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
+          <span className="font-medium text-sm truncate">{pair.node_b.title}</span>
+          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {pair.node_b.type}
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ── NoteCard ──────────────────────────────────────────────────────────────────
+
+function NoteCard({ node, hint, onClick }: { node: NodeSummary; hint?: string; onClick: () => void }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const ref = useRef<HTMLLIElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  return (
+    <li
+      ref={ref}
+      onMouseEnter={() => { timer.current = setTimeout(() => setShowPreview(true), 300); }}
+      onMouseLeave={() => { clearTimeout(timer.current); setShowPreview(false); }}
+    >
+      <button
+        onClick={onClick}
+        className="w-full text-left flex items-start justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-indigo-300 hover:shadow-sm transition-all"
+      >
+        <div className="flex flex-col gap-1 min-w-0 pr-4">
+          <span className="font-medium text-sm truncate">{node.title}</span>
+          {node.summary && (
+            <span className="text-xs text-gray-500 line-clamp-2">{node.summary}</span>
+          )}
+          {hint && <span className="text-xs text-gray-400">{hint}</span>}
+          {node.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {node.tags.map((t) => (
+                <TagChip key={t.id} tag={t} />
+              ))}
+            </div>
+          )}
+        </div>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+          {node.type}
+        </span>
+      </button>
+      <NotePreviewPopover node={node} anchorRef={ref} visible={showPreview} />
+    </li>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function DiscoverPage() {
   const [tab, setTab] = useState<Tab>("orphans");
   const [orphans, setOrphans] = useState<NodeSummary[] | null>(null);
@@ -128,6 +352,41 @@ export default function DiscoverPage() {
   const [bridges, setBridges] = useState<BridgeCandidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Slide-out state
+  const [selectedBridge, setSelectedBridge] = useState<BridgeCandidate | null>(null);
+  const [bridgeDetails, setBridgeDetails] = useState<[NodeDetail | null, NodeDetail | null]>([null, null]);
+  const [loadingBridgeDetails, setLoadingBridgeDetails] = useState(false);
+  const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState<NodeDetail | null>(null);
+  const [loadingNodeDetail, setLoadingNodeDetail] = useState(false);
+  const [nodePickTarget, setNodePickTarget] = useState<NodeRef | null>(null);
+
+  // Fetch full node detail when an orphan/stale node is opened
+  useEffect(() => {
+    if (!selectedNode) { setSelectedNodeDetail(null); return; }
+    let cancelled = false;
+    setLoadingNodeDetail(true);
+    setSelectedNodeDetail(null);
+    getNode(selectedNode.id)
+      .then((d) => { if (!cancelled) setSelectedNodeDetail(d); })
+      .catch(() => { if (!cancelled) setSelectedNodeDetail(null); })
+      .finally(() => { if (!cancelled) setLoadingNodeDetail(false); });
+    return () => { cancelled = true; };
+  }, [selectedNode]);
+
+  // Fetch full node details when a bridge pair is opened
+  useEffect(() => {
+    if (!selectedBridge) { setBridgeDetails([null, null]); return; }
+    let cancelled = false;
+    setLoadingBridgeDetails(true);
+    setBridgeDetails([null, null]);
+    Promise.all([getNode(selectedBridge.node_a.id), getNode(selectedBridge.node_b.id)])
+      .then(([a, b]) => { if (!cancelled) setBridgeDetails([a, b]); })
+      .catch(() => { if (!cancelled) setBridgeDetails([null, null]); })
+      .finally(() => { if (!cancelled) setLoadingBridgeDetails(false); });
+    return () => { cancelled = true; };
+  }, [selectedBridge]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,12 +417,24 @@ export default function DiscoverPage() {
     };
   }, [tab, orphans, stale, bridges]);
 
+  function closePanel() {
+    setSelectedBridge(null);
+    setSelectedNode(null);
+    setSelectedNodeDetail(null);
+    setNodePickTarget(null);
+  }
+
+  function openNode(node: NodeSummary) {
+    setNodePickTarget(null);
+    setSelectedNode(node);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-xl font-semibold">Discover</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Re-encounter notes you've forgotten or never linked.
+          Re-encounter notes you&apos;ve forgotten or never linked.
         </p>
       </div>
 
@@ -197,7 +468,9 @@ export default function DiscoverPage() {
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {orphans?.map((n) => <NoteCard key={n.id} node={n} />)}
+              {orphans?.map((n) => (
+                <NoteCard key={n.id} node={n} onClick={() => openNode(n)} />
+              ))}
             </ul>
           )}
         </>
@@ -216,6 +489,7 @@ export default function DiscoverPage() {
                   key={n.id}
                   node={n}
                   hint={`updated ${fmtAge(n.updated_at)}`}
+                  onClick={() => openNode(n)}
                 />
               ))}
             </ul>
@@ -236,11 +510,123 @@ export default function DiscoverPage() {
           ) : (
             <ul className="flex flex-col gap-3">
               {bridges?.map((br) => (
-                <BridgeCard key={`${br.node_a.id}-${br.node_b.id}`} pair={br} />
+                <BridgeCard
+                  key={`${br.node_a.id}-${br.node_b.id}`}
+                  pair={br}
+                  onClick={() => setSelectedBridge(br)}
+                />
               ))}
             </ul>
           )}
         </>
+      )}
+
+      {/* Bridge pair slide-out */}
+      {selectedBridge && (
+        <SlideOutPanel
+          title={`Bridge — ${Math.round(selectedBridge.similarity * 100)}% similar`}
+          onClose={closePanel}
+        >
+          <div className="flex flex-col gap-4">
+            {loadingBridgeDetails ? (
+              <div className="space-y-3">
+                <div className="h-4 bg-gray-100 rounded w-3/4 animate-pulse" />
+                <div className="h-20 bg-gray-50 rounded animate-pulse" />
+                <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <BridgeNoteSection
+                  node={selectedBridge.node_a}
+                  detail={bridgeDetails[0]}
+                />
+                <div className="border-t border-gray-100" />
+                <BridgeNoteSection
+                  node={selectedBridge.node_b}
+                  detail={bridgeDetails[1]}
+                />
+              </>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 font-medium mb-3">Create connection</p>
+            <EdgeForm
+              fromId={selectedBridge.node_a.id}
+              toId={selectedBridge.node_b.id}
+              excludeIds={[selectedBridge.node_a.id, selectedBridge.node_b.id]}
+              onSuccess={() => {
+                // Remove this pair from the list
+                setBridges((prev) =>
+                  prev
+                    ? prev.filter(
+                        (b) =>
+                          !(b.node_a.id === selectedBridge.node_a.id &&
+                            b.node_b.id === selectedBridge.node_b.id),
+                      )
+                    : prev,
+                );
+                closePanel();
+              }}
+            />
+          </div>
+        </SlideOutPanel>
+      )}
+
+      {/* Orphan / stale node slide-out */}
+      {selectedNode && (
+        <SlideOutPanel
+          title={selectedNode.type.charAt(0).toUpperCase() + selectedNode.type.slice(1)}
+          onClose={closePanel}
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-2">
+              <span className="font-medium text-sm">{selectedNode.title}</span>
+              <Link
+                href={`/nodes/${selectedNode.id}`}
+                className="text-xs text-indigo-600 hover:underline shrink-0"
+                target="_blank"
+              >
+                open ↗
+              </Link>
+            </div>
+            {selectedNode.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {selectedNode.tags.map((t) => <TagChip key={t.id} tag={t} />)}
+              </div>
+            )}
+            {loadingNodeDetail ? (
+              <div className="space-y-1.5 mt-1">
+                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-full" />
+                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-5/6" />
+                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-3/4" />
+              </div>
+            ) : (selectedNodeDetail?.content || selectedNodeDetail?.summary) ? (
+              <p className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap pr-1">
+                {selectedNodeDetail.content || selectedNodeDetail.summary}
+              </p>
+            ) : selectedNode.summary ? (
+              <p className="text-xs text-gray-500 leading-relaxed">{selectedNode.summary}</p>
+            ) : null}
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 font-medium mb-3">Create connection</p>
+            <EdgeForm
+              fromId={selectedNode.id}
+              toId={nodePickTarget?.id ?? null}
+              excludeIds={[selectedNode.id]}
+              onPickTarget={(n) => setNodePickTarget(n)}
+              onSuccess={() => {
+                // Remove from orphans/stale list
+                if (tab === "orphans") {
+                  setOrphans((prev) => prev ? prev.filter((n) => n.id !== selectedNode.id) : prev);
+                } else {
+                  setStale((prev) => prev ? prev.filter((n) => n.id !== selectedNode.id) : prev);
+                }
+                closePanel();
+              }}
+            />
+          </div>
+        </SlideOutPanel>
       )}
     </div>
   );

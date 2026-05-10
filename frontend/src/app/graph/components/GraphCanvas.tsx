@@ -12,7 +12,9 @@ interface Props {
   nodes: GraphNodeRef[];
   edges: GraphEdgeRef[];
   searchQuery: string;
-  onNodeClick: (node: GraphNodeRef) => void;
+  connectingMode?: boolean;
+  selectedNodeIds?: Set<string>;
+  onNodeClick: (node: GraphNodeRef, shiftKey: boolean) => void;
   onEdgeClick: (edge: GraphEdgeRef) => void;
   onBackgroundClick: () => void;
 }
@@ -24,6 +26,8 @@ export function GraphCanvas({
   nodes,
   edges,
   searchQuery,
+  connectingMode = false,
+  selectedNodeIds = new Set(),
   onNodeClick,
   onEdgeClick,
   onBackgroundClick,
@@ -76,6 +80,14 @@ export function GraphCanvas({
       ctx.fillStyle = nodeColor(n.type);
       ctx.fill();
 
+      if (selectedNodeIds.has(n.id as string)) {
+        ctx.beginPath();
+        ctx.arc(x, y, r + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = "#818CF8";
+        ctx.lineWidth = 2 / globalScale;
+        ctx.stroke();
+      }
+
       if (
         searchQuery &&
         n.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -96,13 +108,16 @@ export function GraphCanvas({
         ctx.fillText(n.title, x, y + r + 1 / globalScale);
       }
     },
-    [searchQuery],
+    [searchQuery, selectedNodeIds],
   );
 
   const handleNodeClick = useCallback(
-    (node: NodeObject) => {
+    (node: NodeObject, event?: MouseEvent) => {
       const n = node as FGNode;
-      onNodeClick({ id: n.id as string, title: n.title, type: n.type, tags: n.tags });
+      onNodeClick(
+        { id: n.id as string, title: n.title, type: n.type, tags: n.tags },
+        event?.shiftKey ?? false,
+      );
     },
     [onNodeClick],
   );
@@ -130,6 +145,13 @@ export function GraphCanvas({
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-gray-950">
+      {connectingMode && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+          <span className="bg-indigo-700 text-white text-xs px-4 py-1.5 rounded-full shadow-lg">
+            Click a node to connect — Esc to cancel
+          </span>
+        </div>
+      )}
       <ForceGraph2D
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ref={graphRef as any}
@@ -144,6 +166,7 @@ export function GraphCanvas({
         linkWidth={1.5}
         linkDirectionalArrowLength={4}
         linkDirectionalArrowRelPos={1}
+        cooldownTime={1500}
         onNodeClick={handleNodeClick}
         onLinkClick={handleLinkClick}
         onBackgroundClick={onBackgroundClick}

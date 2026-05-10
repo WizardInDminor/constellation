@@ -27,7 +27,8 @@ export type IngestSourceCreate = components["schemas"]["IngestSourceCreate"];
 export type ChunkResult = components["schemas"]["ChunkResult"];
 export type LiteratureCandidate = components["schemas"]["LiteratureCandidate"];
 export type PendingIngestResponse = components["schemas"]["PendingIngestResponse"];
-export type BridgeCandidate = components["schemas"]["BridgeCandidate"];
+// BridgeCandidate is not yet in the generated schema — define manually from backend model
+export type BridgeCandidate = { node_a: NodeRef; node_b: NodeRef; similarity: number };
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -94,8 +95,8 @@ export function createPermanentNode(data: {
   });
 }
 
-export function listNodes(type?: string, page = 1): Promise<PaginatedNodes> {
-  const params = new URLSearchParams({ page: String(page), page_size: "50" });
+export function listNodes(type?: string, page = 1, pageSize = 50): Promise<PaginatedNodes> {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (type) params.set("type", type);
   return request(`/api/v1/nodes?${params}`);
 }

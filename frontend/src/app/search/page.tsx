@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { searchHybrid, searchSemantic, searchFulltext } from "@/lib/api";
 import type { SearchResult } from "@/lib/api";
+import { NotePreviewPopover } from "@/components/NotePreviewPopover";
 
 type SearchMode = "hybrid" | "semantic" | "fulltext";
 
@@ -23,36 +24,47 @@ const NODE_TYPE_COLORS: Record<string, string> = {
 
 function ResultCard({ result }: { result: SearchResult }) {
   const { node } = result;
+  const [showPreview, setShowPreview] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   return (
-    <Link
-      href={`/nodes/${node.id}`}
-      className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all"
+    <div
+      ref={ref}
+      onMouseEnter={() => { timer.current = setTimeout(() => setShowPreview(true), 300); }}
+      onMouseLeave={() => { clearTimeout(timer.current); setShowPreview(false); }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-medium text-gray-900 leading-snug">{node.title}</h3>
-        <span
-          className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${NODE_TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-700"}`}
-        >
-          {node.type}
-        </span>
-      </div>
-      {node.summary && (
-        <p className="mt-1.5 text-sm text-gray-500 line-clamp-2">{node.summary}</p>
-      )}
-      {node.tags && node.tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {node.tags.map((t) => (
-            <span
-              key={t.id}
-              className="rounded-full px-2 py-0.5 text-xs"
-              style={t.color ? { backgroundColor: t.color + "33", color: t.color } : { backgroundColor: "#e5e7eb", color: "#374151" }}
-            >
-              {t.name}
-            </span>
-          ))}
+      <Link
+        href={`/nodes/${node.id}`}
+        className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-medium text-gray-900 leading-snug">{node.title}</h3>
+          <span
+            className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${NODE_TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-700"}`}
+          >
+            {node.type}
+          </span>
         </div>
-      )}
-    </Link>
+        {node.summary && (
+          <p className="mt-1.5 text-sm text-gray-500 line-clamp-2">{node.summary}</p>
+        )}
+        {node.tags && node.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {node.tags.map((t) => (
+              <span
+                key={t.id}
+                className="rounded-full px-2 py-0.5 text-xs"
+                style={t.color ? { backgroundColor: t.color + "33", color: t.color } : { backgroundColor: "#e5e7eb", color: "#374151" }}
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </Link>
+      <NotePreviewPopover node={node} anchorRef={ref} visible={showPreview} />
+    </div>
   );
 }
 
@@ -68,6 +80,8 @@ function SearchPageInner() {
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set());
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const doSearch = useCallback(
@@ -79,6 +93,8 @@ function SearchPageInner() {
         const fn = m === "semantic" ? searchSemantic : m === "fulltext" ? searchFulltext : searchHybrid;
         const res = await fn(q);
         setResults(res.results);
+        setActiveTypes(new Set());
+        setActiveTags(new Set());
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
         setResults([]);
@@ -112,6 +128,48 @@ function SearchPageInner() {
     setMode(m);
     if (query.trim()) submit(query.trim(), m);
   };
+
+  // Derive available filter options from current results
+  const availableTypes = results
+    ? Array.from(new Set(results.map((r) => r.node.type))).sort()
+    : [];
+  const tagMap = new Map<string, { id: string; name: string; color?: string | null }>();
+  if (results) {
+    for (const r of results) {
+      for (const t of r.node.tags ?? []) {
+        tagMap.set(t.id, t);
+      }
+    }
+  }
+  const availableTags = Array.from(tagMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+  const visibleResults = results
+    ? results.filter(
+        (r) =>
+          (activeTypes.size === 0 || activeTypes.has(r.node.type)) &&
+          (activeTags.size === 0 || (r.node.tags ?? []).some((t) => activeTags.has(t.id))),
+      )
+    : null;
+
+  const activeFilterCount = activeTypes.size + activeTags.size;
+
+  function toggleType(type: string) {
+    setActiveTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  function toggleTag(tagId: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
+    });
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -159,8 +217,57 @@ function SearchPageInner() {
         </span>
       </div>
 
+      {/* Filter panel — shown once results are available */}
+      {!loading && results && results.length > 0 && (
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {availableTypes.map((type) => (
+              <button
+                key={type}
+                onClick={() => toggleType(type)}
+                className={`text-xs px-3 py-0.5 rounded-full border transition-colors ${
+                  activeTypes.has(type)
+                    ? (NODE_TYPE_COLORS[type] ?? "bg-gray-200 text-gray-700") + " border-transparent"
+                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+            {availableTags.map((tag) => (
+              <button
+                key={tag.id}
+                onClick={() => toggleTag(tag.id)}
+                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                  activeTags.has(tag.id)
+                    ? "border-transparent"
+                    : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                }`}
+                style={
+                  activeTags.has(tag.id) && tag.color
+                    ? { backgroundColor: tag.color + "33", color: tag.color }
+                    : activeTags.has(tag.id)
+                    ? { backgroundColor: "#e0e7ff", color: "#4338ca" }
+                    : undefined
+                }
+              >
+                {tag.name}
+              </button>
+            ))}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => { setActiveTypes(new Set()); setActiveTags(new Set()); }}
+                className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+              >
+                Clear ({activeFilterCount})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Results */}
-      <div className="mt-6">
+      <div className="mt-4">
         {loading && (
           <div className="flex justify-center py-12 text-gray-400 text-sm">Searching…</div>
         )}
@@ -185,12 +292,21 @@ function SearchPageInner() {
             )}
           </div>
         )}
-        {!loading && results && results.length > 0 && (
+        {!loading && visibleResults && visibleResults.length > 0 && (
           <div className="space-y-3">
-            <p className="text-xs text-gray-400">{results.length} result{results.length !== 1 ? "s" : ""}</p>
-            {results.map((r) => (
+            <p className="text-xs text-gray-400">
+              {activeFilterCount > 0
+                ? `${visibleResults.length} of ${results!.length} result${results!.length !== 1 ? "s" : ""}`
+                : `${visibleResults.length} result${visibleResults.length !== 1 ? "s" : ""}`}
+            </p>
+            {visibleResults.map((r) => (
               <ResultCard key={r.node.id} result={r} />
             ))}
+          </div>
+        )}
+        {!loading && visibleResults && visibleResults.length === 0 && results && results.length > 0 && (
+          <div className="py-12 text-center text-sm text-gray-400">
+            No results match the active filters.
           </div>
         )}
       </div>

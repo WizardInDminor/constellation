@@ -3,12 +3,14 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
-import { getGraphData, getNode } from "@/lib/api";
-import type { GraphData, GraphEdgeRef, GraphNodeRef, NodeDetail } from "@/lib/api";
+import { createEdge, getGraphData, getNode, listTags, updateNode } from "@/lib/api";
+import type { EdgeType, GraphData, GraphEdgeRef, GraphNodeRef, NodeDetail, TagRef } from "@/lib/api";
 import { applyFilters, initialFilterState, type FilterState } from "./filterGraph";
 import { FilterBar } from "./components/FilterBar";
 import { NodePanel } from "./components/NodePanel";
 import { EdgePanel } from "./components/EdgePanel";
+import { ConnectPanel } from "./components/ConnectPanel";
+import { BatchPanel } from "./components/BatchPanel";
 
 // Canvas is browser-only — disable SSR
 const GraphCanvas = dynamic(
@@ -28,6 +30,14 @@ export default function GraphPage() {
   const [nodeDetail, setNodeDetail] = useState<NodeDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Connecting mode state
+  const [connectingFrom, setConnectingFrom] = useState<GraphNodeRef | null>(null);
+  const [connectTarget, setConnectTarget] = useState<GraphNodeRef | null>(null);
+
+  // Multi-select state
+  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
+  const [allTagRefs, setAllTagRefs] = useState<TagRef[]>([]);
+
   // Load full graph (including fleeting) on mount; filter client-side
   useEffect(() => {
     getGraphData(true)
@@ -39,6 +49,20 @@ export default function GraphPage() {
         setError(String(err));
         setLoading(false);
       });
+    listTags().then(setAllTagRefs).catch(() => {});
+  }, []);
+
+  // Escape key: cancel connecting mode and clear multi-select
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setConnectingFrom(null);
+        setConnectTarget(null);
+        setSelectedNodes(new Set());
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   // Lazy-load node detail when a node is selected (sources have no NodeDetail)
@@ -69,7 +93,33 @@ export default function GraphPage() {
     return Array.from(seen).sort();
   }, [graphData.nodes]);
 
-  const handleNodeClick = (node: GraphNodeRef) => {
+  const handleNodeClick = (node: GraphNodeRef, shiftKey: boolean) => {
+    // Multi-select mode
+    if (shiftKey) {
+      setSelectedNodes((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.id)) next.delete(node.id);
+        else next.add(node.id);
+        return next;
+      });
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setNodeDetail(null);
+      return;
+    }
+
+    // Exit multi-select on plain click
+    if (selectedNodes.size > 0) {
+      setSelectedNodes(new Set());
+    }
+
+    // Connecting mode: second node clicked
+    if (connectingFrom) {
+      if (node.id === connectingFrom.id) return;
+      setConnectTarget(node);
+      return;
+    }
+
     setSelectedEdge(null);
     setSelectedNode(node);
   };
@@ -78,13 +128,48 @@ export default function GraphPage() {
     setSelectedNode(null);
     setNodeDetail(null);
     setSelectedEdge(edge);
+    setSelectedNodes(new Set());
   };
 
   const handleBackgroundClick = () => {
     setSelectedNode(null);
     setSelectedEdge(null);
     setNodeDetail(null);
+    setConnectingFrom(null);
+    setConnectTarget(null);
+    setSelectedNodes(new Set());
   };
+
+  async function handleConfirmConnect(type: EdgeType, note: string) {
+    if (!connectingFrom || !connectTarget) return;
+    await createEdge({
+      from_id: connectingFrom.id,
+      to_id: connectTarget.id,
+      type,
+      note: note || undefined,
+    });
+    const data = await getGraphData(true);
+    setGraphData(data);
+    setConnectingFrom(null);
+    setConnectTarget(null);
+    setSelectedNode(null);
+    setNodeDetail(null);
+  }
+
+  async function handleBatchTagAssign(tagIds: string[]) {
+    const nodeIds = Array.from(selectedNodes);
+    await Promise.all(
+      nodeIds.map(async (nodeId) => {
+        const detail = await getNode(nodeId);
+        const existing = detail.tags.map((t) => t.id);
+        const merged = Array.from(new Set([...existing, ...tagIds]));
+        await updateNode(nodeId, { tag_ids: merged });
+      }),
+    );
+    const data = await getGraphData(true);
+    setGraphData(data);
+    setSelectedNodes(new Set());
+  }
 
   const fromTitle = selectedEdge
     ? (graphData.nodes.find((n) => n.id === selectedEdge.from_id)?.title ?? selectedEdge.from_id)
@@ -93,7 +178,11 @@ export default function GraphPage() {
     ? (graphData.nodes.find((n) => n.id === selectedEdge.to_id)?.title ?? selectedEdge.to_id)
     : "";
 
-  const showPanel = selectedNode !== null || selectedEdge !== null;
+  const showPanel =
+    selectedNodes.size > 0 ||
+    connectTarget !== null ||
+    selectedNode !== null ||
+    selectedEdge !== null;
 
   return (
     // Break out of AppShell's max-w-4xl / px-4 / py-8 with fixed positioning below the header
@@ -118,6 +207,8 @@ export default function GraphPage() {
               nodes={visibleData.nodes}
               edges={visibleData.edges}
               searchQuery={filterState.searchQuery}
+              connectingMode={connectingFrom !== null}
+              selectedNodeIds={selectedNodes}
               onNodeClick={handleNodeClick}
               onEdgeClick={handleEdgeClick}
               onBackgroundClick={handleBackgroundClick}
@@ -136,15 +227,46 @@ export default function GraphPage() {
             showPanel ? "w-72" : "w-0"
           }`}
         >
-          {selectedNode && (
+          {/* Priority: BatchPanel > ConnectPanel > connecting NodePanel > normal NodePanel > EdgePanel */}
+          {selectedNodes.size > 0 && !connectingFrom && (
+            <BatchPanel
+              selectedCount={selectedNodes.size}
+              allTagRefs={allTagRefs}
+              onApplyTags={handleBatchTagAssign}
+              onClose={() => setSelectedNodes(new Set())}
+            />
+          )}
+          {connectTarget && connectingFrom && (
+            <ConnectPanel
+              from={connectingFrom}
+              to={connectTarget}
+              onConfirm={handleConfirmConnect}
+              onCancel={handleBackgroundClick}
+            />
+          )}
+          {!connectTarget && connectingFrom && (
+            <NodePanel
+              node={connectingFrom}
+              detail={nodeDetail}
+              loadingDetail={loadingDetail}
+              onClose={handleBackgroundClick}
+              isConnecting={true}
+            />
+          )}
+          {!connectingFrom && selectedNode && (
             <NodePanel
               node={selectedNode}
               detail={nodeDetail}
               loadingDetail={loadingDetail}
               onClose={handleBackgroundClick}
+              onStartConnect={() => {
+                setConnectingFrom(selectedNode);
+                setConnectTarget(null);
+              }}
+              isConnecting={false}
             />
           )}
-          {selectedEdge && (
+          {!connectingFrom && !selectedNode && selectedEdge && (
             <EdgePanel
               edge={selectedEdge}
               fromTitle={fromTitle}

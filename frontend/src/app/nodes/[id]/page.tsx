@@ -13,10 +13,10 @@ import {
   createTag,
   createEdge,
   deleteEdge,
-  searchNodes,
   suggestLinks,
 } from "@/lib/api";
 import type { NodeDetail, TagRef, EdgeType, LinkSuggestion, NodeRef } from "@/lib/api";
+import { NodePicker } from "@/components/NodePicker";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -221,69 +221,6 @@ function TagEditor({
           </ul>
         )}
       </div>
-    </div>
-  );
-}
-
-// ── NodePicker ────────────────────────────────────────────────────────────────
-
-function NodePicker({
-  onSelect,
-  exclude,
-}: {
-  onSelect: (node: NodeRef) => void;
-  exclude: string;
-}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<NodeRef[]>([]);
-  const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleChange(v: string) {
-    setQuery(v);
-    if (timer.current) clearTimeout(timer.current);
-    if (!v.trim()) { setResults([]); setOpen(false); return; }
-    timer.current = setTimeout(async () => {
-      const res = await searchNodes(v);
-      setResults(res.filter((n) => n.id !== exclude));
-      setOpen(true);
-    }, 250);
-  }
-
-  function select(node: NodeRef) {
-    setQuery(node.title);
-    setResults([]);
-    setOpen(false);
-    onSelect(node);
-  }
-
-  return (
-    <div className="relative">
-      <input
-        value={query}
-        onChange={(e) => handleChange(e.target.value)}
-        placeholder="Search for a note…"
-        className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-      />
-      {open && results.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-sm max-h-48 overflow-y-auto">
-          {results.map((n) => (
-            <li key={n.id}>
-              <button
-                onClick={() => select(n)}
-                className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
-              >
-                <span
-                  className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[n.type] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {n.type}
-                </span>
-                <span className="truncate">{n.title}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

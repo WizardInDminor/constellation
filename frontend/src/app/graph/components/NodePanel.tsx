@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 
 import type { GraphNodeRef, NodeDetail } from "@/lib/api";
@@ -10,9 +11,11 @@ interface Props {
   detail: NodeDetail | null;
   loadingDetail: boolean;
   onClose: () => void;
+  onStartConnect?: () => void;
+  isConnecting?: boolean;
 }
 
-export function NodePanel({ node, detail, loadingDetail, onClose }: Props) {
+export function NodePanel({ node, detail, loadingDetail, onClose, onStartConnect, isConnecting }: Props) {
   const color = nodeColor(node.type);
 
   return (
@@ -39,7 +42,13 @@ export function NodePanel({ node, detail, loadingDetail, onClose }: Props) {
       {node.type === "source" ? (
         <SourcePanel node={node} />
       ) : (
-        <NotePanel node={node} detail={detail} loadingDetail={loadingDetail} />
+        <NotePanel
+          node={node}
+          detail={detail}
+          loadingDetail={loadingDetail}
+          onStartConnect={onStartConnect}
+          isConnecting={isConnecting}
+        />
       )}
     </div>
   );
@@ -85,11 +94,28 @@ function NotePanel({
   node,
   detail,
   loadingDetail,
+  onStartConnect,
+  isConnecting,
 }: {
   node: GraphNodeRef;
   detail: NodeDetail | null;
   loadingDetail: boolean;
+  onStartConnect?: () => void;
+  isConnecting?: boolean;
 }) {
+  useEffect(() => {
+    if (!onStartConnect || isConnecting) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const active = document.activeElement;
+        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
+        onStartConnect!();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onStartConnect, isConnecting]);
+
   return (
     <>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -107,18 +133,34 @@ function NotePanel({
         )}
 
         <div>
-          <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Summary</div>
           {loadingDetail ? (
-            <div className="h-3 bg-gray-700 rounded animate-pulse w-3/4" />
-          ) : detail?.summary ? (
-            <p className="text-sm text-gray-300 leading-relaxed">{detail.summary}</p>
+            <div className="space-y-1.5">
+              <div className="h-3 bg-gray-700 rounded animate-pulse w-3/4" />
+              <div className="h-3 bg-gray-700 rounded animate-pulse w-full" />
+              <div className="h-3 bg-gray-700 rounded animate-pulse w-5/6" />
+            </div>
+          ) : (detail?.content || detail?.summary) ? (
+            <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {detail.content || detail.summary}
+            </p>
           ) : (
-            <p className="text-xs text-gray-500 italic">No summary</p>
+            <p className="text-xs text-gray-500 italic">No content</p>
           )}
         </div>
       </div>
 
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-gray-700 space-y-2">
+        {onStartConnect && !isConnecting && (
+          <button
+            onClick={onStartConnect}
+            className="block w-full text-center text-sm border border-indigo-500 text-indigo-400 hover:bg-indigo-900/40 rounded px-3 py-1.5 transition-colors"
+          >
+            Connect to… <span className="opacity-50 text-xs font-mono ml-1">E</span>
+          </button>
+        )}
+        {isConnecting && (
+          <p className="text-xs text-indigo-400 text-center">Click another node to connect</p>
+        )}
         <Link
           href={`/nodes/${node.id}`}
           className="block w-full text-center text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1.5 transition-colors"

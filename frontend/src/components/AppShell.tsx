@@ -57,13 +57,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/synthesize" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
             Synthesize
           </Link>
-          <Link
-            href="/nodes/new/structure"
-            className="text-sm text-gray-600 hover:text-gray-900"
-          >
-            + Structure note
-          </Link>
           <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/nodes/new/structure"
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              + Structure note
+            </Link>
             <button
               onClick={() => setIntentionalOpen(true)}
               className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"

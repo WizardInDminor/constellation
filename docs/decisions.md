@@ -1224,6 +1224,40 @@ the hub note persists, and the user can create missing edges manually.
 
 ---
 
+## ADR-038 — Client-side filtering with page_size=100 on Notes page
+
+**Status:** Accepted
+
+**Context:** The Notes page needs interactive filtering by node type and tag. Two
+approaches are possible: (1) add `tag` and `type` query parameters to `GET /nodes` for
+server-side filtering, or (2) fetch a larger page of results and filter in the browser.
+
+**Decision:** Client-side filtering with `page_size=100` per type (`permanent`,
+`structure`, `literature`), consistent with the graph page's approach (ADR-027). No
+new backend query parameters added. The `listNodes` API helper was updated to accept
+an optional `pageSize` argument (default 50).
+
+**Rationale:**
+
+- At personal tool scale (typical note count < 500), returning up to 300 notes (100 per
+  type) is fast and imposes negligible memory pressure.
+- Adding server-side tag filtering requires a new migration or a JOIN with the `node_tags`
+  table and a new query parameter — meaningful backend scope for a read-only UX filter.
+- Client-side filtering is instantaneous (no round trips) and consistent with how the
+  graph view handles all interactive filters (ADR-027).
+- If the corpus grows beyond 1 000 notes, a backend `tag` parameter can be added without
+  breaking any existing callers.
+
+**Consequences:**
+
+- Notes page fetches all 3 types in parallel on mount. At page_size=100 per type, the
+  worst case is 300 notes in memory — acceptable.
+- Users with > 100 notes of a single type will see their tag filter working only on the
+  first 100 notes returned. If this becomes a problem, raise page_size or add backend
+  filtering in a later phase.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
