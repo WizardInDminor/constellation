@@ -119,3 +119,9 @@ At import time they look the same. Over time they diverge: a note about keybindi
 ---
 
 *Add new observations below with a date header.*
+
+5/10/26 - Observations
+- When in the inbox, if I enter the edit view to make a change or add a tag I now can no longer process without navigating back to the inbox.  There should be a way to process a fleeting note from the node/[id] page.
+- Home page is currently pretty empty.  Might be cool to do some sort of dashboard with basic graph stats, can be basic numbers, or could have some llm thematic analysis option as well.
+- Need to have hover pop-over in the node/[id] (note) page so that when adding connections I can see what the actual node I am about to select has for a note.
+- Direction of connections, and the differences between when to use some (supports vs elaborates) are a little vague to the user right now.  Need to make these more easily seen and understood, without being annoying about it for users who have the workflow down.

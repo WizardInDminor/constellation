@@ -1258,6 +1258,136 @@ an optional `pageSize` argument (default 50).
 
 ---
 
+## ADR-039 — Lazy NodeDetail fetch in hover popovers and slide-out panels
+
+**Status:** Accepted
+
+**Context:** The `NotePreviewPopover` component and the Discover slide-out panel both
+display note content in contexts where only a `NodeSummary` or `NodeRef` is available
+from the parent list fetch. Two options existed: (1) show only the summary field (already
+present on `NodeSummary`), or (2) fetch the full `NodeDetail` on demand when the panel
+becomes visible.
+
+**Decision:** Fetch `GET /nodes/{id}` lazily when the panel first becomes visible. The
+popover shows a skeleton (3 animated pulse lines) while loading, then renders
+`detail.content` once it resolves. Falls back to `node.summary` for the skeleton interim
+display if already available. The fetch is cancelled if the panel closes before it resolves.
+
+**Rationale:**
+
+- `NodeSummary.summary` is an AI-generated distillation, not the author's actual writing.
+  Showing only the summary in edge-creation contexts (bridge candidates, connecting from
+  graph) gives the user a paraphrase to decide from, not the note itself. That is
+  insufficient context for consequential decisions like creating permanent edges.
+- The popover is shown after a 300ms hover delay — the fetch begins at that moment, so
+  the round trip (typically < 100ms localhost) completes before or shortly after the
+  skeleton appears. The latency penalty is negligible.
+- Cancelling the fetch on close avoids setting state on unmounted/invisible components
+  and wastes no bandwidth if the user moved the cursor.
+
+**Consequences:**
+
+- Every hover that persists 300ms issues a `GET /nodes/{id}` request. At personal tool
+  scale, with a warm SQLite file, this is fast and the server overhead is trivial.
+- The `NotePreviewPopover` component requires `node.id` (available on both `NodeSummary`
+  and `NodeRef`) rather than just `node.summary`. Callers with `NodeRef`-only data can
+  still use it.
+- If the backend is unavailable, the popover renders the skeleton indefinitely (no error
+  state shown). Acceptable for a personal single-user tool where backend availability is
+  assumed.
+
+---
+
+## ADR-040 — Graph edge creation via two-click connecting mode
+
+**Status:** Accepted
+
+**Context:** Users need a way to create edges directly from the graph visualization
+without navigating to a node detail page. The key design question is the interaction
+model for selecting both endpoints of the edge.
+
+**Decision:** A two-step "connecting mode" state machine in `graph/page.tsx`:
+
+1. User selects a node (normal single-click) → `NodePanel` appears with a "Connect to…"
+   button (and keyboard shortcut `E`).
+2. Pressing `E` or clicking the button sets `connectingFrom = selectedNode` — the canvas
+   overlays an indigo banner "Click a node to connect — Esc to cancel."
+3. Clicking any other node sets `connectTarget` → `ConnectPanel` appears with pre-populated
+   from/to node headers, an edge type dropdown, optional note textarea, and Create/Cancel.
+4. On `POST /edges` success: graph data refreshes (full re-fetch), connecting state clears.
+5. `Escape` at any stage clears all connecting state.
+
+The `ConnectPanel` is a separate component (`graph/components/ConnectPanel.tsx`) that
+mirrors the edge creation form on `nodes/[id]/page.tsx`. A 409 response renders
+"Already connected with this edge type." inline without closing the panel.
+
+**Rationale:**
+
+- Two-click is the natural model for directed edges: pick source, pick target. A drag-to-
+  connect approach would require hit-testing on a canvas and is significantly more complex.
+- The modal banner and `Escape` escape hatch make connecting mode clearly communicated and
+  always dismissable without navigating away.
+- Reusing `POST /edges` unchanged means no new API surface; the graph view becomes another
+  edge-creation entry point.
+- The `E` shortcut mirrors common graph editor conventions and is discoverable via the
+  button label hint.
+
+**Consequences:**
+
+- Clicking a source node (type="source") while in connecting mode does nothing — source
+  nodes are graph-only virtual entities and not valid edge targets in the DB.
+- After a successful edge creation, the full `GET /graph/data` is re-fetched to show the
+  new edge. This is consistent with the existing refresh pattern for filter changes.
+- `selectedNodes` (multi-select) and `connectingFrom` are mutually exclusive — entering
+  connecting mode clears multi-select, and shift-clicking clears single-select.
+
+---
+
+## ADR-041 — Graph multi-select and batch tag assignment via shift-click
+
+**Status:** Accepted
+
+**Context:** Users need to assign the same tag to multiple notes simultaneously from the
+graph view, particularly after importing a batch of related literature notes that share
+a topic.
+
+**Decision:** Shift-clicking a node toggles it in a `selectedNodes: Set<string>` set
+(separate from single-select state). When `selectedNodes.size > 0`, a `BatchPanel` replaces
+the normal side panel showing: selected count, all available tags as chip buttons, and an
+"Apply N tags" button.
+
+Tag application: for each selected node ID, `GET /nodes/{id}` (to get current `tag_ids`),
+merge with `pendingTagIds`, then `PATCH /nodes/{id}` with the merged set. All node
+updates run in `Promise.all`. On completion, graph data refreshes and `selectedNodes` clears.
+
+Tags are loaded from `GET /tags` once on initial graph load alongside `GET /graph/data`.
+
+**Rationale:**
+
+- `Promise.all` for the batch PATCH is safe at personal tool scale (tens of selected nodes).
+  A sequential loop would be noticeably slower and unnecessary given SQLite's single-writer
+  model already serializes writes.
+- The read-modify-write pattern (get current tags → merge → patch) preserves existing tags
+  rather than replacing them, which is the always-correct behavior for a "add tag" operation.
+- Loading all tags on initial graph load adds one small API call at mount time; it avoids
+  a blocking fetch when the user first shift-clicks.
+- `BatchPanel` occupies the same panel slot as `NodePanel`/`ConnectPanel` — no extra screen
+  real estate is consumed.
+
+**Consequences:**
+
+- If a node is updated externally between the `GET` and `PATCH` in the batch, the
+  optimistic merge may overwrite an intermediate change. Acceptable for a single-user tool
+  with no concurrent writers.
+- The node graph re-fetch after batch apply (with updated tag colors) is a full re-fetch.
+  This is consistent with all other refresh patterns in the graph view.
+- Shift-clicking a source node adds its ID to `selectedNodes`, but the batch PATCH will
+  fail for it (source IDs are not in the `nodes` table). This is a known edge-case; the
+  error is non-fatal and the other nodes still update. Future fix: filter source nodes out
+  of `selectedNodes` at click time.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

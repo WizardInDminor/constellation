@@ -417,12 +417,40 @@ to the answer, and the UI links back to them.
 - **App Router**, server components by default, client components only when
   interactivity demands it.
 - **API types** generated via `pnpm types` from `/openapi.json`. Never
-  hand-written.
+  hand-written. Exception: types missing from the OpenAPI schema (e.g.,
+  `BridgeCandidate`) are defined manually in `frontend/src/lib/api.ts` alongside
+  a comment explaining why.
 - **Form state**: react-hook-form + zod where forms are non-trivial.
-- **Graph viz**: defer choice until Phase 6 (likely `react-force-graph` or
-  `cytoscape`).
-- **Markdown rendering**: `react-markdown` + `remark-gfm` + a code block
-  component with syntax highlighting (technical content matters here).
+- **Graph viz**: `react-force-graph-2d` (canvas, force-directed). See ADR-027.
+  Imported via `dynamic(..., { ssr: false })` due to canvas browser-only APIs.
+  `cooldownTime={1500}` overrides the default 15 s physics timeout so `onEngineStop`
+  / `zoomToFit` fires within ~2 s.
+- **Markdown rendering**: `react-markdown` + `remark-gfm`. Used on `/ask`,
+  `/synthesize`, and the note detail view (`EditableField` with `markdown` prop).
+- **Shared components** (lives in `frontend/src/components/`):
+  - `NodePicker` — debounced FTS search input for selecting a note. `exclude` prop
+    accepts `string | string[]`. Used on note detail, Discover slide-out,
+    and graph `ConnectPanel`.
+  - `NotePreviewPopover` — hover popover that lazily fetches `NodeDetail` when
+    `visible` becomes true. Renders via `createPortal` to avoid stacking context
+    issues. Flips left if right-side viewport space is insufficient. See ADR-039.
+  - `CaptureDialog`, `IntentionalCaptureDialog`, `NewMenu` — global capture flows
+    mounted once in `AppShell`.
+
+### Graph interaction patterns
+
+The graph page (`/graph`) uses a layered side-panel priority system:
+
+```
+selectedNodes.size > 0  →  BatchPanel   (shift-click multi-select + tag assign)
+connectTarget !== null  →  ConnectPanel (edge creation form, both nodes fixed)
+connectingFrom !== null →  NodePanel    (connecting mode: "click another node")
+selectedNode !== null   →  NodePanel    (normal single-select)
+selectedEdge !== null   →  EdgePanel
+```
+
+Edge creation uses a two-click connecting mode (see ADR-040). Multi-select uses
+shift-click with a `selectedNodes: Set<string>` in page state (see ADR-041).
 
 ---
 
