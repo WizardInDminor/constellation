@@ -240,9 +240,70 @@ discover clusters by sight, and click through to read individual notes.
 
 ---
 
-## Phase 7 — Local provider path (optional v1.5)
+## Phase 6.5 — Operability Dashboard
 
-**Status:** Pending
+**Status:** ✅ Complete (2026-05-13)
+
+**Goal:** End the silent-failure mode for embeddings. The system already has
+an embedding queue and a background worker, but failed jobs sit invisible
+until the user notices a missing vector. This phase adds the visibility and
+manual controls needed to operate the system day-to-day.
+
+**Deliverables:**
+
+- Backend migration `0003_attempt_count.sql`: adds `attempt_count INTEGER
+  NOT NULL DEFAULT 0` to `embedding_jobs`. Existing rows backfill to 0.
+- Backend: `repositories/embedding_job_repo.py` — repository for the job queue
+  (currently SQL lives inline in the route).
+- Backend: typed Pydantic models — `EmbeddingJob`, `EmbeddingJobList`
+  (items + counts-by-status), `EmbeddingJobStatus` enum.
+- Backend: extend `GET /config/embedding-jobs` — accepts optional `status`
+  query param, returns typed `EmbeddingJobList` with `node_title` joined in
+  from the `nodes` table, includes summary counts.
+- Backend: `POST /config/embedding-jobs/{id}/retry` — sets `status='pending'`,
+  clears `error` and `completed_at`, increments `attempt_count`. 404 if the
+  job doesn't exist, 409 if it isn't in `failed`.
+- Backend: `POST /config/embedding-jobs/retry-all-failed` — bulk version,
+  returns count of jobs re-queued.
+- Backend: worker bookkeeping — `app.state.last_drain_at` and
+  `app.state.drain_count` updated each cycle in `_embedding_worker`.
+- Backend: `GET /admin/status` — returns `{ last_drain_at, drain_count,
+  pending_jobs, failed_jobs }`. Module-state only; resets on restart by design.
+- Backend: `embedding_service.embed_or_queue` and `drain_jobs` increment
+  `attempt_count` on every failure path. New jobs queued by `embed_or_queue`
+  are created with `attempt_count = 1` (the inline attempt counts).
+- Frontend: `/admin` route with three sections — status bar (counts +
+  last-drain), failed-jobs table with per-row retry + "retry all failed"
+  bulk action, pending-jobs table. Polls `/admin/status` and the jobs list
+  every 5s while the page is open.
+- Frontend: nav link to `/admin` (low-visual-weight — right side of the bar).
+- Tests: one happy-path test per new route + a worker test verifying
+  `attempt_count` increments on retry.
+
+**Definition of done:** Open `/admin`, see counts and worker health, see any
+failed embeddings with their error message, click Retry on one, watch it
+move from failed → pending → complete (or back to failed with
+`attempt_count: 2`) within ~15 seconds.
+
+Frontend tradeoffs (relative timestamps, drawer pattern, polling cadence,
+optimistic retry) are recorded in [ADR-043](./decisions.md).
+
+---
+
+## Phase 7 — Local provider path (optional / deferred)
+
+**Status:** Deferred indefinitely
+
+**Note:** Local provider integration is no longer on the active roadmap.
+API costs at personal-tool scale are manageable, and the re-embedding cost
+(every node must be re-embedded on a dimension or model switch) outweighs
+the benefit. The Voyage `voyage-4` + Anthropic `claude-sonnet-4-6` stack
+remains the supported configuration. Revisit only if API costs become
+material, an extended offline-use case emerges, or a privacy requirement
+forces it.
+
+The deliverables below remain as a reference design; nothing in Phase 6.5
+or earlier blocks this work, and nothing in this work blocks anything else.
 
 **Goal:** Privacy / offline mode. Switchable between API and local providers.
 

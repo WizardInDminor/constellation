@@ -12,7 +12,9 @@ def _two_nodes(client):
 
 def test_create_edge(client):
     a, b = _two_nodes(client)
-    r = client.post("/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"})
+    r = client.post(
+        "/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"}
+    )
     assert r.status_code == 201
     data = r.json()
     assert data["from_id"] == a["id"]
@@ -23,7 +25,9 @@ def test_create_edge(client):
 def test_create_edge_duplicate_returns_409(client):
     a, b = _two_nodes(client)
     client.post("/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"})
-    r = client.post("/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"})
+    r = client.post(
+        "/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"}
+    )
     assert r.status_code == 409
 
 
@@ -165,10 +169,17 @@ def test_get_config_returns_seeded_values(client):
     r = client.get("/api/v1/config")
     assert r.status_code == 200
     keys = {entry["key"] for entry in r.json()}
-    assert {"embedding_provider", "embedding_model", "generation_provider", "generation_model"} == keys
+    assert {
+        "embedding_provider",
+        "embedding_model",
+        "generation_provider",
+        "generation_model",
+    } == keys
 
 
 def test_get_embedding_jobs_empty(client):
     r = client.get("/api/v1/config/embedding-jobs")
     assert r.status_code == 200
-    assert r.json() == []
+    body = r.json()
+    assert body["items"] == []
+    assert body["counts"] == {"pending": 0, "processing": 0, "complete": 0, "failed": 0}

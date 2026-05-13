@@ -8,6 +8,14 @@ from app.models.edge import (
     EdgeType,
     NeighborResult,
 )
+from app.models.embedding_job import (
+    AdminStatus,
+    EmbeddingJob,
+    EmbeddingJobCounts,
+    EmbeddingJobList,
+    EmbeddingJobStatus,
+    RetryAllResponse,
+)
 from app.models.graph import GraphData, GraphEdgeRef, GraphNodeRef
 from app.models.ingest import (
     ChunkResult,
@@ -105,4 +113,10 @@ __all__ = [
     "LiteratureCandidate",
     "PendingIngestResponse",
     "BridgeCandidate",
+    "AdminStatus",
+    "EmbeddingJob",
+    "EmbeddingJobCounts",
+    "EmbeddingJobList",
+    "EmbeddingJobStatus",
+    "RetryAllResponse",
 ]

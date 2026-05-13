@@ -1,9 +1,16 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.core.config import get_settings
 from app.core.deps import DB
-from app.models import ConfigEntry, ConfigUpdate
-from app.repositories import config_repo
+from app.models import (
+    ConfigEntry,
+    ConfigUpdate,
+    EmbeddingJob,
+    EmbeddingJobList,
+    EmbeddingJobStatus,
+    RetryAllResponse,
+)
+from app.repositories import config_repo, embedding_job_repo
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -43,12 +50,30 @@ async def update_config(data: ConfigUpdate, db: DB, request: Request) -> list[Co
 
 
 @router.get("/embedding-jobs")
-async def get_embedding_jobs(db: DB) -> list[dict]:
-    cursor = await db.execute(
-        """SELECT id, node_id, status, target_model, error, created_at, completed_at
-           FROM embedding_jobs
-           ORDER BY created_at DESC
-           LIMIT 100"""
+async def get_embedding_jobs(
+    db: DB,
+    status: EmbeddingJobStatus | None = Query(None),
+) -> EmbeddingJobList:
+    items = await embedding_job_repo.list_jobs(db, status=status, limit=100)
+    counts = await embedding_job_repo.get_counts(db)
+    return EmbeddingJobList(items=items, counts=counts)
+
+
+@router.post("/embedding-jobs/{job_id}/retry")
+async def retry_embedding_job(job_id: str, db: DB) -> EmbeddingJob:
+    updated = await embedding_job_repo.retry_job(db, job_id)
+    if updated is not None:
+        return updated
+    existing = await embedding_job_repo.get_by_id(db, job_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    raise HTTPException(
+        status_code=409,
+        detail=f"Job is in status {existing.status!r}; only failed jobs can be retried",
     )
-    rows = await cursor.fetchall()
-    return [dict(r) for r in rows]
+
+
+@router.post("/embedding-jobs/retry-all-failed")
+async def retry_all_failed_embedding_jobs(db: DB) -> RetryAllResponse:
+    n = await embedding_job_repo.retry_all_failed(db)
+    return RetryAllResponse(retried=n)

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
+    admin,
     config,
     discover,
     edges,
@@ -43,6 +44,7 @@ app.include_router(rag.router, prefix=_v1_prefix)
 app.include_router(graph.router, prefix=_v1_prefix)
 app.include_router(ingest.router, prefix=_v1_prefix)
 app.include_router(discover.router, prefix=_v1_prefix)
+app.include_router(admin.router, prefix=_v1_prefix)
 
 
 @app.get("/health")

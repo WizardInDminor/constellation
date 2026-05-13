@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -58,9 +59,9 @@ async def _load_providers(
 
     Fails loud at startup if a cloud provider is configured but its API key is absent.
     """
-    from app.repositories import config_repo
-    from app.providers.voyage import VoyageEmbeddingProvider
     from app.providers.anthropic_gen import AnthropicGenerationProvider
+    from app.providers.voyage import VoyageEmbeddingProvider
+    from app.repositories import config_repo
 
     embed_name = (await config_repo.get(db, "embedding_provider")).value
     embed_model = (await config_repo.get(db, "embedding_model")).value
@@ -95,12 +96,29 @@ async def _load_providers(
 async def _embedding_worker(app: FastAPI) -> None:
     from app.services import embedding_service
 
+    settings = get_settings()
+    interval = settings.embedding_worker_interval_seconds
+
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(interval)
         try:
-            await embedding_service.drain_jobs(get_db(), app.state.embedding_provider)
+            now = datetime.now(UTC)
+            cooldown_until = app.state.cooldown_until
+            if cooldown_until is not None and cooldown_until > now:
+                continue
+
+            result = await embedding_service.drain_jobs(
+                get_db(), app.state.embedding_provider
+            )
+            if result.cooldown_seconds:
+                app.state.cooldown_until = datetime.now(UTC) + timedelta(
+                    seconds=result.cooldown_seconds
+                )
         except Exception as exc:
             logger.error("Embedding worker error: %s", exc)
+        finally:
+            app.state.last_drain_at = datetime.now(UTC)
+            app.state.drain_count += 1
 
 
 @asynccontextmanager
@@ -119,6 +137,10 @@ async def lifespan(app: FastAPI):
         embed_provider.model_id,
         gen_provider.model_id,
     )
+
+    app.state.last_drain_at = None
+    app.state.drain_count = 0
+    app.state.cooldown_until = None
 
     worker = asyncio.create_task(_embedding_worker(app))
 

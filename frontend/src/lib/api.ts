@@ -27,6 +27,11 @@ export type IngestSourceCreate = components["schemas"]["IngestSourceCreate"];
 export type ChunkResult = components["schemas"]["ChunkResult"];
 export type LiteratureCandidate = components["schemas"]["LiteratureCandidate"];
 export type PendingIngestResponse = components["schemas"]["PendingIngestResponse"];
+export type EmbeddingJob = components["schemas"]["EmbeddingJob"];
+export type EmbeddingJobCounts = components["schemas"]["EmbeddingJobCounts"];
+export type EmbeddingJobList = components["schemas"]["EmbeddingJobList"];
+export type EmbeddingJobStatus = EmbeddingJob["status"];
+export type AdminStatus = components["schemas"]["AdminStatus"];
 // BridgeCandidate is not yet in the generated schema — define manually from backend model
 export type BridgeCandidate = { node_a: NodeRef; node_b: NodeRef; similarity: number };
 
@@ -307,4 +312,22 @@ export function saveAnswer(data: {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// Admin / embedding jobs
+export function getEmbeddingJobs(status?: EmbeddingJobStatus): Promise<EmbeddingJobList> {
+  const qs = status ? `?status=${status}` : "";
+  return request(`/api/v1/config/embedding-jobs${qs}`);
+}
+
+export function retryEmbeddingJob(jobId: string): Promise<EmbeddingJob> {
+  return request(`/api/v1/config/embedding-jobs/${jobId}/retry`, { method: "POST" });
+}
+
+export function retryAllFailedEmbeddingJobs(): Promise<{ retried: number }> {
+  return request("/api/v1/config/embedding-jobs/retry-all-failed", { method: "POST" });
+}
+
+export function getAdminStatus(): Promise<AdminStatus> {
+  return request("/api/v1/admin/status");
 }

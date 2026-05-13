@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     ollama_embed_model: str = "mxbai-embed-large"
     ollama_gen_model: str = "llama3.2"
 
+    # Embedding worker pacing — defaults sized for the Voyage free tier
+    # (3 RPM / 10 K TPM): one job every 22 s ≈ 2.7 RPM with headroom.
+    embedding_worker_interval_seconds: int = 22
+    embedding_rate_limit_cooldown_seconds: int = 60
+    embedding_drain_batch_size: int = 1
+
 
 @lru_cache
 def get_settings() -> Settings:

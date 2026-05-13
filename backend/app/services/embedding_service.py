@@ -1,27 +1,52 @@
 import logging
 import struct
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import aiosqlite
 
+from app.core.config import settings
 from app.providers.base import EmbeddingProvider
+from app.repositories import embedding_job_repo
+from app.services.embedding_errors import (
+    extract_retry_after_seconds,
+    is_retriable,
+)
 
 logger = logging.getLogger(__name__)
 
 _EXPECTED_DIM = 1024
 
 
+@dataclass
+class DrainResult:
+    """Summary of one `drain_jobs` cycle.
+
+    `cooldown_seconds` is non-None when the worker hit a retriable provider
+    error and should pause before its next cycle.
+    """
+
+    processed: int
+    cooldown_seconds: int | None
+
+
 def _pack_vector(v: list[float]) -> bytes:
     return struct.pack(f"{len(v)}f", *v)
 
 
-async def _queue_job(db: aiosqlite.Connection, node_id: str, target_model: str) -> None:
+async def _queue_job(
+    db: aiosqlite.Connection,
+    node_id: str,
+    target_model: str,
+    *,
+    attempt_count: int = 0,
+) -> None:
     now = datetime.now(UTC).isoformat()
     await db.execute(
-        "INSERT INTO embedding_jobs(id, node_id, status, target_model, created_at) "
-        "VALUES (?, ?, 'pending', ?, ?)",
-        (str(uuid.uuid4()), node_id, target_model, now),
+        "INSERT INTO embedding_jobs(id, node_id, status, target_model, created_at, attempt_count) "
+        "VALUES (?, ?, 'pending', ?, ?, ?)",
+        (str(uuid.uuid4()), node_id, target_model, now, attempt_count),
     )
     await db.commit()
 
@@ -42,9 +67,7 @@ async def embed_node(
 
     vector = await provider.embed(f"{row['title']}\n\n{row['content']}")
     if len(vector) != _EXPECTED_DIM:
-        raise ValueError(
-            f"Provider returned {len(vector)}-dim vector; expected {_EXPECTED_DIM}"
-        )
+        raise ValueError(f"Provider returned {len(vector)}-dim vector; expected {_EXPECTED_DIM}")
 
     packed = _pack_vector(vector)
 
@@ -69,12 +92,15 @@ async def embed_or_queue(
     node_id: str,
     provider: EmbeddingProvider,
 ) -> None:
-    """Attempt inline embedding; on failure queue a job for the background worker."""
+    """Attempt inline embedding; on failure queue a job for the background worker.
+
+    The queued job starts at attempt_count=1 because the failed inline attempt counts.
+    """
     try:
         await embed_node(db, node_id, provider)
     except Exception as exc:
         logger.warning("Inline embed failed for node %s, queuing: %s", node_id, exc)
-        await _queue_job(db, node_id, provider.model_id)
+        await _queue_job(db, node_id, provider.model_id, attempt_count=1)
 
 
 async def queue_reembed_all(db: aiosqlite.Connection, target_model: str) -> int:
@@ -166,22 +192,28 @@ async def search_similar(
     """
     packed = _pack_vector(vector)
     cursor = await db.execute(
-        "SELECT node_id FROM vec_nodes"
-        " WHERE embedding MATCH ? AND k = ?"
-        " ORDER BY distance",
+        "SELECT node_id FROM vec_nodes WHERE embedding MATCH ? AND k = ? ORDER BY distance",
         (packed, limit),
     )
     rows = await cursor.fetchall()
     return [r["node_id"] for r in rows]
 
 
-async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> None:
-    """Drain up to 10 pending embedding jobs. Called by the background worker."""
+async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> DrainResult:
+    """Drain up to `embedding_drain_batch_size` pending embedding jobs.
+
+    Retriable provider errors (rate limit, transient network, 5xx) revert the
+    job to `pending` without bumping `attempt_count` and stop the loop early
+    so the worker can cool down. Terminal errors keep the existing path:
+    bump `attempt_count` and mark the job `failed`.
+    """
     cursor = await db.execute(
-        "SELECT id, node_id FROM embedding_jobs WHERE status = 'pending' LIMIT 10"
+        "SELECT id, node_id FROM embedding_jobs WHERE status = 'pending' LIMIT ?",
+        (settings.embedding_drain_batch_size,),
     )
     jobs = await cursor.fetchall()
 
+    processed = 0
     for job in jobs:
         job_id = job["id"]
         node_id = job["node_id"]
@@ -198,10 +230,32 @@ async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> N
                 "UPDATE embedding_jobs SET status = 'complete', completed_at = ? WHERE id = ?",
                 (datetime.now(UTC).isoformat(), job_id),
             )
+            await db.commit()
+            processed += 1
         except Exception as exc:
+            if is_retriable(exc):
+                cooldown = (
+                    extract_retry_after_seconds(exc)
+                    or settings.embedding_rate_limit_cooldown_seconds
+                )
+                logger.warning(
+                    "Embedding job %s for node %s hit retriable error (%s); "
+                    "reverting to pending and cooling down %ss",
+                    job_id, node_id, exc.__class__.__name__, cooldown,
+                )
+                await db.execute(
+                    "UPDATE embedding_jobs SET status = 'pending', error = NULL WHERE id = ?",
+                    (job_id,),
+                )
+                await db.commit()
+                return DrainResult(processed=processed, cooldown_seconds=cooldown)
+
             logger.error("Embedding job %s failed for node %s: %s", job_id, node_id, exc)
+            await embedding_job_repo.increment_attempt(db, job_id)
             await db.execute(
                 "UPDATE embedding_jobs SET status = 'failed', error = ? WHERE id = ?",
                 (str(exc), job_id),
             )
-        await db.commit()
+            await db.commit()
+
+    return DrainResult(processed=processed, cooldown_seconds=None)

@@ -2,13 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { getAdminStatus } from "@/lib/api";
+import { usePollWhileVisible } from "@/lib/usePollWhileVisible";
 import { CaptureDialog } from "./CaptureDialog";
 import { IntentionalCaptureDialog } from "./IntentionalCaptureDialog";
 import { NewMenu } from "./NewMenu";
 
+const ADMIN_POLL_MS = 30_000;
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [intentionalOpen, setIntentionalOpen] = useState(false);
+  const [failedJobs, setFailedJobs] = useState(0);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -23,6 +28,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    getAdminStatus()
+      .then((s) => setFailedJobs(s.failed_jobs))
+      .catch(() => {});
+  }, []);
+
+  usePollWhileVisible(() => {
+    getAdminStatus()
+      .then((s) => setFailedJobs(s.failed_jobs))
+      .catch(() => {});
+  }, ADMIN_POLL_MS);
 
   return (
     <>
@@ -58,7 +75,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/synthesize" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 whitespace-nowrap">
             Synthesize
           </Link>
-          <div className="ml-auto flex flex-nowrap items-center gap-2">
+          <Link
+            href="/admin"
+            className="ml-auto flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 whitespace-nowrap"
+            title="Operability dashboard"
+          >
+            Admin
+            {failedJobs > 0 && (
+              <span
+                className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 text-[10px] font-semibold text-white bg-red-500 rounded-full"
+                aria-label={`${failedJobs} failed embedding jobs`}
+              >
+                {failedJobs}
+              </span>
+            )}
+          </Link>
+          <div className="flex flex-nowrap items-center gap-2">
             <NewMenu onCreateNote={() => setIntentionalOpen(true)} />
             <button
               onClick={() => setCaptureOpen(true)}

@@ -1388,6 +1388,270 @@ Tags are loaded from `GET /tags` once on initial graph load alongside `GET /grap
 
 ---
 
+## ADR-042 — Embedding jobs observability via /admin dashboard
+
+**Status:** Accepted
+
+**Context:** The embedding pipeline silently absorbs failures. `embed_or_queue`
+queues a job on inline failure; the worker tries once and marks the job
+`failed` on error. Failed jobs are never retried automatically and there is
+no UI for the user to see them. A rate-limit incident (e.g., Voyage free
+tier) can leave dozens of notes without vectors with no indication anything
+went wrong until search returns degraded results.
+
+**Decision:** Add a minimal operability dashboard at `/admin` backed by four
+backend endpoints:
+
+1. `GET /config/embedding-jobs` — extended with status filter, typed
+   response, node titles joined in, summary counts in the envelope.
+2. `POST /config/embedding-jobs/{id}/retry` — flips the existing row from
+   `failed` back to `pending`, increments `attempt_count`, clears `error`.
+3. `POST /config/embedding-jobs/retry-all-failed` — bulk version of (2).
+4. `GET /admin/status` — worker health (last drain timestamp, drain count,
+   queue depth). Module-state only; resets on restart.
+
+Schema change: add `attempt_count INTEGER NOT NULL DEFAULT 0` to
+`embedding_jobs`. Incremented by both inline-failure path in `embed_or_queue`
+and worker-failure path in `drain_jobs`, and by explicit retry. New jobs
+queued by `embed_or_queue` start at `attempt_count = 1` (the failed inline
+attempt is counted).
+
+**Rationale:**
+
+- **Flip-in-place over audit-row-per-attempt:** simpler schema, simpler
+  worker pickup query (`WHERE status = 'pending'` already works), and
+  `attempt_count` preserves enough audit information to identify silent
+  problem nodes without an additional table.
+- **`attempt_count` from day one:** the alternative is adding it later
+  during an incident, which requires a migration *and* code change at the
+  worst possible moment. Adding it now is one extra integer column.
+- **Starting at 1 when queued from inline failure:** the inline attempt
+  failed — that's why the job exists. Counting it preserves the honest
+  "total attempts to date" semantic and makes `attempt_count` directly
+  useful for spotting problem nodes ("why is this at 5?").
+- **No exponential backoff:** the existing 10-second poll plus natural API
+  rate-limit windows (e.g., 60-second reset on the Voyage free tier)
+  provide sufficient throttling for a single-user tool. Backoff adds
+  complexity (per-row scheduled retry time, eligibility query, jitter)
+  that is unjustified until real-world data shows it is needed.
+  *(Revisited 2026-05-13 — this rationale was wrong because a 429 isn't a
+  no-op; it kicks the row out of `pending` into `failed`. See
+  [ADR-044](#adr-044--retriable-vs-terminal-embedding-errors).)*
+- **Module-state worker health, not a database table:** acceptable to lose
+  this on restart. The information is operational ("is the worker
+  running?"), not historical. A `worker_heartbeats` table would be
+  overengineering for a single-process app.
+- **Manual retry over auto-retry:** auto-retry hides ongoing problems. The
+  user wants to know *why* something failed before deciding whether to
+  retry it (rate limit? Provider down? Bad content?). A button is the
+  right control surface.
+
+**Consequences:**
+
+- New migration `0003_attempt_count.sql`. Existing jobs backfill to 0;
+  history of past failures is not reconstructed.
+- The dashboard polls every 5s while open. Trivial load on the local
+  SQLite — measured separately if it ever proves otherwise.
+- A note that consistently fails (e.g., content exceeds provider token
+  limit) can be retried indefinitely. `attempt_count` is purely
+  informational in v1; no UI alert or automatic dead-lettering. If
+  attempt counts climb visibly, that signals a future ADR to add either
+  alerting or a `dead` terminal status.
+- Worker health lost on restart. Acceptable: a restart is itself a known
+  event, and the worker re-engages on the next cycle (10s).
+- `attempt_count` is incremented on *every* failure path, including the
+  initial inline `embed_or_queue` attempt. This means a freshly queued
+  job already shows `attempt_count = 1` before the worker has touched it.
+
+---
+
+## ADR-043 — Frontend choices for the /admin operability dashboard
+
+**Status:** Accepted
+
+**Context:** Phase 6.5 added four backend endpoints (`GET
+/config/embedding-jobs`, retry, retry-all-failed, `GET /admin/status`) and
+needed a frontend surface for them. Several small tradeoffs came up while
+building the page that are individually too small for their own ADR but
+worth recording together so future work can stay consistent.
+
+**Decision:**
+
+1. **Polling cadence.** `/admin` polls every 5 s; the nav-bar badge in
+   `AppShell` polls `/admin/status` every 30 s. Both pause when
+   `document.visibilityState === "hidden"` via a shared
+   `usePollWhileVisible` hook backed by a pure `createVisibilityPoller`
+   state machine (so it is testable without DOM).
+2. **Relative timestamps.** Plain text — `"4s ago"`, `"3m ago"`, `"2h
+   ago"`, `"2d ago"`. `null` renders as `"never"` (used for
+   `last_drain_at` before the worker has run). No tooltip with the exact
+   timestamp in v1; the dashboard re-renders every poll so absolute
+   precision is rarely useful.
+3. **Failed-jobs section is conditional.** Only renders when
+   `failed_jobs > 0`. The dashboard's resting state for a healthy system
+   is "Pending (0)" with no red anywhere. Same logic drives the nav
+   badge — absent when zero, otherwise a small red pill with the count.
+4. **Recent completions collapsed by default.** They're not actionable;
+   they confirm the worker is doing work. The header row shows the
+   total complete count so the user can tell at a glance.
+5. **Slide-over drawer for "Open note".** A new
+   `NodeDetailDrawer` component fetches `NodeDetail` on demand and
+   renders as a right-anchored panel over the dashboard. The user
+   stays on `/admin` while triaging — navigating to `/nodes/{id}`
+   would lose the polled state and force a back-button trip. The
+   drawer also offers a final "Open full note →" link for users who
+   want the editor view.
+6. **Optimistic retry.** Clicking Retry flips the row's local status
+   to `pending` before the API call returns, then a full refresh
+   reconciles. The optimistic step is in `applyOptimisticRetry`,
+   exported from the page module so it can be unit-tested without
+   mounting the component (React Testing Library is not in the
+   dependency set and adding it for one component would be
+   disproportionate).
+7. **No toast / notification system.** Errors render inline (red text
+   under the StatusBar for a failed refresh; the failed table itself
+   surfaces job-level errors). A toast library would be the first of
+   its kind in the project and the dashboard is already self-refreshing,
+   so transient failures self-heal on the next poll.
+
+**Rationale:**
+
+- **Same polling primitive everywhere** keeps the visibility-pause
+  behavior in one place. Otherwise it's easy to ship a feature that
+  hammers the API while the tab is hidden.
+- **Drawer over route navigation** matches the user's stated goal of
+  "stay on the dashboard." A modal would be equally fine; a right-anchored
+  drawer reads as "auxiliary detail" rather than "blocking task,"
+  which fits the triage flow.
+- **Optimistic-then-refresh** rather than full optimistic state machine
+  keeps the page code small. The worker picks up the row within ~10 s
+  anyway, so the next poll will reconcile to ground truth.
+- **No React Testing Library** because the testable logic is already
+  pure functions (`applyOptimisticRetry`, `relativeTime`,
+  `createVisibilityPoller`). Adding `@testing-library/react` would
+  pull in DOM-mount machinery the project does not otherwise use.
+
+**Consequences:**
+
+- A future feature that needs to mount a React component in a test
+  (e.g., a hook test that depends on real `useEffect` timing) will
+  have to add `@testing-library/react`. The pure-function pattern
+  used here will not stretch to all cases.
+- Relative timestamps re-render at the polling cadence; a job that
+  completes 4 s ago will read "4s ago" until the next poll. Acceptable
+  drift for a 5 s loop.
+- The nav badge poll runs even on routes that don't care (e.g., the
+  reader pages). 30 s × one `GET` is trivial load on a local SQLite,
+  but if the project ever grows other always-on indicators, they
+  should share a single polling root in `AppShell` rather than each
+  adding their own.
+
+---
+
+## ADR-044 — Retriable vs terminal embedding errors
+
+**Status:** Accepted (revisits the "No exponential backoff" bullet of
+[ADR-042](#adr-042--embedding-jobs-observability-via-admin-dashboard))
+
+**Context:** Once the Phase 6.5 `/admin` dashboard shipped, the user
+saw ~190 of ~200 embedding jobs in `failed` — not because the notes
+were bad but because the worker's 10 s drain cadence guaranteed that
+~7 of every 10 API calls per minute hit the Voyage free tier's 3 RPM
+ceiling. The worker caught the `RateLimitError` as a generic
+`Exception`, bumped `attempt_count`, marked the job `failed`, and
+stored the rate-limit message verbatim. ADR-042 explicitly assumed
+"natural rate-limit windows provide sufficient throttling." That
+assumption was wrong: a 429 is destructive in this stack because it
+moves the row out of `pending`. One `retry-all-failed` click would
+re-queue the rows, the same race would play out, and most would land
+back in `failed` — requiring repeated manual intervention.
+
+**Decision:**
+
+1. **Classify provider exceptions** in a new
+   `app/services/embedding_errors.py`:
+   `RateLimitError | TryAgain | Timeout | APIConnectionError |
+   ServiceUnavailableError` (all from `voyageai.error`) → retriable.
+   Everything else → terminal (existing behavior).
+2. **Retriable hit ≠ failure.** On retriable, the worker reverts the
+   row from `processing` back to `pending`, does **not** bump
+   `attempt_count`, and does **not** store an error string. The
+   `attempt_count` column is reserved for "things actually wrong with
+   this job," not "we backed off."
+3. **Single in-memory cooldown.** When `drain_jobs` hits a retriable
+   error it returns a `DrainResult(processed, cooldown_seconds)`.
+   The worker sets `app.state.cooldown_until = now + cooldown_seconds`
+   and skips its next cycle (or cycles) while that time is in the
+   future. The cooldown value is the Voyage `Retry-After` header if
+   present, otherwise `settings.embedding_rate_limit_cooldown_seconds`
+   (default 60).
+4. **Tighter cadence, smaller per-cycle bound.** Worker sleep is now
+   `settings.embedding_worker_interval_seconds` (default 22),
+   `drain_jobs` picks up at most
+   `settings.embedding_drain_batch_size` (default 1) rows per cycle.
+   At those values the steady-state rate is ~2.7 RPM — under the 3 RPM
+   ceiling with buffer — so 429s should be rare under normal use; the
+   cooldown is the safety net for bursts or unexpected throttling.
+5. **Surface cooldown in the UI.** `AdminStatus.cooldown_until` is a
+   nullable ISO timestamp. The `/admin` page renders an amber banner
+   ("Rate-limited — next attempt in Xs") whenever the value is in the
+   future, computed via a tiny `secondsUntil` helper.
+
+**Rationale:**
+
+- **Reuse the SDK's typed exceptions** rather than parse error
+  strings — Voyage already raises a `RateLimitError` subclass; we
+  just have to look at it instead of swallowing it as `Exception`.
+- **No `scheduled_for` column.** ADR-042 chose module state for
+  worker health for the same reason it's right here: this is
+  operational, not historical. A per-row scheduled-retry-time
+  column would also need its own pickup query, jitter, and migration
+  — overkill when one timestamp at the worker level does the job.
+- **`attempt_count` semantics preserved.** Existing callers and tests
+  treat `attempt_count` as "things have gone wrong with this row."
+  Bumping it on rate-limits would inflate the number without
+  conveying anything actionable; users would see `attempt_count: 5`
+  on a healthy job and worry.
+- **Cadence + batch size are config-driven** (`.env`) so the user
+  can tighten if they upgrade their Voyage tier or loosen for
+  debugging without code changes.
+- **The retriable list is conservative.** `InvalidRequestError`
+  (bad input) and `AuthenticationError` (bad key) stay terminal —
+  retrying those is wasted load and obscures real problems. `Timeout`
+  and `APIConnectionError` are included because both are usually
+  transient infrastructure; if they're persistent the user will see
+  the same job re-enter `pending` repeatedly and can intervene.
+
+**Consequences:**
+
+- The 192 stale failed rows from the originating incident drain on
+  their own once `retry-all-failed` is clicked once — no further
+  manual retries needed. Drain time at default settings is ~70 min
+  for that backlog (3 RPM ceiling). Throughput is *not* fixed by this
+  ADR; predictability is.
+- The inline `embed_or_queue` path is unchanged. Inline failures
+  still queue at `attempt_count = 1`; if that failure was rate-limit
+  related, the worker will pick the job up and the second attempt
+  will be the one that actually counts toward the cooldown logic.
+  This is a minor inconsistency we are accepting (cleaning it up
+  would require either threading worker state into the request path
+  or duplicating the cooldown mechanism inline; neither is worth it).
+- The cooldown is process-local. A backend restart loses it; the
+  worker will probably hit one 429 immediately, then cool down.
+  Acceptable: identical to ADR-042's stance on `drain_count`
+  resetting on restart.
+- Future tier changes (e.g., paid Voyage) are a `.env` edit:
+  `EMBEDDING_WORKER_INTERVAL_SECONDS=5`,
+  `EMBEDDING_DRAIN_BATCH_SIZE=10`. No code change.
+- If `RateLimitError` ever turns out to be a misclassification (e.g.,
+  Voyage starts raising it for unrecoverable per-key suspensions),
+  we'd see the same row re-enter `pending` on every cycle. That
+  pattern would be visible in `/admin` (a perpetually-cycling
+  `pending` count) and is recoverable via a manual intervention; no
+  silent corruption risk.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

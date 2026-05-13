@@ -24,7 +24,12 @@ def test_patch_config_updates_multiple_values(client):
 def test_patch_config_returns_full_config(client):
     r = client.patch("/api/v1/config", json={"generation_model": "claude-opus-4-7"})
     keys = {e["key"] for e in r.json()}
-    assert keys == {"embedding_provider", "embedding_model", "generation_provider", "generation_model"}
+    assert keys == {
+        "embedding_provider",
+        "embedding_model",
+        "generation_provider",
+        "generation_model",
+    }
 
 
 def test_patch_config_empty_body_is_noop(client):
@@ -68,9 +73,7 @@ def test_create_fleeting_does_not_embed(client):
 
 
 def test_update_content_triggers_reembed(client):
-    node = client.post(
-        "/api/v1/nodes/permanent", json={"title": "T", "content": "original"}
-    ).json()
+    node = client.post("/api/v1/nodes/permanent", json={"title": "T", "content": "original"}).json()
     assert node["embedding_model"] == "fake-embed"
 
     r = client.patch(f"/api/v1/nodes/{node['id']}", json={"content": "revised"})
@@ -81,9 +84,7 @@ def test_update_content_triggers_reembed(client):
 def test_update_tags_only_does_not_reembed(client):
     # Create a tag then a node
     tag = client.post("/api/v1/tags", json={"name": "ai"}).json()
-    node = client.post(
-        "/api/v1/nodes/permanent", json={"title": "T", "content": "c"}
-    ).json()
+    node = client.post("/api/v1/nodes/permanent", json={"title": "T", "content": "c"}).json()
 
     # Patch only tags — should not trigger re-embed (embedding_model stays set)
     r = client.patch(f"/api/v1/nodes/{node['id']}", json={"tag_ids": [tag["id"]]})
@@ -101,11 +102,12 @@ def test_patch_config_queues_reembed_on_model_change(client):
     assert r.status_code == 200
 
     # A job should be queued (node has "fake-embed" != "voyage-4-ultra")
-    jobs = client.get("/api/v1/config/embedding-jobs").json()
-    assert len(jobs) == 1
-    assert jobs[0]["node_id"] == node["id"]
-    assert jobs[0]["target_model"] == "voyage-4-ultra"
-    assert jobs[0]["status"] == "pending"
+    body = client.get("/api/v1/config/embedding-jobs").json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["node_id"] == node["id"]
+    assert body["items"][0]["target_model"] == "voyage-4-ultra"
+    assert body["items"][0]["status"] == "pending"
+    assert body["counts"]["pending"] == 1
 
 
 def test_patch_config_no_reembed_when_model_unchanged(client):
@@ -115,5 +117,6 @@ def test_patch_config_no_reembed_when_model_unchanged(client):
     r = client.patch("/api/v1/config", json={"embedding_model": "voyage-4"})
     assert r.status_code == 200
 
-    jobs = client.get("/api/v1/config/embedding-jobs").json()
-    assert len(jobs) == 0
+    body = client.get("/api/v1/config/embedding-jobs").json()
+    assert body["items"] == []
+    assert body["counts"] == {"pending": 0, "processing": 0, "complete": 0, "failed": 0}
