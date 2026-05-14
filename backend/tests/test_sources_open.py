@@ -90,3 +90,41 @@ def test_open_source_calls_open_url_exactly_once(open_client):
     c.get(f"/api/v1/sources/{source['id']}/open")
     assert len(opened) == 2
     assert all(u == "file:///tmp/once.pdf" for u in opened)
+
+
+def test_normalize_file_url_expands_tilde(monkeypatch):
+    """`file://~/foo` and `file:///~/foo` both expand via os.path.expanduser."""
+    from app.api.v1.sources import _normalize_file_url
+
+    monkeypatch.setenv("HOME", "/home/user")
+    assert _normalize_file_url("file://~/docs/x.pdf") == "file:///home/user/docs/x.pdf"
+    assert _normalize_file_url("file:///~/docs/x.pdf") == "file:///home/user/docs/x.pdf"
+
+
+def test_normalize_file_url_expands_home_var(monkeypatch):
+    from app.api.v1.sources import _normalize_file_url
+
+    monkeypatch.setenv("HOME", "/home/user")
+    assert _normalize_file_url("file://$HOME/x.pdf") == "file:///home/user/x.pdf"
+
+
+def test_normalize_file_url_decodes_percent_escapes():
+    from app.api.v1.sources import _normalize_file_url
+
+    assert _normalize_file_url("file:///tmp/a%20b.pdf") == "file:///tmp/a b.pdf"
+
+
+def test_normalize_file_url_passes_through_http():
+    from app.api.v1.sources import _normalize_file_url
+
+    assert _normalize_file_url("https://example.com/x") == "https://example.com/x"
+
+
+def test_open_source_normalizes_tilde(open_client, monkeypatch):
+    monkeypatch.setenv("HOME", "/home/user")
+    c, opened = open_client
+    source = _make_source(c, "file://~/docs/x.pdf")
+    r = c.get(f"/api/v1/sources/{source['id']}/open")
+    assert r.status_code == 200
+    assert r.json()["opened"] == "file:///home/user/docs/x.pdf"
+    assert opened == ["file:///home/user/docs/x.pdf"]

@@ -96,6 +96,12 @@ At import time they look the same. Over time they diverge: a note about keybindi
 | Sources as first-class graph nodes (virtual, teal, CITES edges) | Phase X |
 | Auto-hub structure note on import acceptance | Phase X |
 | Tags included in RAG context blocks | Phase X |
+| Process button on node detail page | Phase X |
+| Shared edgeTypes module + direction arrows + descriptions | Phase X |
+| NotePreviewPopover wired into NodePicker (edge creation) | Phase X |
+| Source edit / delete UI + duplicate-URL warning | Phase X |
+| File path normalization for `file://` URLs + xdg-open warning surfacing | Phase X |
+| Home page stats dashboard (`/admin/stats`) | Phase X |
 
 ### 🔲 Still outstanding
 
@@ -120,11 +126,35 @@ At import time they look the same. Over time they diverge: a note about keybindi
 
 *Add new observations below with a date header.*
 
-5/10/26 - Observations
-- When in the inbox, if I enter the edit view to make a change or add a tag I now can no longer process without navigating back to the inbox.  There should be a way to process a fleeting note from the node/[id] page.
-- Home page is currently pretty empty.  Might be cool to do some sort of dashboard with basic graph stats, can be basic numbers, or could have some llm thematic analysis option as well.
-- Need to have hover pop-over in the node/[id] (note) page so that when adding connections I can see what the actual node I am about to select has for a note.
-- Direction of connections, and the differences between when to use some (supports vs elaborates) are a little vague to the user right now.  Need to make these more easily seen and understood, without being annoying about it for users who have the workflow down.
-- +1 on needing to show the direction of connections being made.  Not intuitive for telling which note supports which when adding the connections.
-- Need to add a way to edit and or remove sources.  I am having issues with file paths and have 3 sources all attempting to point to a specific file, but I am unable to try and update so I am forced to continue to generate new sources.
-- Need to determine how to properly handle file paths and opening source files from the app.
+## 5/10/26 — Observations (all addressed 2026-05-14)
+
+- ✅ **Process from node detail page.** A "Process →" link now appears
+  next to the Delete button in the `/nodes/[id]` header whenever the
+  node is `type=fleeting`. Deep-links to `/inbox/process/[id]`; no
+  backend change needed.
+- ✅ **Home page dashboard.** Replaced the placeholder with a stats grid
+  (counts per node type, edges, sources, tags, inbox size, last
+  processed). New `GET /admin/stats` endpoint. Thematic AI analysis
+  deferred per ADR-048 — wait for real usage to justify it.
+- ✅ **Hover preview on connection picker.** `NodePicker` now accepts a
+  `previewOnHover` prop; when set, hovering a search result shows the
+  existing `NotePreviewPopover` with the candidate note's content.
+  Enabled on the `EdgePanel` picker on `/nodes/[id]`.
+- ✅ **Edge type direction and semantics.** Shared
+  `frontend/src/lib/edgeTypes.ts` now owns the `EDGE_TYPES` and
+  `EDGE_COLORS` constants plus an `EDGE_TYPE_META` map with a label,
+  direction flag, description, and example for each type. Edge-type
+  pickers show the description under the dropdown. Edge rows display
+  `→` / `←` / `↔` arrows so direction is inline. Badge `title`
+  attributes carry the description on hover. See ADR-046.
+- ✅ **Edit and delete sources.** `SourceDetailPanel` on `/sources`
+  gains Edit and Delete actions. Backend `PATCH` / `DELETE` already
+  existed; this was a pure frontend completion. A soft duplicate-URL
+  warning on the create form helps prevent the "3 sources for one
+  file" situation that motivated the report.
+- ✅ **File path handling.** `_normalize_file_url` expands `~` and
+  `$HOME` and decodes percent escapes for `file://` URLs on the open
+  endpoint. xdg-open stderr is now surfaced in the response as
+  `{"opened": ..., "warning": ...}` and shown as a toast in the UI.
+  Store-as-typed, expand-on-open. See ADR-047 and the ADR-024
+  amendment.

@@ -43,6 +43,12 @@ async def delete(db: aiosqlite.Connection, edge_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+async def count(db: aiosqlite.Connection) -> int:
+    cursor = await db.execute("SELECT COUNT(*) AS n FROM edges")
+    row = await cursor.fetchone()
+    return row["n"] if row else 0
+
+
 async def exists_between(db: aiosqlite.Connection, a_id: str, b_id: str) -> bool:
     cursor = await db.execute(
         """SELECT 1 FROM edges

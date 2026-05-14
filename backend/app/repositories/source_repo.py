@@ -83,6 +83,12 @@ async def list_sources(db: aiosqlite.Connection) -> list[SourceSummary]:
     return [await _row_to_summary(r) for r in rows]
 
 
+async def count(db: aiosqlite.Connection) -> int:
+    cursor = await db.execute("SELECT COUNT(*) AS n FROM sources")
+    row = await cursor.fetchone()
+    return row["n"] if row else 0
+
+
 async def update(
     db: aiosqlite.Connection, source_id: str, data: SourceUpdate
 ) -> SourceDetail | None:
