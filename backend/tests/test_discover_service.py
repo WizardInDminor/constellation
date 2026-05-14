@@ -1,4 +1,8 @@
+import json
 import struct
+
+import pytest
+from starlette.testclient import TestClient
 
 from app.models import (
     EdgeCreate,
@@ -218,3 +222,316 @@ def test_discover_orphans_paginates(client):
     r = client.get("/api/v1/discover/orphans?limit=2&offset=0")
     assert r.status_code == 200
     assert len(r.json()) == 2
+
+
+# ---------------------------------------------------------------------------
+# Bridge classification — _parse_classification unit tests
+# ---------------------------------------------------------------------------
+
+
+_PAIR = {"a-id", "b-id"}
+
+
+def test_parse_classification_happy_path():
+    raw = json.dumps(
+        {
+            "no_connection": False,
+            "edge_type": "ANALOGOUS_TO",
+            "from_id": "a-id",
+            "to_id": "b-id",
+            "rationale": "Both describe feedback loops in different domains.",
+        }
+    )
+    result = discover_service._parse_classification(raw, allowed_ids=_PAIR)
+    assert result.no_connection is False
+    assert result.edge_type == "ANALOGOUS_TO"
+    assert result.from_id == "a-id"
+    assert result.to_id == "b-id"
+    assert "feedback loops" in result.rationale
+
+
+def test_parse_classification_no_connection():
+    raw = json.dumps(
+        {"no_connection": True, "rationale": "Surface vocabulary overlap, no real link."}
+    )
+    result = discover_service._parse_classification(raw, allowed_ids=_PAIR)
+    assert result.no_connection is True
+    assert result.edge_type is None
+    assert result.from_id is None
+    assert result.to_id is None
+
+
+def test_parse_classification_strips_markdown_fences():
+    payload = json.dumps(
+        {
+            "no_connection": False,
+            "edge_type": "SUPPORTS",
+            "from_id": "a-id",
+            "to_id": "b-id",
+            "rationale": "x",
+        }
+    )
+    raw = f"```json\n{payload}\n```"
+    result = discover_service._parse_classification(raw, allowed_ids=_PAIR)
+    assert result.edge_type == "SUPPORTS"
+
+
+def test_parse_classification_rejects_unknown_edge_type():
+    raw = json.dumps(
+        {
+            "no_connection": False,
+            "edge_type": "NOT_A_TYPE",
+            "from_id": "a-id",
+            "to_id": "b-id",
+            "rationale": "x",
+        }
+    )
+    with pytest.raises(ValueError, match="Unknown edge_type"):
+        discover_service._parse_classification(raw, allowed_ids=_PAIR)
+
+
+def test_parse_classification_rejects_hallucinated_ids():
+    raw = json.dumps(
+        {
+            "no_connection": False,
+            "edge_type": "SUPPORTS",
+            "from_id": "ghost-id",
+            "to_id": "b-id",
+            "rationale": "x",
+        }
+    )
+    with pytest.raises(ValueError, match="not in the supplied pair"):
+        discover_service._parse_classification(raw, allowed_ids=_PAIR)
+
+
+def test_parse_classification_rejects_self_loop():
+    raw = json.dumps(
+        {
+            "no_connection": False,
+            "edge_type": "SUPPORTS",
+            "from_id": "a-id",
+            "to_id": "a-id",
+            "rationale": "x",
+        }
+    )
+    with pytest.raises(ValueError, match="must differ"):
+        discover_service._parse_classification(raw, allowed_ids=_PAIR)
+
+
+def test_parse_classification_raises_on_bad_json():
+    with pytest.raises(ValueError, match="decode JSON"):
+        discover_service._parse_classification("this is not json", allowed_ids=_PAIR)
+
+
+# ---------------------------------------------------------------------------
+# classify_pair — service-level integration with a stub provider
+# ---------------------------------------------------------------------------
+
+
+class _StubGen:
+    """Captures the system prompt and user message; returns a canned response."""
+
+    def __init__(self, response: str):
+        self._response = response
+        self.captured_system: str | None = None
+        self.captured_user: str | None = None
+
+    async def complete(self, messages, system, max_tokens=1024):
+        self.captured_system = system
+        self.captured_user = messages[0]["content"]
+        return self._response
+
+
+async def test_classify_pair_returns_parsed_classification(db):
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="alpha"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="beta"))
+    stub = _StubGen(
+        json.dumps(
+            {
+                "no_connection": False,
+                "edge_type": "ANALOGOUS_TO",
+                "from_id": a.id,
+                "to_id": b.id,
+                "rationale": "Both about iteration toward equilibrium.",
+            }
+        )
+    )
+    result = await discover_service.classify_pair(db, stub, node_a_id=a.id, node_b_id=b.id)
+    assert result.no_connection is False
+    assert result.edge_type == "ANALOGOUS_TO"
+    assert result.from_id == a.id
+    assert result.to_id == b.id
+    # Prompt assembly sanity-check
+    assert "NOTE A:" in stub.captured_user
+    assert "NOTE B:" in stub.captured_user
+    assert a.title in stub.captured_user
+    assert b.title in stub.captured_user
+
+
+async def test_classify_pair_raises_lookup_when_node_missing(db):
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    stub = _StubGen("{}")
+    with pytest.raises(LookupError):
+        await discover_service.classify_pair(db, stub, node_a_id=a.id, node_b_id="ghost")
+
+
+# ---------------------------------------------------------------------------
+# POST /discover/bridges/classify — route-level tests
+# ---------------------------------------------------------------------------
+
+
+def _classify_client(tmp_path, monkeypatch, gen_response: str):
+    """Build a TestClient whose generation provider returns `gen_response`."""
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _FakeGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return gen_response
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _FakeGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    return TestClient(fastapi_app)
+
+
+def test_classify_route_happy_path(tmp_path, monkeypatch):
+    # We need the IDs to exist before the canned response references them; so
+    # spin up one client, create the pair, then point a second client at the
+    # same db file with a response that names those IDs.
+    db_path = tmp_path / "test.db"
+    import app.core.config as cfg
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    cfg.get_settings.cache_clear()
+
+    # Phase 1: create the pair with the default fake gen (returns "fake response")
+    import app.core.lifespan as lsp
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    captured: dict[str, str] = {}
+
+    class _FakeGenA:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            return captured.get("response", "fake response")
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _FakeGenA()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        a = c.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()
+        b = c.post("/api/v1/nodes/permanent", json={"title": "B", "content": "y"}).json()
+        captured["response"] = json.dumps(
+            {
+                "no_connection": False,
+                "edge_type": "ANALOGOUS_TO",
+                "from_id": a["id"],
+                "to_id": b["id"],
+                "rationale": "Shared structural pattern.",
+            }
+        )
+        r = c.post(
+            "/api/v1/discover/bridges/classify",
+            json={"node_a_id": a["id"], "node_b_id": b["id"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["no_connection"] is False
+        assert body["edge_type"] == "ANALOGOUS_TO"
+        assert body["from_id"] == a["id"]
+        assert body["to_id"] == b["id"]
+    cfg.get_settings.cache_clear()
+
+
+def test_classify_route_no_connection(tmp_path, monkeypatch):
+    response = json.dumps({"no_connection": True, "rationale": "Coincidental overlap only."})
+    with _classify_client(tmp_path, monkeypatch, response) as c:
+        a = c.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()
+        b = c.post("/api/v1/nodes/permanent", json={"title": "B", "content": "y"}).json()
+        r = c.post(
+            "/api/v1/discover/bridges/classify",
+            json={"node_a_id": a["id"], "node_b_id": b["id"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["no_connection"] is True
+        assert body["edge_type"] is None
+    import app.core.config as cfg
+
+    cfg.get_settings.cache_clear()
+
+
+def test_classify_route_bad_json_500(tmp_path, monkeypatch):
+    with _classify_client(tmp_path, monkeypatch, "definitely not json") as c:
+        a = c.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()
+        b = c.post("/api/v1/nodes/permanent", json={"title": "B", "content": "y"}).json()
+        r = c.post(
+            "/api/v1/discover/bridges/classify",
+            json={"node_a_id": a["id"], "node_b_id": b["id"]},
+        )
+        assert r.status_code == 500
+    import app.core.config as cfg
+
+    cfg.get_settings.cache_clear()
+
+
+def test_classify_route_missing_node_404(tmp_path, monkeypatch):
+    with _classify_client(tmp_path, monkeypatch, "{}") as c:
+        a = c.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()
+        r = c.post(
+            "/api/v1/discover/bridges/classify",
+            json={"node_a_id": a["id"], "node_b_id": "ghost"},
+        )
+        assert r.status_code == 404
+    import app.core.config as cfg
+
+    cfg.get_settings.cache_clear()
+
+
+def test_classify_route_same_id_422(tmp_path, monkeypatch):
+    with _classify_client(tmp_path, monkeypatch, "{}") as c:
+        a = c.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()
+        r = c.post(
+            "/api/v1/discover/bridges/classify",
+            json={"node_a_id": a["id"], "node_b_id": a["id"]},
+        )
+        assert r.status_code == 422
+    import app.core.config as cfg
+
+    cfg.get_settings.cache_clear()

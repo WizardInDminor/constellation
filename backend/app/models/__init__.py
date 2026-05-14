@@ -1,6 +1,6 @@
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
-from app.models.discover import BridgeCandidate
+from app.models.discover import BridgeCandidate, BridgeClassification, ClassifyBridgeRequest
 from app.models.edge import (
     EdgeCreate,
     EdgeDetail,
@@ -114,6 +114,8 @@ __all__ = [
     "LiteratureCandidate",
     "PendingIngestResponse",
     "BridgeCandidate",
+    "BridgeClassification",
+    "ClassifyBridgeRequest",
     "CorpusStats",
     "AdminStatus",
     "EmbeddingJob",

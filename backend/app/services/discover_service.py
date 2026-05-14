@@ -11,14 +11,104 @@ Bridge-finding caps the input set at the most-recently-updated 200 nodes. See
 ADR-033 for why we don't precompute or scan the full corpus.
 """
 
+import json
+import logging
+import re
+
 import aiosqlite
 
-from app.models import BridgeCandidate, NodeRef, NodeSummary
+from app.models import BridgeCandidate, BridgeClassification, NodeDetail, NodeRef, NodeSummary
+from app.models.edge import EdgeType
+from app.providers.base import GenerationProvider
 from app.repositories import edge_repo, node_repo
-from app.services import embedding_service
+from app.services import embedding_service, generation_service
 
 _BRIDGE_SCAN_LIMIT = 200
 _BRIDGE_NEIGHBORS_PER_NODE = 8
+
+_log = logging.getLogger(__name__)
+
+_CLASSIFY_BRIDGE_SYSTEM = """\
+You are a zettelkasten assistant. The user will give you two notes from their \
+knowledge base that share high embedding similarity but have no edge between \
+them. Your job is to decide whether a real conceptual relationship exists \
+between them, and if so, recommend a single best edge type and direction.
+
+Edge types (all are directional except ANALOGOUS_TO, which is symmetric):
+  SUPPORTS     — A provides evidence or argument for B
+  CONTRADICTS  — A is in tension with B
+  ELABORATES   — A zooms in on one aspect of B
+  ANALOGOUS_TO — A and B share structural similarity, often across domains
+  QUESTIONS    — A raises a problem with or about B
+  INSPIRED_BY  — A is a looser creative or associative offshoot of B
+  COLLECTS     — A (a structure note / MOC) includes B in its map
+
+Surface similarity is not enough. If both notes happen to share vocabulary or \
+domain but have no real conceptual connection, return NO_CONNECTION. It is \
+better to honestly reject a coincidence than invent a weak link.
+
+When a connection exists, pick the SINGLE most fitting edge type. Identify which \
+note is the source (`from_id`) and which is the target (`to_id`); for \
+ANALOGOUS_TO, the choice is arbitrary — pick either. Provide a one- or \
+two-sentence rationale that names the specific shared idea, not generic \
+similarity.
+
+Return ONLY valid JSON — no markdown fences, no commentary. One of:
+  {"no_connection": false, "edge_type": "SUPPORTS",
+   "from_id": "...", "to_id": "...", "rationale": "..."}
+  {"no_connection": true, "rationale": "..."}\
+"""
+
+
+def _format_pair_user_message(a: NodeDetail, b: NodeDetail) -> str:
+    return (
+        f"NOTE A:\n  node_id: {a.id}\n  Title: {a.title}\n  Content: {a.content}"
+        f"\n\nNOTE B:\n  node_id: {b.id}\n  Title: {b.title}\n  Content: {b.content}"
+    )
+
+
+def _parse_classification(raw: str, *, allowed_ids: set[str]) -> BridgeClassification:
+    """Parse Claude's JSON response. Raises ValueError on unparseable output.
+
+    `allowed_ids` is the {a.id, b.id} set; we reject `from_id`/`to_id` that
+    aren't one of the pair to guard against model hallucination.
+    """
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if match:
+        cleaned = match.group()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Could not decode JSON: {exc}") from exc
+
+    no_connection = bool(data.get("no_connection", False))
+    rationale = str(data.get("rationale", "")).strip()
+
+    if no_connection:
+        return BridgeClassification(no_connection=True, rationale=rationale)
+
+    edge_type_raw = data.get("edge_type")
+    from_id = data.get("from_id")
+    to_id = data.get("to_id")
+
+    if edge_type_raw not in EdgeType.__args__:  # type: ignore[attr-defined]
+        raise ValueError(f"Unknown edge_type: {edge_type_raw!r}")
+    if from_id not in allowed_ids or to_id not in allowed_ids:
+        raise ValueError(f"from_id/to_id ({from_id!r}, {to_id!r}) not in the supplied pair")
+    if from_id == to_id:
+        raise ValueError("from_id and to_id must differ")
+
+    return BridgeClassification(
+        no_connection=False,
+        edge_type=edge_type_raw,
+        from_id=from_id,
+        to_id=to_id,
+        rationale=rationale,
+    )
 
 
 async def find_orphans(
@@ -124,3 +214,36 @@ async def find_bridges(
         if a in refs and b in refs:
             results.append(BridgeCandidate(node_a=refs[a], node_b=refs[b], similarity=sim))
     return results
+
+
+async def classify_pair(
+    db: aiosqlite.Connection,
+    gen_provider: GenerationProvider,
+    *,
+    node_a_id: str,
+    node_b_id: str,
+) -> BridgeClassification:
+    """Ask Claude to evaluate whether two notes share a meaningful edge.
+
+    Returns a BridgeClassification with either (a) a recommended edge_type +
+    direction + rationale, or (b) `no_connection=True` if Claude rejects the
+    apparent similarity as surface coincidence.
+
+    Raises ValueError on unparseable model output (the route layer translates
+    this to HTTP 500, consistent with `/rag/suggest-links`).
+    """
+    a = await node_repo.get_by_id(db, node_a_id)
+    b = await node_repo.get_by_id(db, node_b_id)
+    if a is None or b is None:
+        raise LookupError("One or both notes not found")
+
+    messages = [{"role": "user", "content": _format_pair_user_message(a, b)}]
+    raw = await generation_service.complete(
+        gen_provider, messages, _CLASSIFY_BRIDGE_SYSTEM, max_tokens=512
+    )
+
+    try:
+        return _parse_classification(raw, allowed_ids={a.id, b.id})
+    except ValueError:
+        _log.error("Unparseable classify-bridge response: %r", raw)
+        raise

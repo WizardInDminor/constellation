@@ -3,8 +3,23 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { listBridges, listOrphans, listStale, createEdge, getNode } from "@/lib/api";
-import type { BridgeCandidate, NodeDetail, NodeSummary, TagRef, EdgeType, NodeRef } from "@/lib/api";
+import {
+  listBridges,
+  listOrphans,
+  listStale,
+  createEdge,
+  getNode,
+  classifyBridge,
+} from "@/lib/api";
+import type {
+  BridgeCandidate,
+  BridgeClassification,
+  NodeDetail,
+  NodeSummary,
+  TagRef,
+  EdgeType,
+  NodeRef,
+} from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
 import { NotePreviewPopover } from "@/components/NotePreviewPopover";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
@@ -63,17 +78,31 @@ function EdgeForm({
   excludeIds,
   onPickTarget,
   onSuccess,
+  initialType,
+  initialNote,
+  prefillKey,
 }: {
   fromId: string;
   toId: string | null;
   excludeIds: string[];
   onPickTarget?: (node: NodeRef) => void;
   onSuccess: () => void;
+  initialType?: EdgeType;
+  initialNote?: string;
+  // Bumping this signals "external suggestion changed — reset edge type and note".
+  // Direct equality on the initial* values would over-fire on every parent re-render.
+  prefillKey?: string | number;
 }) {
-  const [edgeType, setEdgeType] = useState<EdgeType>("SUPPORTS");
-  const [note, setNote] = useState("");
+  const [edgeType, setEdgeType] = useState<EdgeType>(initialType ?? "SUPPORTS");
+  const [note, setNote] = useState(initialNote ?? "");
   const [saving, setSaving] = useState(false);
   const [edgeError, setEdgeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (prefillKey === undefined) return;
+    if (initialType !== undefined) setEdgeType(initialType);
+    if (initialNote !== undefined) setNote(initialNote);
+  }, [prefillKey, initialType, initialNote]);
 
   async function submit() {
     if (!toId) return;
@@ -258,6 +287,129 @@ function BridgeNoteSection({
   );
 }
 
+// ── ClassifyBridgePanel ───────────────────────────────────────────────────────
+
+function ClassifyBridgePanel({
+  pair,
+  onApply,
+}: {
+  pair: BridgeCandidate;
+  onApply: (result: BridgeClassification) => void;
+}) {
+  const [result, setResult] = useState<BridgeClassification | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset on pair change
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+    setLoading(false);
+  }, [pair.node_a.id, pair.node_b.id]);
+
+  async function run() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await classifyBridge(pair.node_a.id, pair.node_b.id);
+      setResult(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Classification failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-xs text-gray-500 italic flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin" />
+        Asking Claude…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-red-600">{error}</p>
+        <button
+          onClick={run}
+          className="self-start text-xs text-indigo-600 hover:text-indigo-800"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (result === null) {
+    return (
+      <button
+        onClick={run}
+        className="w-full text-sm border border-indigo-200 bg-indigo-50/50 text-indigo-700 rounded px-3 py-2 hover:bg-indigo-100 transition-colors"
+      >
+        ✨ Ask Claude to classify this pair
+      </button>
+    );
+  }
+
+  if (result.no_connection) {
+    return (
+      <div className="border border-amber-200 bg-amber-50 rounded px-3 py-2 flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-amber-700">
+          Claude doesn&apos;t see a meaningful link
+        </span>
+        <p className="text-xs text-amber-800/80 leading-relaxed">{result.rationale}</p>
+        <button
+          onClick={run}
+          className="self-start text-xs text-amber-700 hover:text-amber-900"
+        >
+          Re-classify
+        </button>
+      </div>
+    );
+  }
+
+  // Direction display: which node is from, which is to
+  const fromNode = result.from_id === pair.node_a.id ? pair.node_a : pair.node_b;
+  const toNode = result.to_id === pair.node_a.id ? pair.node_a : pair.node_b;
+
+  return (
+    <div className="border border-indigo-200 bg-indigo-50/50 rounded px-3 py-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className="font-medium truncate max-w-32" title={fromNode.title}>
+          {fromNode.title}
+        </span>
+        <span className="text-indigo-400">→</span>
+        <span className="font-medium truncate max-w-32" title={toNode.title}>
+          {toNode.title}
+        </span>
+        <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono">
+          {result.edge_type}
+        </span>
+      </div>
+      <p className="text-xs text-gray-600 leading-relaxed italic">
+        {result.rationale}
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onApply(result)}
+          className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+        >
+          Apply suggestion
+        </button>
+        <button
+          onClick={run}
+          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-800"
+        >
+          Re-classify
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── BridgeCard ────────────────────────────────────────────────────────────────
 
 function BridgeCard({
@@ -349,10 +501,22 @@ export default function DiscoverPage() {
   const [selectedBridge, setSelectedBridge] = useState<BridgeCandidate | null>(null);
   const [bridgeDetails, setBridgeDetails] = useState<[NodeDetail | null, NodeDetail | null]>([null, null]);
   const [loadingBridgeDetails, setLoadingBridgeDetails] = useState(false);
+  const [bridgePrefill, setBridgePrefill] = useState<{
+    fromId: string;
+    toId: string;
+    edgeType: EdgeType;
+    note: string;
+    key: number;
+  } | null>(null);
   const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
   const [selectedNodeDetail, setSelectedNodeDetail] = useState<NodeDetail | null>(null);
   const [loadingNodeDetail, setLoadingNodeDetail] = useState(false);
   const [nodePickTarget, setNodePickTarget] = useState<NodeRef | null>(null);
+
+  // Reset bridge prefill when the selected bridge changes
+  useEffect(() => {
+    setBridgePrefill(null);
+  }, [selectedBridge?.node_a.id, selectedBridge?.node_b.id]);
 
   // Fetch full node detail when an orphan/stale node is opened
   useEffect(() => {
@@ -540,12 +704,28 @@ export default function DiscoverPage() {
               </>
             )}
           </div>
+          <ClassifyBridgePanel
+            pair={selectedBridge}
+            onApply={(r) => {
+              if (r.no_connection || !r.edge_type || !r.from_id || !r.to_id) return;
+              setBridgePrefill({
+                fromId: r.from_id,
+                toId: r.to_id,
+                edgeType: r.edge_type,
+                note: r.rationale,
+                key: Date.now(),
+              });
+            }}
+          />
           <div>
             <p className="text-xs text-gray-500 font-medium mb-3">Create connection</p>
             <EdgeForm
-              fromId={selectedBridge.node_a.id}
-              toId={selectedBridge.node_b.id}
+              fromId={bridgePrefill?.fromId ?? selectedBridge.node_a.id}
+              toId={bridgePrefill?.toId ?? selectedBridge.node_b.id}
               excludeIds={[selectedBridge.node_a.id, selectedBridge.node_b.id]}
+              initialType={bridgePrefill?.edgeType}
+              initialNote={bridgePrefill?.note}
+              prefillKey={bridgePrefill?.key}
               onSuccess={() => {
                 // Remove this pair from the list
                 setBridges((prev) =>

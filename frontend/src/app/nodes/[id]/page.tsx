@@ -418,6 +418,7 @@ function SourcePanel({
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openMessage, setOpenMessage] = useState<{ kind: "error" | "warning"; text: string } | null>(null);
 
   // New-source form state
   const [newTitle, setNewTitle] = useState("");
@@ -494,10 +495,14 @@ function SourcePanel({
 
   async function handleOpen() {
     if (!node.source_id) return;
+    setOpenMessage(null);
     try {
-      await openSource(node.source_id);
+      const result = await openSource(node.source_id);
+      if (result.warning) {
+        setOpenMessage({ kind: "warning", text: result.warning });
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open source");
+      setOpenMessage({ kind: "error", text: e instanceof Error ? e.message : "Could not open source" });
     }
   }
 
@@ -538,6 +543,17 @@ function SourcePanel({
                   Open source →
                 </button>
               </div>
+              {openMessage && (
+                <p
+                  className={
+                    openMessage.kind === "error"
+                      ? "text-xs text-red-600"
+                      : "text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1"
+                  }
+                >
+                  {openMessage.text}
+                </p>
+              )}
             </>
           ) : (
             <span className="text-xs text-gray-400 italic">Loading source…</span>

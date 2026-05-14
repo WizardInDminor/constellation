@@ -15,10 +15,20 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 
 
 def _normalize_file_url(url: str) -> str:
-    """For file:// URLs, expand ~ and $HOME, decode percent-escapes, then re-form.
-    Non-file schemes pass through unchanged. See ADR-047.
+    """Normalize a source URL for `xdg-open`.
+
+    - `file://` URLs: expand `~` and `$HOME`, decode percent-escapes, re-form.
+    - Bare filesystem paths (no scheme, starting with `/`, `~`, or `$`): expand
+      and wrap as `file:///abs/path`. xdg-open does not perform shell expansion
+      itself, so `~/foo.md` would otherwise be passed verbatim and fail silently.
+    - All other URLs pass through unchanged.
+
+    See ADR-047.
     """
     parsed = urlparse(url)
+    if not parsed.scheme and (url.startswith(("/", "~", "$"))):
+        expanded = os.path.expanduser(os.path.expandvars(url))
+        return urlunparse(("file", "", expanded, "", "", ""))
     if parsed.scheme != "file":
         return url
     raw_path = unquote(parsed.path)
@@ -38,7 +48,9 @@ async def _open_url(url: str) -> str | None:
     """Launch xdg-open for a URL or file path.
 
     Fire-and-forget: does not wait for the opened application to close.
-    Returns any stderr text captured during the brief window after launch so the
+    `start_new_session=True` detaches the subprocess so a `uvicorn --reload`
+    restart cannot kill the GUI app that xdg-open spawned. Returns any stderr
+    text or a synthesized exit-code message when xdg-open fails, so the
     caller can surface it as a warning (see ADR-024 amendment).
     """
     try:
@@ -47,15 +59,24 @@ async def _open_url(url: str) -> str | None:
             url,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
         try:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-            if stderr:
-                msg = stderr.decode().strip()
-                logger.warning("xdg-open stderr for %r: %s", url, msg)
-                return msg
         except asyncio.TimeoutError:
             logger.warning("xdg-open did not exit within 5 s for %r", url)
+            return None
+        msg = stderr.decode().strip() if stderr else ""
+        rc = proc.returncode
+        if rc:
+            if msg:
+                logger.warning("xdg-open exit %d for %r: %s", rc, url, msg)
+                return msg
+            logger.warning("xdg-open exit %d for %r (no stderr)", rc, url)
+            return f"xdg-open exited with code {rc}"
+        if msg:
+            logger.warning("xdg-open stderr for %r: %s", url, msg)
+            return msg
         return None
     except FileNotFoundError as exc:
         raise HTTPException(500, "xdg-open not found on this system") from exc
@@ -104,6 +125,12 @@ async def open_source(source_id: str, db: DB) -> dict:
     if not source.url:
         raise HTTPException(400, "Source has no URL configured")
     target = _normalize_file_url(source.url)
+    # For local files, verify existence before spawning xdg-open. xdg-open
+    # exits silently for missing files, so without this check the user sees
+    # no error and no app opens.
+    parsed = urlparse(target)
+    if parsed.scheme == "file" and not os.path.exists(parsed.path):
+        raise HTTPException(404, f"File not found: {parsed.path}")
     warning = await _open_url(target)
     payload: dict = {"opened": target}
     if warning:

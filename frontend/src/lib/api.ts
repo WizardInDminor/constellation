@@ -46,6 +46,7 @@ export type CorpusStats = {
 };
 // BridgeCandidate is not yet in the generated schema — define manually from backend model
 export type BridgeCandidate = { node_a: NodeRef; node_b: NodeRef; similarity: number };
+export type BridgeClassification = components["schemas"]["BridgeClassification"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -305,6 +306,16 @@ export function listBridges(opts: {
     params.set("min_similarity", String(opts.minSimilarity));
   const qs = params.toString();
   return request(`/api/v1/discover/bridges${qs ? `?${qs}` : ""}`);
+}
+
+export function classifyBridge(
+  nodeAId: string,
+  nodeBId: string,
+): Promise<BridgeClassification> {
+  return request("/api/v1/discover/bridges/classify", {
+    method: "POST",
+    body: JSON.stringify({ node_a_id: nodeAId, node_b_id: nodeBId }),
+  });
 }
 
 // RAG

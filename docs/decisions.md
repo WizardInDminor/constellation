@@ -1851,6 +1851,34 @@ preserved). Stderr is still logged for server-side observability. This
 is a strict superset of the ADR-024 contract: existing clients that read
 only `opened` continue to work; new clients can surface the warning.
 
+**2026-05-14 amendment — bare paths, existence check, exit codes:** Users
+were typing source URLs like `~/notes/foo.md` or `/home/matt/foo.md` with
+no `file://` scheme. The original `_normalize_file_url` only acted on
+`file://` URLs, so bare paths were passed verbatim to xdg-open. Tilde
+forms failed silently (xdg-open does not shell-expand), and missing
+files produced no stderr — the user saw nothing.
+
+Three additions:
+
+1. `_normalize_file_url` now coerces a bare string starting with `/`,
+   `~`, or `$` into a `file:///abs/path` URL after `expanduser` /
+   `expandvars`. Strings that don't look like paths (e.g. `example.com`,
+   `git@host:repo.git`) pass through unchanged so we don't break opaque
+   identifiers.
+2. The route validates `os.path.exists(parsed.path)` for `file://`
+   targets and returns **HTTP 404** with `File not found: <path>` when
+   the file is missing. This is a behavior change: previously the call
+   would return 200 with no warning. The 404 gives the user immediate,
+   actionable feedback.
+3. `_open_url` now treats a non-zero exit code from xdg-open as a
+   warning even when stderr is empty (e.g., `"xdg-open exited with code
+   4"`). It also passes `start_new_session=True` so a `uvicorn --reload`
+   restart cannot kill the GUI app xdg-open just spawned.
+
+The frontend SourcePanel on `/nodes/[id]` was also updated to display
+warnings (it previously only handled errors), bringing it in line with
+the `/sources` modal.
+
 ---
 
 ## ADR-048 — Home page dashboard: stats-only, no AI thematic analysis
@@ -1894,6 +1922,120 @@ snapshot).
 - The `count_by_type`, `count_inbox`, `last_processed_at` helpers live in
   `node_repo`. `edge_repo.count`, `source_repo.count`, `tag_repo.count`
   are simple `COUNT(*)` wrappers. Routes stay thin.
+
+---
+
+## ADR-049 — AI-classified bridges: on-demand, per-pair, NO_CONNECTION as a first-class result
+
+**Status:** Accepted
+
+**Context:** The `/discover` Bridges tab surfaces pairs of notes with high
+embedding similarity but no edge — pure cosine-equivalent retrieval, no
+LLM. Two limitations of that signal showed up once the corpus had real
+breadth (per the lyrics-workflow exercise of 2026-05-14):
+
+1. Some pairs are surface coincidences — notes that share vocabulary or
+   domain but no real conceptual link.
+2. Even genuine pairs require the user to manually pick an edge type
+   from a seven-option vocabulary and decide on direction, which slows
+   the per-bridge triage loop.
+
+A natural fix: pass each pair through Claude with the typed edge
+vocabulary and ask for a recommended type + direction + rationale, plus
+an option to reject the pair as coincidence. The design questions were
+(a) when to fire the call, (b) where the prompt lives, (c) how to model
+"no real link" cleanly.
+
+**Decision:**
+
+1. **Per-pair on-demand classification, not batch.** A new endpoint
+   `POST /discover/bridges/classify` takes `{node_a_id, node_b_id}` and
+   returns a `BridgeClassification`. The frontend exposes it as an
+   explicit "Ask Claude to classify this pair" button inside the bridge
+   slide-out; the bridge list itself stays unclassified.
+2. **Prompt skeleton reused from `_SUGGEST_LINKS_SYSTEM`.** The
+   classifier prompt (`_CLASSIFY_BRIDGE_SYSTEM` in
+   `app/services/discover_service.py`) reuses the same edge-type
+   vocabulary block, with a different framing: two notes, one edge,
+   plus an explicit `NO_CONNECTION` escape and a direction requirement
+   (which `from_id`/`to_id`).
+3. **`NO_CONNECTION` is a first-class result.** `BridgeClassification`
+   exposes `no_connection: bool`; when true,
+   `edge_type`/`from_id`/`to_id` are null. The UI renders this as an
+   amber banner ("Claude doesn't see a meaningful link") with the
+   rationale, not as an error.
+4. **Hallucinated IDs rejected at parse time.** `_parse_classification`
+   takes an `allowed_ids: set[str]` (the two node IDs the user
+   supplied) and rejects any `from_id`/`to_id` outside that set, plus
+   self-loops. Unparseable output raises `ValueError`, which the route
+   translates to HTTP 500 — consistent with `/rag/suggest-links` and
+   `/rag/suggest-permanent`.
+5. **Frontend applies the suggestion via a separate "Apply" click.**
+   The classifier does not auto-fill the edge form. A dedicated "Apply
+   suggestion" button copies the recommended `edge_type`, direction
+   (from/to), and rationale (as the edge note) into the existing
+   `EdgeForm`. The user can still edit each field before submission. A
+   `prefillKey` timestamp scopes `EdgeForm`'s `useEffect` so re-renders
+   that don't change the suggestion don't clobber the user's
+   in-progress edits.
+
+**Rationale:**
+
+- **On-demand over batch.** Pre-classifying all 30 bridges on every
+  list refresh would cost ~30 LLM calls each time the user opens the
+  tab. Aligned with the rate-conscious posture of
+  [ADR-044](#adr-044--retriable-vs-terminal-embedding-errors): the
+  classifier is opt-in, paid for only when the user is actually
+  triaging a specific pair. A future "auto-classify all" toggle is a
+  pure addition; the on-demand path is the right default.
+- **Same prompt skeleton.** The edge-type vocabulary already shipped
+  once in `_SUGGEST_LINKS_SYSTEM` and changes there would need to
+  propagate anyway. The bridge prompt is its own string constant
+  rather than a shared helper because the framing ("two notes" vs
+  "source + N candidates") differs enough that a shared abstraction
+  would obscure the difference more than it would save.
+- **NO_CONNECTION as a result, not an error.** A "this is a
+  coincidence" verdict is information the user wants — it justifies
+  dismissing the pair without creating an edge. Treating it as an
+  HTTP error would force the frontend into special-case handling for
+  the not-error case, and would lose Claude's rationale (which is the
+  most useful part of a rejection).
+- **ID validation guards against hallucination.** Voyage-similar
+  pairs can be very close in embedding space; the `allowed_ids` check
+  is cheap insurance against the model returning an ID it inferred
+  rather than echoed.
+- **Manual "Apply" button.** Auto-applying would surprise the user
+  when their selected edge type or note text gets wiped. The two-step
+  flow (classify → review banner → apply) keeps the user in control;
+  the banner alone is often enough information without applying.
+
+**Consequences:**
+
+- Each bridge classification is a small Claude call (~512 tokens
+  out). At default settings (30 bridges per refresh, classify on
+  click), per-session cost remains in single-digit-cents range for a
+  personal user.
+- The classifier endpoint uses the same generation provider as the
+  rest of the app via `GenProvider` dependency injection — no
+  separate model selection. If `generation_model` is later set to a
+  faster/cheaper model just for classification, that would be a
+  config-level change ([ADR-011](#adr-011--provider-switch-is-a-deliberate-setting-not-a-hot-toggle))
+  with no code impact.
+- `BridgeClassification` is a separate model from `LinkSuggestion`
+  even though both are AI edge-type recommendations. The shapes
+  diverge meaningfully (suggest-links returns N suggestions vs. one
+  classification, and only the classifier has `no_connection`).
+  Merging them would require optional fields on both sides; the cost
+  of the duplication is small.
+- Edge direction in the response: for the symmetric `ANALOGOUS_TO`
+  type, the model's choice of `from_id`/`to_id` is arbitrary. The
+  prompt explicitly tells it to pick either. The user can still flip
+  the direction by editing the form before submission, or by
+  ignoring the "Apply" button entirely.
+- A future feature could pre-classify bridges in batch (e.g., a
+  "classify all visible" button at the top of the tab). The per-pair
+  endpoint composes into that without refactoring — a `Promise.all`
+  at the call site.
 
 ---
 
