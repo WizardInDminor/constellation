@@ -208,7 +208,15 @@ def test_process_node_wrong_type(client):
 # POST /rag/suggest-links/{node_id}
 # ---------------------------------------------------------------------------
 
-EDGE_TYPES = {"SUPPORTS", "CONTRADICTS", "ELABORATES", "ANALOGOUS_TO", "QUESTIONS", "INSPIRED_BY", "COLLECTS"}
+EDGE_TYPES = {
+    "SUPPORTS",
+    "CONTRADICTS",
+    "ELABORATES",
+    "ANALOGOUS_TO",
+    "QUESTIONS",
+    "INSPIRED_BY",
+    "COLLECTS",
+}
 
 
 @pytest.fixture
@@ -482,9 +490,7 @@ def test_rag_query_empty_string(rag_query_client):
 
 
 def test_rag_query_embed_failure_returns_503(rag_query_embed_fail_client):
-    resp = rag_query_embed_fail_client.post(
-        "/api/v1/rag/query", json={"query": "Will this work?"}
-    )
+    resp = rag_query_embed_fail_client.post("/api/v1/rag/query", json={"query": "Will this work?"})
     assert resp.status_code == 503
 
 

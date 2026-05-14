@@ -1,0 +1,1 @@
+- Need to add a way to edit and or remove sources.  I am having issues with file paths and have 3 sources all attempting to point to a specific file, but I am unable to try and update so I am forced to continue to generate new sources.

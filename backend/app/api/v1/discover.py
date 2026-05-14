@@ -14,9 +14,7 @@ async def list_orphans(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[NodeSummary]:
-    return await discover_service.find_orphans(
-        db, node_type=node_type, limit=limit, offset=offset
-    )
+    return await discover_service.find_orphans(db, node_type=node_type, limit=limit, offset=offset)
 
 
 @router.get("/stale")
@@ -42,6 +40,4 @@ async def list_bridges(
     limit: int = Query(default=30, ge=1, le=100),
     min_similarity: float = Query(default=0.7, ge=0.0, le=1.0),
 ) -> list[BridgeCandidate]:
-    return await discover_service.find_bridges(
-        db, limit=limit, min_similarity=min_similarity
-    )
+    return await discover_service.find_bridges(db, limit=limit, min_similarity=min_similarity)

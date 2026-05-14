@@ -95,6 +95,38 @@ def test_update_node_not_found(client):
     assert r.status_code == 404
 
 
+def test_update_attaches_source_to_permanent(client):
+    src = client.post("/api/v1/sources", json={"title": "Lyrics", "type": "other"}).json()
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "b"}).json()
+    r = client.patch(f"/api/v1/nodes/{perm['id']}", json={"source_id": src["id"]})
+    assert r.status_code == 200
+    assert r.json()["source_id"] == src["id"]
+
+
+def test_update_detaches_source(client):
+    src = client.post("/api/v1/sources", json={"title": "A Book", "type": "book"}).json()
+    lit = client.post(
+        "/api/v1/nodes/literature",
+        json={"title": "L", "content": "b", "source_id": src["id"]},
+    ).json()
+    r = client.patch(f"/api/v1/nodes/{lit['id']}", json={"source_id": None})
+    assert r.status_code == 200
+    assert r.json()["source_id"] is None
+
+
+def test_update_rejects_source_on_fleeting(client):
+    src = client.post("/api/v1/sources", json={"title": "S", "type": "other"}).json()
+    f = client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "x"}).json()
+    r = client.patch(f"/api/v1/nodes/{f['id']}", json={"source_id": src["id"]})
+    assert r.status_code == 422
+
+
+def test_update_rejects_unknown_source(client):
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "b"}).json()
+    r = client.patch(f"/api/v1/nodes/{perm['id']}", json={"source_id": "ghost-id"})
+    assert r.status_code == 422
+
+
 def test_delete_node(client):
     created = client.post("/api/v1/nodes/fleeting", json={"title": "Bye", "content": "x"}).json()
     r = client.delete(f"/api/v1/nodes/{created['id']}")

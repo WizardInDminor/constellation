@@ -66,8 +66,8 @@ def test_chunk_indices_are_sequential():
 
 
 def test_oversized_h2_section_splits_by_paragraph():
-    long_para_a = "A " * 600      # ~1200 chars
-    long_para_b = "B " * 600      # ~1200 chars
+    long_para_a = "A " * 600  # ~1200 chars
+    long_para_b = "B " * 600  # ~1200 chars
     md = f"## Big Section\n\n{long_para_a}\n\n{long_para_b}"
     chunks = chunk_document(md, filename="doc.md")
     assert len(chunks) >= 2

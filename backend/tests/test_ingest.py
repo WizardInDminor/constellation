@@ -257,9 +257,7 @@ def test_ingest_over_chunk_limit_returns_400(ingest_client):
     from app.services.doc_chunker import MAX_CHUNKS
 
     # Build a markdown doc with MAX_CHUNKS + 5 sections, each short
-    sections = "\n\n".join(
-        f"## Section {i}\n\nShort content." for i in range(MAX_CHUNKS + 5)
-    )
+    sections = "\n\n".join(f"## Section {i}\n\nShort content." for i in range(MAX_CHUNKS + 5))
     resp = _post_ingest(ingest_client, content=sections)
     assert resp.status_code == 400
     assert "chunk" in resp.json()["detail"].lower()

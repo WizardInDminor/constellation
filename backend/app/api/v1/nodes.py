@@ -16,7 +16,7 @@ from app.models import (
     PermanentCreate,
     StructureCreate,
 )
-from app.repositories import edge_repo, node_repo
+from app.repositories import edge_repo, node_repo, source_repo
 from app.services import embedding_service
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -112,6 +112,17 @@ async def get_node(node_id: str, db: DB) -> NodeDetail:
 async def update_node(
     node_id: str, data: NodeUpdate, db: DB, provider: EmbedProvider
 ) -> NodeDetail:
+    if "source_id" in data.model_fields_set:
+        existing = await node_repo.get_by_id(db, node_id)
+        if existing is None:
+            raise HTTPException(404, "Node not found")
+        if existing.type == "fleeting":
+            raise HTTPException(422, "Sources cannot be attached to fleeting notes")
+        if data.source_id is not None:
+            src = await source_repo.get_by_id(db, data.source_id)
+            if src is None:
+                raise HTTPException(422, f"Source '{data.source_id}' does not exist")
+
     node = await node_repo.update(db, node_id, data)
     if node is None:
         raise HTTPException(404, "Node not found")

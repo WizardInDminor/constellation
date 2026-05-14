@@ -11,8 +11,7 @@ def _scored(summaries, /) -> list[SearchResult]:
     """Attach rank-normalized scores (1.0 for rank 1, descending to ~0)."""
     n = len(summaries)
     return [
-        SearchResult(node=s, score=round(1.0 - i / max(n, 1), 4))
-        for i, s in enumerate(summaries)
+        SearchResult(node=s, score=round(1.0 - i / max(n, 1), 4)) for i, s in enumerate(summaries)
     ]
 
 
@@ -21,9 +20,7 @@ async def search_semantic(body: SearchRequest, db: DB, provider: EmbedProvider) 
     if not body.query.strip():
         raise HTTPException(400, "Query cannot be empty")
     try:
-        summaries = await search_service.semantic_search(
-            db, provider, body.query, limit=body.limit
-        )
+        summaries = await search_service.semantic_search(db, provider, body.query, limit=body.limit)
     except Exception as exc:
         raise HTTPException(503, "Embedding service unavailable") from exc
     return SearchResponse(results=_scored(summaries), query=body.query)
@@ -42,9 +39,7 @@ async def search_hybrid(body: SearchRequest, db: DB, provider: EmbedProvider) ->
     if not body.query.strip():
         raise HTTPException(400, "Query cannot be empty")
     try:
-        summaries = await search_service.hybrid_search(
-            db, provider, body.query, limit=body.limit
-        )
+        summaries = await search_service.hybrid_search(db, provider, body.query, limit=body.limit)
     except Exception as exc:
         raise HTTPException(503, "Embedding service unavailable") from exc
     return SearchResponse(results=_scored(summaries), query=body.query)

@@ -125,3 +125,6 @@ At import time they look the same. Over time they diverge: a note about keybindi
 - Home page is currently pretty empty.  Might be cool to do some sort of dashboard with basic graph stats, can be basic numbers, or could have some llm thematic analysis option as well.
 - Need to have hover pop-over in the node/[id] (note) page so that when adding connections I can see what the actual node I am about to select has for a note.
 - Direction of connections, and the differences between when to use some (supports vs elaborates) are a little vague to the user right now.  Need to make these more easily seen and understood, without being annoying about it for users who have the workflow down.
+- +1 on needing to show the direction of connections being made.  Not intuitive for telling which note supports which when adding the connections.
+- Need to add a way to edit and or remove sources.  I am having issues with file paths and have 3 sources all attempting to point to a specific file, but I am unable to try and update so I am forced to continue to generate new sources.
+- Need to determine how to properly handle file paths and opening source files from the app.

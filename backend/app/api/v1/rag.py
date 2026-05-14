@@ -54,9 +54,7 @@ async def suggest_permanent(
             422, f"Node is type '{node.type}'; only fleeting notes can be processed"
         )
 
-    messages = [
-        {"role": "user", "content": f"Title: {node.title}\n\nContent:\n{node.content}"}
-    ]
+    messages = [{"role": "user", "content": f"Title: {node.title}\n\nContent:\n{node.content}"}]
     raw = await generation_service.complete(provider, messages, _SYSTEM_PROMPT, max_tokens=1024)
 
     try:
@@ -77,6 +75,7 @@ async def suggest_permanent(
         )
     except (json.JSONDecodeError, KeyError, ValidationError) as exc:
         import logging
+
         logging.getLogger(__name__).error("Unparseable AI response: %r", raw)
         raise HTTPException(500, "AI returned unparseable response") from exc
 
@@ -112,15 +111,11 @@ async def suggest_links(
     if node is None:
         raise HTTPException(404, "Node not found")
     if node.type == "fleeting":
-        raise HTTPException(
-            422, "Fleeting notes cannot be used as link suggestion sources"
-        )
+        raise HTTPException(422, "Fleeting notes cannot be used as link suggestion sources")
 
     # Embed source inline — always fresh so we don't depend on a stored vector
     vector = await embed_provider.embed(f"{node.title}\n\n{node.content}")
-    candidate_ids = await embedding_service.find_similar(
-        db, vector, exclude_id=node_id, limit=10
-    )
+    candidate_ids = await embedding_service.find_similar(db, vector, exclude_id=node_id, limit=10)
     if not candidate_ids:
         return SuggestLinksResponse(source_id=node_id, suggestions=[])
 
@@ -141,7 +136,10 @@ async def suggest_links(
     )
 
     raw = await generation_service.complete(
-        gen_provider, [{"role": "user", "content": user_msg}], _SUGGEST_LINKS_SYSTEM, max_tokens=1024
+        gen_provider,
+        [{"role": "user", "content": user_msg}],
+        _SUGGEST_LINKS_SYSTEM,
+        max_tokens=1024,
     )
 
     try:
@@ -155,6 +153,7 @@ async def suggest_links(
         raw_suggestions = data.get("suggestions", [])
     except (json.JSONDecodeError, KeyError) as exc:
         import logging
+
         logging.getLogger(__name__).error("Unparseable suggest-links response: %r", raw)
         raise HTTPException(500, "AI returned unparseable response") from exc
 
@@ -200,14 +199,13 @@ async def rag_query(
         raise HTTPException(503, "Embedding service unavailable") from exc
     except Exception as exc:
         import logging
+
         logging.getLogger(__name__).error("RAG query failed: %s", exc)
         raise HTTPException(500, "RAG query failed") from exc
 
 
 @router.post("/scoped")
-async def rag_scoped(
-    body: ScopedRagRequest, db: DB, gen_provider: GenProvider
-) -> RagResponse:
+async def rag_scoped(body: ScopedRagRequest, db: DB, gen_provider: GenProvider) -> RagResponse:
     """Run RAG against an explicit list of node IDs — no retrieval, no expansion."""
     if not body.query.strip():
         raise HTTPException(400, "Query cannot be empty")
@@ -221,6 +219,7 @@ async def rag_scoped(
         )
     except Exception as exc:
         import logging
+
         logging.getLogger(__name__).error("Scoped RAG failed: %s", exc)
         raise HTTPException(500, "Scoped RAG failed") from exc
 
@@ -235,9 +234,7 @@ def _derive_title(query: str) -> str:
 
 
 @router.post("/save-answer")
-async def save_answer(
-    body: SaveAnswerRequest, db: DB, embed_provider: EmbedProvider
-) -> NodeDetail:
+async def save_answer(body: SaveAnswerRequest, db: DB, embed_provider: EmbedProvider) -> NodeDetail:
     """Persist a RAG answer as a permanent note with COLLECTS edges to cited sources."""
     if not body.answer.strip():
         raise HTTPException(400, "Answer cannot be empty")

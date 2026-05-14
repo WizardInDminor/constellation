@@ -219,7 +219,9 @@ def _import_main() -> None:
     chunks = result["chunks_processed"]
     candidates = result["total_candidates"]
     source_id = result["source_id"]
-    print(f"Processed {chunks} chunk{'s' if chunks != 1 else ''}. Generated {candidates} candidate{'s' if candidates != 1 else ''}.")
+    print(
+        f"Processed {chunks} chunk{'s' if chunks != 1 else ''}. Generated {candidates} candidate{'s' if candidates != 1 else ''}."
+    )
     print(f"Source: {source_id}")
     print(f"Opening review page…")
     _open_review_url(source_id)

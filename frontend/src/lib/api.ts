@@ -68,7 +68,13 @@ export function getNode(id: string): Promise<NodeDetail> {
 
 export function updateNode(
   id: string,
-  patch: { title?: string; content?: string; summary?: string; tag_ids?: string[] | null },
+  patch: {
+    title?: string;
+    content?: string;
+    summary?: string;
+    source_id?: string | null;
+    tag_ids?: string[] | null;
+  },
 ): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`, {
     method: "PATCH",

@@ -14,9 +14,21 @@ import {
   createEdge,
   deleteEdge,
   suggestLinks,
+  listSources,
+  createSource,
+  openSource,
 } from "@/lib/api";
-import type { NodeDetail, TagRef, EdgeType, LinkSuggestion, NodeRef } from "@/lib/api";
+import type {
+  NodeDetail,
+  TagRef,
+  EdgeType,
+  LinkSuggestion,
+  NodeRef,
+  SourceSummary,
+} from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
+
+const SOURCE_TYPES = ["datasheet", "manual", "book", "article", "video", "podcast", "other"] as const;
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -378,6 +390,245 @@ function EdgePanel({
   );
 }
 
+// ── SourcePanel ───────────────────────────────────────────────────────────────
+
+function SourcePanel({
+  node,
+  onChange,
+}: {
+  node: NodeDetail;
+  onChange: () => void;
+}) {
+  const [sources, setSources] = useState<SourceSummary[]>([]);
+  const [attaching, setAttaching] = useState(false);
+  const [query, setQuery] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // New-source form state
+  const [newTitle, setNewTitle] = useState("");
+  const [newType, setNewType] = useState<(typeof SOURCE_TYPES)[number]>("other");
+  const [newUrl, setNewUrl] = useState("");
+  const [newError, setNewError] = useState<string | null>(null);
+
+  const attached = sources.find((s) => s.id === node.source_id) ?? null;
+  const knownAttached = node.source_id !== null && node.source_id !== undefined;
+
+  useEffect(() => {
+    if (attaching || knownAttached) {
+      listSources().then(setSources).catch(() => {});
+    }
+  }, [attaching, knownAttached]);
+
+  const filtered = query.trim()
+    ? sources.filter((s) => s.title.toLowerCase().includes(query.toLowerCase()))
+    : sources.slice(0, 20);
+
+  async function attach(sourceId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateNode(node.id, { source_id: sourceId });
+      setAttaching(false);
+      setQuery("");
+      setShowNew(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to attach source");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function detach() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateNode(node.id, { source_id: null });
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to detach source");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateAndAttach(e: React.FormEvent) {
+    e.preventDefault();
+    setNewError(null);
+    if (!newTitle.trim()) return;
+    setSaving(true);
+    try {
+      const created = await createSource({
+        title: newTitle.trim(),
+        type: newType,
+        url: newUrl.trim() || null,
+      });
+      await updateNode(node.id, { source_id: created.id });
+      setNewTitle("");
+      setNewUrl("");
+      setNewType("other");
+      setShowNew(false);
+      setAttaching(false);
+      onChange();
+    } catch (err) {
+      setNewError(err instanceof Error ? err.message : "Failed to create source");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleOpen() {
+    if (!node.source_id) return;
+    try {
+      await openSource(node.source_id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open source");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">Source</h3>
+        {knownAttached && (
+          <button
+            onClick={detach}
+            disabled={saving}
+            className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+          >
+            Detach
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {knownAttached ? (
+        <div className="flex flex-col gap-1.5 border border-blue-100 bg-blue-50/50 rounded px-3 py-2">
+          {attached ? (
+            <>
+              <Link
+                href={`/sources/${attached.id}`}
+                className="text-sm font-medium text-blue-800 hover:underline truncate"
+              >
+                {attached.title}
+              </Link>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="capitalize">{attached.type}</span>
+                {attached.author && <span>· {attached.author}</span>}
+                <button
+                  onClick={handleOpen}
+                  className="ml-auto text-indigo-600 hover:text-indigo-800"
+                >
+                  Open source →
+                </button>
+              </div>
+            </>
+          ) : (
+            <span className="text-xs text-gray-400 italic">Loading source…</span>
+          )}
+        </div>
+      ) : attaching ? (
+        <div className="flex flex-col gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search sources…"
+            className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+          />
+          <ul className="max-h-40 overflow-y-auto border border-gray-100 rounded divide-y divide-gray-100">
+            {filtered.length === 0 && (
+              <li className="text-xs text-gray-400 italic px-2 py-1.5">No sources match.</li>
+            )}
+            {filtered.map((s) => (
+              <li key={s.id}>
+                <button
+                  onClick={() => attach(s.id)}
+                  disabled={saving}
+                  className="w-full text-left px-2 py-1.5 hover:bg-indigo-50 disabled:opacity-50"
+                >
+                  <span className="text-sm font-medium truncate block">{s.title}</span>
+                  <span className="text-xs text-gray-400 capitalize">{s.type}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            onClick={() => setShowNew((v) => !v)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 self-start"
+          >
+            {showNew ? "▲ Cancel new source" : "+ New source"}
+          </button>
+
+          {showNew && (
+            <form
+              onSubmit={handleCreateAndAttach}
+              className="space-y-2 rounded border border-indigo-200 bg-indigo-50 p-3"
+            >
+              {newError && <p className="text-xs text-red-600">{newError}</p>}
+              <input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="Title *"
+                required
+                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value as (typeof SOURCE_TYPES)[number])}
+                  className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                >
+                  {SOURCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <input
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="URL or file:// path"
+                  className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowNew(false); setNewError(null); }}
+                  className="text-xs text-gray-500 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newTitle.trim()}
+                  className="text-xs bg-indigo-600 text-white rounded px-3 py-1 hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : "Create & attach"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <button
+            onClick={() => { setAttaching(false); setQuery(""); setShowNew(false); }}
+            className="text-xs text-gray-400 hover:text-gray-700 self-start"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAttaching(true)}
+          className="text-xs text-indigo-600 hover:text-indigo-800 self-start"
+        >
+          + Attach source
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── SuggestLinksPanel ─────────────────────────────────────────────────────────
 
 function SuggestLinksPanel({
@@ -625,6 +876,11 @@ export default function NodePage() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
+          {node.type !== "fleeting" && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <SourcePanel node={node} onChange={reload} />
+            </div>
+          )}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <EdgePanel node={node} onRefresh={reload} />
           </div>

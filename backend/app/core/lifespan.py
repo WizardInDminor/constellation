@@ -107,9 +107,7 @@ async def _embedding_worker(app: FastAPI) -> None:
             if cooldown_until is not None and cooldown_until > now:
                 continue
 
-            result = await embedding_service.drain_jobs(
-                get_db(), app.state.embedding_provider
-            )
+            result = await embedding_service.drain_jobs(get_db(), app.state.embedding_provider)
             if result.cooldown_seconds:
                 app.state.cooldown_until = datetime.now(UTC) + timedelta(
                     seconds=result.cooldown_seconds

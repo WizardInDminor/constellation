@@ -24,6 +24,7 @@ def open_client(tmp_path, monkeypatch):
 
     async def _fake_load(db, settings):
         from tests.conftest import FakeEmbeddingProvider, FakeGenerationProvider
+
         return FakeEmbeddingProvider(), FakeGenerationProvider()
 
     monkeypatch.setattr(lsp, "_load_providers", _fake_load)

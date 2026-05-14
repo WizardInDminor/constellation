@@ -11,7 +11,9 @@ from app.repositories import node_repo, source_repo, tag_repo
 
 
 async def test_create_fleeting(db):
-    node = await node_repo.create_fleeting(db, FleetingCreate(title="Quick thought", content="body"))
+    node = await node_repo.create_fleeting(
+        db, FleetingCreate(title="Quick thought", content="body")
+    )
     assert node.type == "fleeting"
     assert node.title == "Quick thought"
     assert node.processed_at is None
@@ -113,6 +115,26 @@ async def test_update_clears_summary(db):
     updated = await node_repo.update(db, node.id, NodeUpdate.model_validate({"summary": None}))
     assert updated is not None
     assert updated.summary is None
+
+
+async def test_update_attaches_source(db):
+    src = await source_repo.create(db, SourceCreate(title="Lyrics: Night Song", type="other"))
+    node = await node_repo.create_permanent(db, PermanentCreate(title="P", content="b"))
+    assert node.source_id is None
+    updated = await node_repo.update(db, node.id, NodeUpdate(source_id=src.id))
+    assert updated is not None
+    assert updated.source_id == src.id
+
+
+async def test_update_clears_source(db):
+    src = await source_repo.create(db, SourceCreate(title="A Book", type="book"))
+    node = await node_repo.create_literature(
+        db, LiteratureCreate(title="L", content="b", source_id=src.id)
+    )
+    assert node.source_id == src.id
+    updated = await node_repo.update(db, node.id, NodeUpdate.model_validate({"source_id": None}))
+    assert updated is not None
+    assert updated.source_id is None
 
 
 async def test_update_tags_replaces_set(db):

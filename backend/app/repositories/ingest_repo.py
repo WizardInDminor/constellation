@@ -10,9 +10,7 @@ _TTL_DAYS = 7
 
 
 async def expire_old(db: aiosqlite.Connection) -> None:
-    await db.execute(
-        "DELETE FROM pending_ingests WHERE expires_at < datetime('now')"
-    )
+    await db.execute("DELETE FROM pending_ingests WHERE expires_at < datetime('now')")
     await db.commit()
 
 
@@ -45,9 +43,7 @@ async def upsert(
     return record_id
 
 
-async def get_by_source(
-    db: aiosqlite.Connection, source_id: str
-) -> PendingIngestResponse | None:
+async def get_by_source(db: aiosqlite.Connection, source_id: str) -> PendingIngestResponse | None:
     cursor = await db.execute(
         "SELECT id, source_id, candidates_json FROM pending_ingests "
         "WHERE source_id = ? AND expires_at > datetime('now')",

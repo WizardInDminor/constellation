@@ -184,9 +184,7 @@ async def list_nodes(
     return items, total
 
 
-async def search_nodes(
-    db: aiosqlite.Connection, *, q: str, limit: int = 10
-) -> list[NodeRef]:
+async def search_nodes(db: aiosqlite.Connection, *, q: str, limit: int = 10) -> list[NodeRef]:
     # Build FTS5 prefix-match query: each token gets a trailing * for prefix search
     import re as _re
 
@@ -215,6 +213,7 @@ async def fts_search(db: aiosqlite.Connection, *, q: str, limit: int = 10) -> li
     exclude a type should filter the returned IDs against a subsequent fetch.
     """
     import re as _re
+
     # Keep only alphanumeric tokens; strip punctuation that FTS5 treats as syntax
     tokens = _re.findall(r"[A-Za-z0-9]+", q)
     fts_query = " ".join(tok + "*" for tok in tokens if tok)
@@ -329,9 +328,7 @@ async def find_stale(
     ]
 
 
-async def list_recent_for_bridge_scan(
-    db: aiosqlite.Connection, *, limit: int = 200
-) -> list[str]:
+async def list_recent_for_bridge_scan(db: aiosqlite.Connection, *, limit: int = 200) -> list[str]:
     """IDs of the most-recently-updated non-fleeting nodes — bridge scan input set."""
     cursor = await db.execute(
         """SELECT id FROM nodes
@@ -369,9 +366,7 @@ async def list_inbox(db: aiosqlite.Connection) -> list[NodeSummary]:
     ]
 
 
-async def update(
-    db: aiosqlite.Connection, node_id: str, data: NodeUpdate
-) -> NodeDetail | None:
+async def update(db: aiosqlite.Connection, node_id: str, data: NodeUpdate) -> NodeDetail | None:
     updates: dict[str, Any] = {}
     if data.title is not None:
         updates["title"] = data.title
@@ -379,6 +374,8 @@ async def update(
         updates["content"] = data.content
     if "summary" in data.model_fields_set:
         updates["summary"] = data.summary
+    if "source_id" in data.model_fields_set:
+        updates["source_id"] = data.source_id
 
     if updates:
         now = datetime.now(UTC).isoformat()

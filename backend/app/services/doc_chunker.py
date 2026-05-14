@@ -10,7 +10,9 @@ from dataclasses import dataclass
 
 _MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 _HEADING_RE = re.compile(r"(?m)^(#{2,3}) (.+)")
-_SPLIT_RE = re.compile(r"(?m)(?=^#{2,3} )", )
+_SPLIT_RE = re.compile(
+    r"(?m)(?=^#{2,3} )",
+)
 
 MAX_CHARS = 2400  # ≈ 600 tokens at chars/4
 MAX_CHUNKS = 30
@@ -96,9 +98,7 @@ def _split_oversized(chunk: DocumentChunk) -> list[DocumentChunk]:
     return _group_paragraphs(paragraphs, heading=chunk.heading)
 
 
-def _group_paragraphs(
-    paragraphs: list[str], heading: str | None
-) -> list[DocumentChunk]:
+def _group_paragraphs(paragraphs: list[str], heading: str | None) -> list[DocumentChunk]:
     groups: list[DocumentChunk] = []
     current_parts: list[str] = []
     current_len = 0

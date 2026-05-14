@@ -4,7 +4,12 @@ from app.repositories import config_repo
 async def test_get_all_returns_seeded_values(db):
     entries = await config_repo.get_all(db)
     keys = {e.key for e in entries}
-    assert {"embedding_provider", "embedding_model", "generation_provider", "generation_model"} == keys
+    assert {
+        "embedding_provider",
+        "embedding_model",
+        "generation_provider",
+        "generation_model",
+    } == keys
 
 
 async def test_get_existing_key(db):

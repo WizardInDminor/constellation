@@ -28,9 +28,7 @@ async def find_orphans(
     limit: int = 50,
     offset: int = 0,
 ) -> list[NodeSummary]:
-    return await node_repo.find_orphans(
-        db, node_type=node_type, limit=limit, offset=offset
-    )
+    return await node_repo.find_orphans(db, node_type=node_type, limit=limit, offset=offset)
 
 
 async def find_stale(

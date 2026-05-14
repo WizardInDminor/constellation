@@ -77,4 +77,5 @@ class NodeUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
     summary: str | None = None
+    source_id: str | None = None
     tag_ids: list[str] | None = None

@@ -1652,6 +1652,79 @@ back in `failed` — requiring repeated manual intervention.
 
 ---
 
+## ADR-045 — Sources are attachable to non-fleeting nodes after creation
+
+**Status:** Accepted
+
+**Context:** The original design constrained source attachment to creation
+time via `LiteratureCreate.source_id`, with the implicit assumption that
+"having a source" and "being a literature note" were the same statement.
+Real-world use surfaced a counterexample: notes captured directly from a
+fleeting thought (e.g., a song lyric typed in raw, processed into atomic
+permanents) are conceptually grounded in a source that the user wants to
+attach *after* the notes exist. The schema already permitted `source_id`
+on every node type (the column is nullable on `nodes`, with no
+`CHECK(type='literature')`), but no API surface existed to set it after
+creation. Three options were considered:
+
+1. Allow `source_id` to be patched on any non-fleeting node, leaving node
+   type alone.
+2. "Convert" the note's type to `literature` when a source is attached
+   (and back to `permanent` when detached).
+3. Build a separate, weaker association table for "soft" source links
+   that don't imply a literature note.
+
+**Decision:** Option 1. `NodeUpdate` gains a `source_id: str | None`
+field with `model_fields_set` semantics distinguishing "not provided"
+from "explicit null" (detach). `PATCH /nodes/{id}` validates that
+(a) the node is not fleeting and (b) any non-null `source_id` resolves
+to an existing row in `sources`, returning 422 otherwise. Node `type`
+is never changed by this operation.
+
+**Rationale:**
+
+- The schema already supports this — the `source_id` column has been
+  nullable on every node type since Phase 0. No migration is needed.
+- Node type is a creation-time invariant in this codebase (it gates
+  embedding, drives UI affordances, and shapes RAG context). Flipping
+  it on source attachment would ripple through the embedding pipeline
+  (literature notes auto-embed at creation; we'd need to re-evaluate),
+  the inbox filter, and the graph view. None of that complexity buys
+  anything the column-on-permanent doesn't already provide.
+- ADR-029 already accepts orphan sources (sources with no linked
+  literature note). Letting a permanent note *have* a source is the
+  symmetric case — a source with a non-literature-typed note — and is
+  similarly innocuous.
+- The conceptual distinction from the 2026-05-09 design clarification
+  is preserved: "source = provenance, frozen" vs. "structure note =
+  organization, evolves." A permanent note about an idea in a song
+  can point at the lyric file (provenance) without becoming a
+  literature note (which the design treats as "notes about an
+  external work" — a slightly different framing than "ideas inspired
+  by an external work").
+
+**Consequences:**
+
+- `nodes.source_id` is no longer a literature-only column in practice.
+  Code that filters by `type='literature'` to find "notes with a
+  source" must instead filter by `source_id IS NOT NULL`. Audit
+  existing callers if they relied on the old assumption.
+- The virtual `CITES` edge synthesis in `GET /graph/data` (ADR-034)
+  joins on `nodes.source_id`; it already operates on all rows
+  regardless of type, so non-literature notes with attached sources
+  will surface as `CITES`-connected to their source nodes in the
+  graph. This is desired behaviour for the lyric workflow.
+- `source_repo.delete` already blocks deletion when linked notes
+  exist (using `COUNT(*) FROM nodes WHERE source_id = ?`); that
+  guard correctly extends to non-literature attachments without
+  changes.
+- The frontend `Source` panel on `/nodes/[id]` is shown for all
+  non-fleeting node types. Users can attach a source from
+  permanent or structure notes, not just literature, which
+  matches the new server contract.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

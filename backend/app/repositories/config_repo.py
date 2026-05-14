@@ -12,9 +12,7 @@ async def get_all(db: aiosqlite.Connection) -> list[ConfigEntry]:
 
 
 async def get(db: aiosqlite.Connection, key: str) -> ConfigEntry | None:
-    cursor = await db.execute(
-        "SELECT key, value, updated_at FROM config WHERE key = ?", (key,)
-    )
+    cursor = await db.execute("SELECT key, value, updated_at FROM config WHERE key = ?", (key,))
     row = await cursor.fetchone()
     if row is None:
         return None

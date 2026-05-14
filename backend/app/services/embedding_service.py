@@ -241,7 +241,10 @@ async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> D
                 logger.warning(
                     "Embedding job %s for node %s hit retriable error (%s); "
                     "reverting to pending and cooling down %ss",
-                    job_id, node_id, exc.__class__.__name__, cooldown,
+                    job_id,
+                    node_id,
+                    exc.__class__.__name__,
+                    cooldown,
                 )
                 await db.execute(
                     "UPDATE embedding_jobs SET status = 'pending', error = NULL WHERE id = ?",

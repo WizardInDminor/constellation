@@ -84,7 +84,9 @@ def _build_context(
             block_lines.append("Connections: " + "; ".join(edge_annotations[node.id]))
 
         blocks.append("\n".join(block_lines))
-        provenance.append(NodeUsed(node_id=node.id, title=node.title, node_type=node.type, role=role))
+        provenance.append(
+            NodeUsed(node_id=node.id, title=node.title, node_type=node.type, role=role)
+        )
 
     return "\n\n---\n\n".join(blocks), provenance
 
@@ -136,10 +138,7 @@ async def query(
         user_content = f"Question: {query_text}\n\nNotes:\n\n{context_text}"
     else:
         provenance = []
-        user_content = (
-            f"Question: {query_text}\n\n"
-            "(No relevant notes found in the knowledge base.)"
-        )
+        user_content = f"Question: {query_text}\n\n(No relevant notes found in the knowledge base.)"
 
     # 7. Generate answer
     messages = [{"role": "user", "content": user_content}]

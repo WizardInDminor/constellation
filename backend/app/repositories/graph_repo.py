@@ -52,9 +52,7 @@ async def get_graph_data(
     ]
 
     edge_type_filter = (
-        ""
-        if include_fleeting
-        else "AND fn.type != 'fleeting' AND tn.type != 'fleeting'"
+        "" if include_fleeting else "AND fn.type != 'fleeting' AND tn.type != 'fleeting'"
     )
     cursor = await db.execute(
         f"""
