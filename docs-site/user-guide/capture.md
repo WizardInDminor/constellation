@@ -86,3 +86,21 @@ Add the venv `bin/` directory to your `PATH` (in `.bashrc` or `.zshrc`) to use `
 ```bash
 export PATH="$HOME/dev/constellation/backend/.venv/bin:$PATH"
 ```
+
+The service binds uvicorn to `0.0.0.0` rather than `127.0.0.1` so the backend is reachable from Tailscale peers — see [Mobile capture — iOS Shortcuts](#mobile-capture--ios-shortcuts) below.
+
+---
+
+## Mobile capture — iOS Shortcuts
+
+For capture from the iPhone when you're away from the laptop, Constellation supports a Tailscale + iOS Shortcuts path. The phone hits the same `POST /api/v1/nodes/fleeting` endpoint over a private mesh network, so mobile notes land in the same inbox and go through the same embedding pipeline as everything else — no cloud staging, no separate inbox to reconcile.
+
+Three Shortcuts cover the common cases:
+
+- **Capture Note** — manual, two-prompt (title + optional content), Siri-triggerable with the phrase "Capture note".
+- **Capture from Text** — runs from the iOS Share Sheet. Pre-fills the title from the first line of the selected text and lets you add a personal reaction.
+- **Capture Idea** — pure dictation, hands-free. Siri phrase "Capture idea". For driving, walking, anywhere looking at the screen isn't an option.
+
+Prerequisites: Tailscale on the laptop and the iPhone, Constellation running (typically the systemd service above), and the laptop awake.
+
+See [Mobile Capture](mobile-capture.md) for step-by-step setup: Tailscale install, finding the laptop's IP, building each Shortcut action-by-action, assigning Siri phrases, sleep prevention on macOS, and troubleshooting.

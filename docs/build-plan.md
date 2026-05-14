@@ -164,6 +164,46 @@ page and back restores the previous suggestions.
 
 ---
 
+## Phase 3.6 — Mobile capture (Tailscale + iOS Shortcuts)
+
+**Status:** ✅ Complete (2026-05-14)
+
+**Goal:** Close the gap between capture surfaces. Thoughts captured away from
+the laptop should land in the same inbox as everything else, with no cloud
+staging and no new auth layer. The phone hits the existing
+`POST /api/v1/nodes/fleeting` endpoint directly over a private Tailscale
+mesh.
+
+**Deliverables:**
+
+- `backend/constellation.service` binds uvicorn to `0.0.0.0` (was
+  `127.0.0.1`) so Tailscale peers can reach the backend. This is the
+  only backend change; no new routes, no auth, no schema changes.
+- `docs-site/user-guide/mobile-capture.md` — full setup guide:
+  Tailscale install + IP discovery, the bind-address change and why,
+  action-by-action build of three Shortcuts (manual / share-sheet /
+  voice), Siri phrase assignment, macOS sleep-prevention tradeoffs
+  (`pmset` vs. `caffeinate` vs. launchd), troubleshooting.
+- `docs-site/user-guide/capture.md` gains a "Mobile capture" section
+  summarizing the three Shortcuts and linking to the full guide.
+- `mkdocs.yml` exposes the new guide in the User Guide nav.
+- `docs-site/index.md` and `README.md` mention mobile capture under
+  the Capture feature bullets. README systemd note documents the
+  `0.0.0.0` bind and when it is and isn't safe.
+- [ADR-050](./decisions.md#adr-050--mobile-capture-via-tailscale--ios-shortcuts)
+  records the decision, the four alternatives considered (email,
+  cloud staging, iCloud watcher, SMS), and the consequences (laptop
+  must be awake; no offline queue; mobile can't assign tags).
+
+**Definition of done:** With Tailscale active on both devices and the
+systemd service running with the new bind, all three Shortcuts
+("Capture Note", "Capture from Text", "Capture Idea") successfully
+POST to `/api/v1/nodes/fleeting` from the iPhone and the resulting
+fleeting notes appear in the desktop inbox. `uv run pytest` still
+passes.
+
+---
+
 ## Phase 4 — Linking (the constellation grows)
 
 **Status:** ✅ Complete (2026-05-09)

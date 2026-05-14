@@ -16,7 +16,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/matt/dev/constellation/backend
-ExecStart=/home/matt/dev/constellation/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/home/matt/dev/constellation/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1

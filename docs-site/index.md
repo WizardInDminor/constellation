@@ -37,6 +37,7 @@ Everything is stored in a single SQLite file. Cloud AI (Voyage for embeddings, A
 - **Quick capture** from the browser (`Ctrl+K`) or terminal (`con "thought"`) drops a fleeting note into the inbox instantly
 - **Intentional capture** (`Shift+Ctrl+K`) opens a full dialog for permanent and literature notes with tag assignment and inline source creation
 - **`con import`** ingests a local markdown file — Claude chunks it by heading and generates candidate literature notes for review
+- **Mobile capture** via Tailscale + iOS Shortcuts — three Shortcuts (manual, share-sheet, voice/Siri) post directly to the same inbox from the iPhone
 
 ### Process
 

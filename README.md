@@ -32,6 +32,7 @@ If you're orienting yourself, read `CLAUDE.md` first, then skim
 **Capture**
 - Quick fleeting-note capture from the browser (Ctrl+K) or terminal (`con "thought"`)
 - Intentional capture dialog (Shift+Ctrl+K) for permanent and literature notes with tag assignment
+- Mobile capture from the iPhone via Tailscale + iOS Shortcuts — see `docs-site/user-guide/mobile-capture.md`
 - Systemd user service so the backend starts automatically on login
 
 **Process**
@@ -96,6 +97,9 @@ uv run uvicorn app.main:app --reload          # serves on :8000; migrations run 
 # 3. (Optional) Run backend as a systemd user service instead
 cp constellation.service ~/.config/systemd/user/
 systemctl --user enable --now constellation   # starts on login, no manual uvicorn needed
+# Note: the service binds 0.0.0.0:8000 so the backend is reachable from
+# Tailscale peers (used by the iOS mobile-capture Shortcuts). On a publicly
+# reachable host, fall back to --host 127.0.0.1 — there is no auth layer.
 
 # 4. Frontend (in a second terminal)
 cd frontend

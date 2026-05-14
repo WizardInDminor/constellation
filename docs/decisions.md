@@ -2039,6 +2039,145 @@ an option to reject the pair as coincidence. The design questions were
 
 ---
 
+## ADR-050 — Mobile capture via Tailscale + iOS Shortcuts
+
+**Status:** Accepted
+
+**Context:** Every capture surface up to this point — the `Ctrl+K`
+browser dialog, the `Shift+Ctrl+K` intentional capture, the `con` CLI,
+`con import` — requires being at the laptop. Thoughts that arrive
+while walking, driving, reading on the phone, or otherwise away from
+the desk had no path into Constellation. They ended up in a separate
+inbox (the iOS Notes app, paper, lossy memory) and rarely made it
+back, which breaks both the daily-capture habit and the graph: a note
+that never lands in the system can't be linked, can't be searched,
+can't contribute to RAG answers.
+
+The constraint set on the solution:
+
+1. Notes captured on mobile must land in the same inbox as desktop
+   captures and go through the same embedding pipeline. A second
+   inbox would just relocate the triage problem.
+2. No new cloud dependencies. Constellation is local-first by design;
+   adding a Supabase, Firestore, or similar staging layer would
+   contradict that and introduce a new failure mode and a new auth
+   surface.
+3. No new auth layer in the backend. The system is single-user and
+   has no auth today; adding one just for mobile would be
+   disproportionate.
+4. The existing `POST /api/v1/nodes/fleeting` endpoint is already the
+   right interface — it accepts title + content and returns a 201.
+   Anything that can speak HTTP can capture.
+
+**Decision:**
+
+1. **Tailscale + iOS Shortcuts as the mobile capture layer.** The
+   phone and the laptop join a private Tailscale mesh. iOS Shortcuts
+   POST directly to `http://<laptop-tailscale-ip>:8000/api/v1/nodes/fleeting`.
+2. **The only backend change is binding uvicorn to `0.0.0.0`** instead
+   of `127.0.0.1`, applied in `backend/constellation.service`. No new
+   routes, no auth middleware, no schema changes.
+3. **Three Shortcuts cover the use cases naturally:** "Capture Note"
+   (manual two-prompt, Siri phrase), "Capture from Text" (Share
+   Sheet, first-line title extraction, optional reaction), "Capture
+   Idea" (Dictate Text only, Siri phrase, hands-free). Each starts
+   with a `Text` action holding the Tailscale base URL stored into a
+   `TailscaleBase` variable, so an IP change is one edit per
+   Shortcut.
+4. **No offline queue.** If the laptop is asleep or off the network,
+   the Shortcut surfaces a visible failure rather than buffering
+   locally on the phone. Mitigation lives outside Constellation:
+   `pmset -b sleep 0`, `caffeinate -i`, or a launchd agent.
+
+**Alternatives considered:**
+
+- **Email-to-inbox.** Run an IMAP poller or SMTP receiver that turns
+  inbound mail into fleeting notes. Pros: works while the laptop is
+  asleep (the mail server stages it). Cons: a new daemon, a new
+  attack surface, an auth/spam problem, and a new failure mode
+  decoupled from the rest of the system.
+- **Cloud staging table (Supabase / Firestore / etc.).** Phone writes
+  to a serverless table; the laptop polls. Pros: works offline on the
+  laptop side. Cons: a new cloud dependency, a new schema, sync
+  edge-cases, and an auth surface — explicit violation of the
+  local-first posture in `architecture.md`.
+- **iCloud Drive file watcher.** Phone writes a file to a synced
+  folder; the laptop has a `watchdog` process that picks it up and
+  POSTs. Pros: zero new infra. Cons: iCloud sync latency is minutes
+  in practice, the user gets no feedback on whether the note made
+  it, and a synced-folder race condition is its own bug surface.
+- **SMS gateway via Twilio.** Inbound SMS → webhook on the laptop →
+  fleeting note. Pros: works without Tailscale. Cons: paid service,
+  external dependency, awkward content modeling (length limits,
+  multimedia), and the auth/webhook story is non-trivial.
+
+**Rationale:**
+
+- **Zero new infrastructure or cloud dependencies.** Mobile capture
+  reuses the existing API, the existing embedding pipeline, the
+  existing inbox. The only new thing on the laptop is a `0.0.0.0`
+  bind. Aligned with the local-first decision in
+  [ADR-001](#adr-001--sqlite-not-postgres) and the
+  no-new-cloud-dependencies posture across the project.
+- **Tailscale is the access control layer.** The mesh network is
+  private; only authenticated devices in the Tailscale tailnet can
+  reach the `0.0.0.0:8000` endpoint. This is the right place to
+  enforce access for a single-user tool — moving it into the app
+  layer (Bearer tokens, etc.) would duplicate what Tailscale already
+  does well.
+- **Three Shortcuts, not one.** The capture *moment* differs across
+  contexts. Typing a thought, reacting to selected text, and
+  capturing while driving have different ergonomics; a single
+  Shortcut trying to handle all three would either overprompt the
+  voice case or underspecify the share-sheet case. The cost of
+  building three is small (~10 actions each); the ergonomic win is
+  large.
+- **Failure is visible.** The Shortcut surfaces a notification on
+  non-201 responses. The user knows immediately that the laptop
+  isn't reachable, so they can fall back to the iOS Notes app and
+  paste it in later rather than discovering a silent loss after the
+  fact.
+- **Same endpoint, same pipeline.** A fleeting note captured from
+  the phone is indistinguishable from one captured via `con` or
+  `Ctrl+K`. The inbox triage flow, the AI-assisted decomposition,
+  the embedding-on-write — none of it knows or cares which surface
+  produced the note. That's the right level of coupling.
+
+**Consequences:**
+
+- **Laptop must be awake and on the network.** macOS sleep prevention
+  (`pmset`, `caffeinate`, or a launchd agent) becomes part of the
+  user setup. The mobile-capture doc explains the tradeoffs of each
+  approach; the project does not prescribe one.
+- **Tailscale must be active on both devices.** A new user
+  prerequisite. Tailscale itself is free at this scale.
+- **No tag assignment from mobile.** `POST /api/v1/nodes/fleeting`
+  doesn't accept tags by design (fleeting notes are raw input); tag
+  assignment happens during inbox processing on the desktop, same as
+  every other fleeting-note path. This is a deliberate symmetry, not
+  a gap.
+- **Base URL is duplicated across the three Shortcuts.** Each
+  Shortcut holds the Tailscale base URL in its own `TailscaleBase`
+  variable. If the IP changes (rare — Tailscale IPs are stable
+  across reboots and re-registration is uncommon), the user edits
+  three Text actions. An iCloud Sharing-folder-shared-Shortcut
+  approach was considered for a single source of truth, but the
+  added build complexity wasn't justified for an IP that changes
+  on the order of years.
+- **`--host 0.0.0.0` is safe only because Tailscale is the boundary.**
+  This is documented in `docs-site/user-guide/mobile-capture.md` and
+  the `README.md` systemd note. If Constellation is ever run on a
+  publicly addressable host, the bind must revert to `127.0.0.1` and
+  an auth layer must precede mobile capture — a future-ADR concern,
+  not a v1 one.
+- **No PWA, no native mobile app, no mobile inbox view.** Inbox
+  triage on mobile (swipe-to-discard, lightweight read view) is a
+  valid follow-on, and the same Tailscale-reachable backend supports
+  it without further changes. It is deliberately not in scope for
+  this ADR.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

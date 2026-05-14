@@ -61,6 +61,7 @@ nav:
   - Getting Started: getting-started.md
   - User Guide:
     - Capture: user-guide/capture.md
+    - Mobile Capture: user-guide/mobile-capture.md
     - Processing: user-guide/processing.md
     - Linking: user-guide/linking.md
     - Search: user-guide/search.md
