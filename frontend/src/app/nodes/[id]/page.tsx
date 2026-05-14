@@ -27,6 +27,7 @@ import type {
   SourceSummary,
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
+import { EDGE_TYPES, EDGE_COLORS, EDGE_TYPE_META, directionGlyph } from "@/lib/edgeTypes";
 
 const SOURCE_TYPES = ["datasheet", "manual", "book", "article", "video", "podcast", "other"] as const;
 
@@ -37,26 +38,6 @@ const TYPE_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
   literature: "bg-blue-100 text-blue-700",
   structure: "bg-purple-100 text-purple-700",
-};
-
-const EDGE_TYPES: EdgeType[] = [
-  "SUPPORTS",
-  "CONTRADICTS",
-  "ELABORATES",
-  "ANALOGOUS_TO",
-  "QUESTIONS",
-  "INSPIRED_BY",
-  "COLLECTS",
-];
-
-const EDGE_COLORS: Record<EdgeType, string> = {
-  SUPPORTS: "bg-green-100 text-green-700",
-  CONTRADICTS: "bg-red-100 text-red-700",
-  ELABORATES: "bg-blue-100 text-blue-700",
-  ANALOGOUS_TO: "bg-purple-100 text-purple-700",
-  QUESTIONS: "bg-amber-100 text-amber-700",
-  INSPIRED_BY: "bg-pink-100 text-pink-700",
-  COLLECTS: "bg-indigo-100 text-indigo-700",
 };
 
 // ── EditableField ─────────────────────────────────────────────────────────────
@@ -303,16 +284,34 @@ function EdgePanel({
 
       {addOpen && (
         <div className="border border-indigo-100 rounded-lg p-3 flex flex-col gap-3 bg-indigo-50/40">
-          <NodePicker onSelect={setTarget} exclude={node.id} />
+          <NodePicker onSelect={setTarget} exclude={node.id} previewOnHover />
           {target && (
             <>
-              <select
-                value={edgeType}
-                onChange={(e) => setEdgeType(e.target.value as EdgeType)}
-                className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-              >
-                {EDGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <div className="flex flex-col gap-1 text-xs text-gray-600 bg-white border border-gray-200 rounded p-2">
+                <div className="flex gap-2">
+                  <span className="uppercase tracking-wide text-gray-400 shrink-0">From</span>
+                  <span className="truncate text-gray-800">{node.title}</span>
+                </div>
+                <div className="text-center text-gray-400">{directionGlyph(edgeType)}</div>
+                <div className="flex gap-2">
+                  <span className="uppercase tracking-wide text-gray-400 shrink-0">To</span>
+                  <span className="truncate text-gray-800">{target.title}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <select
+                  value={edgeType}
+                  onChange={(e) => setEdgeType(e.target.value as EdgeType)}
+                  className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                >
+                  {EDGE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {EDGE_TYPE_META[t].label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500">{EDGE_TYPE_META[edgeType].description}</p>
+              </div>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -339,17 +338,23 @@ function EdgePanel({
 
       {EDGE_TYPES.filter((t) => byType[t].length > 0).map((t) => (
         <div key={t} className="flex flex-col gap-1">
-          <span className={`text-xs font-medium px-1.5 py-0.5 rounded self-start ${EDGE_COLORS[t]}`}>
-            {t}
+          <span
+            className={`text-xs font-medium px-1.5 py-0.5 rounded self-start ${EDGE_COLORS[t]}`}
+            title={EDGE_TYPE_META[t].description}
+          >
+            {EDGE_TYPE_META[t].label}
           </span>
           {byType[t].map((e) => (
             <div key={e.id} className="flex items-center justify-between pl-2 group">
-              <Link
-                href={`/nodes/${e.neighbor.id}`}
-                className="text-sm text-indigo-700 hover:underline truncate"
-              >
-                {e.neighbor.title}
-              </Link>
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="text-xs text-gray-400 shrink-0">{directionGlyph(t)}</span>
+                <Link
+                  href={`/nodes/${e.neighbor.id}`}
+                  className="text-sm text-indigo-700 hover:underline truncate"
+                >
+                  {e.neighbor.title}
+                </Link>
+              </div>
               <div className="flex items-center gap-2 shrink-0">
                 {e.note && (
                   <span className="text-xs text-gray-400 italic hidden group-hover:inline truncate max-w-32">
@@ -373,14 +378,22 @@ function EdgePanel({
           <span className="text-xs text-gray-400 font-medium">Referenced by</span>
           {node.incoming_edges.map((e) => (
             <div key={e.id} className="flex items-center justify-between pl-2 group">
-              <Link
-                href={`/nodes/${e.neighbor.id}`}
-                className="text-sm text-gray-600 hover:text-indigo-700 hover:underline truncate"
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="text-xs text-gray-400 shrink-0">
+                  {EDGE_TYPE_META[e.type].directional ? "←" : "↔"}
+                </span>
+                <Link
+                  href={`/nodes/${e.neighbor.id}`}
+                  className="text-sm text-gray-600 hover:text-indigo-700 hover:underline truncate"
+                >
+                  {e.neighbor.title}
+                </Link>
+              </div>
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded ${EDGE_COLORS[e.type]}`}
+                title={EDGE_TYPE_META[e.type].description}
               >
-                {e.neighbor.title}
-              </Link>
-              <span className={`text-xs px-1.5 py-0.5 rounded ${EDGE_COLORS[e.type]}`}>
-                {e.type}
+                {EDGE_TYPE_META[e.type].label}
               </span>
             </div>
           ))}
@@ -832,12 +845,22 @@ export default function NodePage() {
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="text-sm text-gray-400 hover:text-red-500"
-          >
-            Delete note
-          </button>
+          <div className="flex items-center gap-4">
+            {node.type === "fleeting" && (
+              <Link
+                href={`/inbox/process/${nodeId}`}
+                className="text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                Process →
+              </Link>
+            )}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-sm text-gray-400 hover:text-red-500"
+            >
+              Delete note
+            </button>
+          </div>
         )}
       </div>
 

@@ -7,6 +7,7 @@ import { listBridges, listOrphans, listStale, createEdge, getNode } from "@/lib/
 import type { BridgeCandidate, NodeDetail, NodeSummary, TagRef, EdgeType, NodeRef } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
 import { NotePreviewPopover } from "@/components/NotePreviewPopover";
+import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
 type Tab = "orphans" | "stale" | "bridges";
 
@@ -29,16 +30,6 @@ const TYPE_COLORS: Record<string, string> = {
   literature: "bg-blue-100 text-blue-700",
   fleeting: "bg-amber-100 text-amber-700",
 };
-
-const EDGE_TYPES: EdgeType[] = [
-  "SUPPORTS",
-  "CONTRADICTS",
-  "ELABORATES",
-  "ANALOGOUS_TO",
-  "QUESTIONS",
-  "INSPIRED_BY",
-  "COLLECTS",
-];
 
 function TagChip({ tag }: { tag: TagRef }) {
   return (
@@ -120,9 +111,10 @@ function EdgeForm({
           className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
         >
           {EDGE_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>{EDGE_TYPE_META[t].label}</option>
           ))}
         </select>
+        <p className="text-xs text-gray-500 mt-1">{EDGE_TYPE_META[edgeType].description}</p>
       </div>
       <div>
         <label className="text-xs text-gray-500 block mb-1">Note (optional)</label>

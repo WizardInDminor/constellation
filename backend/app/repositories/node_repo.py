@@ -416,3 +416,32 @@ async def mark_processed(db: aiosqlite.Connection, node_id: str) -> NodeDetail |
     )
     await db.commit()
     return await _fetch_full(db, node_id)
+
+
+async def count_by_type(db: aiosqlite.Connection) -> dict[str, int]:
+    cursor = await db.execute(
+        """SELECT type, COUNT(*) AS n
+           FROM nodes
+           WHERE deleted_at IS NULL
+           GROUP BY type""",
+    )
+    rows = await cursor.fetchall()
+    return {r["type"]: r["n"] for r in rows}
+
+
+async def count_inbox(db: aiosqlite.Connection) -> int:
+    cursor = await db.execute(
+        """SELECT COUNT(*) AS n FROM nodes
+           WHERE type = 'fleeting' AND processed_at IS NULL AND deleted_at IS NULL""",
+    )
+    row = await cursor.fetchone()
+    return row["n"] if row else 0
+
+
+async def last_processed_at(db: aiosqlite.Connection) -> str | None:
+    cursor = await db.execute(
+        """SELECT MAX(processed_at) AS t FROM nodes
+           WHERE deleted_at IS NULL AND processed_at IS NOT NULL""",
+    )
+    row = await cursor.fetchone()
+    return row["t"] if row and row["t"] else None

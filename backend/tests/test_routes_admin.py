@@ -59,3 +59,29 @@ def test_status_exposes_cooldown_until(client):
         assert "T" in body["cooldown_until"]  # ISO 8601 sanity
     finally:
         client.app.state.cooldown_until = None
+
+
+def test_stats_empty_db(client):
+    body = client.get("/api/v1/admin/stats").json()
+    assert body["nodes_by_type"] == {}
+    assert body["edges"] == 0
+    assert body["sources"] == 0
+    assert body["tags"] == 0
+    assert body["inbox"] == 0
+    assert body["last_processed_at"] is None
+
+
+def test_stats_counts_nodes_edges_inbox(client):
+    a = client.post("/api/v1/nodes/permanent", json={"title": "A", "content": "a"}).json()
+    b = client.post("/api/v1/nodes/permanent", json={"title": "B", "content": "b"}).json()
+    client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "f"})
+    client.post(
+        "/api/v1/edges",
+        json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"},
+    )
+
+    body = client.get("/api/v1/admin/stats").json()
+    assert body["nodes_by_type"]["permanent"] == 2
+    assert body["nodes_by_type"]["fleeting"] == 1
+    assert body["edges"] == 1
+    assert body["inbox"] == 1

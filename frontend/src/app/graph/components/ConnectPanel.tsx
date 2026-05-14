@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 import type { EdgeType, GraphNodeRef } from "@/lib/api";
-
-const EDGE_TYPES: EdgeType[] = [
-  "SUPPORTS",
-  "CONTRADICTS",
-  "ELABORATES",
-  "ANALOGOUS_TO",
-  "QUESTIONS",
-  "INSPIRED_BY",
-  "COLLECTS",
-];
+import { EDGE_TYPES, EDGE_TYPE_META, directionGlyph } from "@/lib/edgeTypes";
 
 interface Props {
   from: GraphNodeRef;
@@ -57,7 +48,7 @@ export function ConnectPanel({ from, to, onConfirm, onCancel }: Props) {
             <span className="text-xs text-gray-400 uppercase tracking-wide">From</span>
             <span className="text-sm text-gray-200 truncate">{from.title}</span>
           </div>
-          <div className="text-center text-gray-600 text-xs">↓</div>
+          <div className="text-center text-gray-600 text-xs">{directionGlyph(edgeType)}</div>
           <div className="flex flex-col gap-1">
             <span className="text-xs text-gray-400 uppercase tracking-wide">To</span>
             <span className="text-sm text-gray-200 truncate">{to.title}</span>
@@ -74,9 +65,10 @@ export function ConnectPanel({ from, to, onConfirm, onCancel }: Props) {
             className="w-full text-sm bg-gray-800 border border-gray-600 text-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             {EDGE_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{EDGE_TYPE_META[t].label}</option>
             ))}
           </select>
+          <p className="text-xs text-gray-500 mt-1">{EDGE_TYPE_META[edgeType].description}</p>
         </div>
 
         <div>

@@ -57,6 +57,7 @@ from app.models.source import (
     SourceType,
     SourceUpdate,
 )
+from app.models.stats import CorpusStats
 from app.models.tag import TagCreate, TagRef, TagUpdate
 
 # EdgeSummary is imported under TYPE_CHECKING in node.py to break the mutual
@@ -113,6 +114,7 @@ __all__ = [
     "LiteratureCandidate",
     "PendingIngestResponse",
     "BridgeCandidate",
+    "CorpusStats",
     "AdminStatus",
     "EmbeddingJob",
     "EmbeddingJobCounts",

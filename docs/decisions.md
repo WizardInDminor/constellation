@@ -737,6 +737,11 @@ without subprocess involvement.
 - The HTTP 200 response does not confirm the target application launched successfully, only that
   xdg-open was invoked. The WARNING log is the observable signal for failures.
 
+**2026-05-14 amendment (see ADR-047):** `_open_url` now returns any captured
+stderr text rather than only logging it, and the route includes it as
+`{"opened": url, "warning": <msg>}`. HTTP status remains 200 in all
+post-launch outcomes; this is a strict superset of the original contract.
+
 ---
 
 ## ADR-025 — Source creation inline in IntentionalCaptureDialog
@@ -1722,6 +1727,173 @@ is never changed by this operation.
   non-fleeting node types. Users can attach a source from
   permanent or structure notes, not just literature, which
   matches the new server contract.
+
+---
+
+## ADR-046 — Shared `edgeTypes` module with type metadata
+
+**Status:** Accepted
+
+**Context:** The `EDGE_TYPES` enum array was duplicated across three
+frontend files (`/nodes/[id]/page.tsx`, `/graph/components/ConnectPanel.tsx`,
+`/discover/page.tsx`), and `EDGE_COLORS` was duplicated as well. Edge types
+rendered as bare uppercase tokens (`SUPPORTS`, `ELABORATES`) with no help
+text, and edge direction was conveyed only by section headings
+("Referenced by") rather than per-row indicators. Real-user feedback on
+2026-05-10: "Direction of connections, and the differences between when to
+use some (supports vs elaborates) are a little vague to the user right now."
+
+**Decision:** Introduce `frontend/src/lib/edgeTypes.ts` as the single source
+of truth, exporting:
+
+- `EDGE_TYPES: EdgeType[]` — canonical ordering.
+- `EDGE_COLORS: Record<EdgeType, string>` — Tailwind class strings for badges
+  (the hex map in `graph/colors.ts` stays put — different consumer / value
+  shape).
+- `EDGE_TYPE_META: Record<EdgeType, { label, directional, description, example }>`
+  with the prose copy below.
+- `directionGlyph(t): "→" | "↔"` for inline direction rendering.
+
+The three duplicated arrays now import from this module. Edge type pickers
+render `EDGE_TYPE_META[t].label` (title-case) with the description as small
+grey text below the select. Edge rows render `→` for outgoing and `←` for
+incoming directional types; `↔` for `ANALOGOUS_TO` (the only symmetric
+type). Edge-type badges use `title={description}` for hover tooltips
+(deliberately a native browser tooltip rather than a custom popover — the
+testing note asked for "without being annoying about it for users who have
+the workflow down").
+
+**Prose copy** (mirrored in `EDGE_TYPE_META`):
+
+| Type | Description |
+|---|---|
+| `SUPPORTS` | A provides evidence or argument for B. |
+| `CONTRADICTS` | A is in tension with B. |
+| `ELABORATES` | A zooms in on an aspect of B. |
+| `ANALOGOUS_TO` | A and B share structural similarity, often across domains. (symmetric) |
+| `QUESTIONS` | A raises a problem with or about B. |
+| `INSPIRED_BY` | A is a looser creative or associative link from B. |
+| `COLLECTS` | A (a structure note) includes B in its map. |
+
+**Rationale:**
+- One module, one update point. Future edge types or copy edits land in
+  exactly one place.
+- Direction is now visible inline without forcing the user to learn which
+  section ("Connections" vs "Referenced by") implies which direction.
+- `title` attributes for the badge tooltip cost nothing in screen real
+  estate and degrade gracefully without JavaScript.
+
+**Consequences:**
+- The `EDGE_TYPES` and `EDGE_COLORS` constants in the three files are
+  removed and re-imported from `@/lib/edgeTypes`. `discover/page.tsx`
+  also picks up the description copy.
+- Display labels change from `SUPPORTS` to `Supports`. The enum values
+  sent to the backend are unchanged.
+
+---
+
+## ADR-047 — File path normalization for `file://` source URLs
+
+**Status:** Accepted
+
+**Context:** Sources can have a `url` of any form. For local files, users
+type things like `~/Documents/x.pdf` or `$HOME/notes/y.pdf` because that's
+how they think about their filesystem. Previously, `_open_url` passed the
+raw URL straight to `xdg-open`, which does not expand `~` or environment
+variables. The result was confusing failures even though the file
+existed. A separate consideration was URL-encoded characters in `file://`
+paths (e.g., `%20` for spaces).
+
+A symmetric design question was whether to normalize at write time
+(store-expanded) or read time (store-as-typed, expand-on-open). The two
+have different trade-offs:
+
+1. **Store-expanded.** The DB always holds canonical absolute paths.
+   Reads are cheap and obvious. But the user's intent is lost on display
+   — they typed `~/...`, the panel shows `/home/them/...`.
+2. **Store-as-typed.** Display preserves user intent. Open performs the
+   expansion. Slightly more code at the call site, but only one site
+   needs it (`/sources/{id}/open`).
+
+**Decision:** Store-as-typed; expand on open via a helper
+`_normalize_file_url(url)` in `backend/app/api/v1/sources.py`:
+
+1. If scheme is not `file`, pass through unchanged.
+2. Otherwise, `urlparse` the URL, `unquote` the path (decoding percent
+   escapes), apply `os.path.expanduser` then `os.path.expandvars`, and
+   `urlunparse` back to `file://...`.
+3. `file://~/foo` (where `~` lands in `netloc`) is handled as a
+   special case by prepending netloc to path before expansion.
+
+`$HOME` resolves to the server process's `HOME` env var (single-user
+local-first tool — this is fine; called out in the consequences).
+
+**Rationale:**
+- Preserves the user's typing on display, which matches expectations.
+- One normalization point — the open endpoint — keeps changes contained.
+- Tests can drive the helper directly via `monkeypatch.setenv("HOME", ...)`.
+
+**Consequences:**
+- The DB may contain non-canonical paths (`~/...`, `$HOME/...`). Code
+  that wants the absolute filesystem path must call `_normalize_file_url`.
+- Cross-user paths (`~someuser/...`) work because `expanduser` handles
+  them — but only if the server process has access to that user's home.
+- The duplicate-URL warning on the create form (frontend) does
+  case-insensitive raw-string comparison; users who paste the same path
+  in two different forms (`~/x.pdf` vs `$HOME/x.pdf`) won't get a
+  warning. Acceptable — the warning is best-effort.
+
+**Note on ADR-024:** The open endpoint now returns
+`{"opened": url, "warning": "<stderr>"}` when xdg-open emits stderr,
+instead of swallowing stderr into log-only. HTTP status remains 200 in
+all post-launch outcomes (ADR-024's central intent — fire-and-forget — is
+preserved). Stderr is still logged for server-side observability. This
+is a strict superset of the ADR-024 contract: existing clients that read
+only `opened` continue to work; new clients can surface the warning.
+
+---
+
+## ADR-048 — Home page dashboard: stats-only, no AI thematic analysis
+
+**Status:** Accepted
+
+**Context:** The placeholder home page ("Press Ctrl+K…") was an empty
+shell. The 2026-05-10 testing note proposed two directions: "basic
+graph stats" or "some llm thematic analysis option as well."
+
+Thematic analysis would require a new RAG endpoint, latency on home
+page load, and an opinion about what "themes" means before any real use
+has revealed which framing matters. The testing notes elsewhere
+(`Deferred Features Tracker`) explicitly note for processing modes:
+"Wait for real use to reveal which modes are actually needed. Don't
+design speculatively." That same logic applies here.
+
+**Decision:** Replace the home page with a stats-only dashboard.
+Backed by `GET /admin/stats` returning a new `CorpusStats` model:
+counts per node type, total edges, sources, tags, inbox size,
+`last_processed_at`. Fetched once on mount; no polling. Tiles link to
+the relevant list views (`/notes?type=`, `/graph`, `/sources`,
+`/inbox`).
+
+The endpoint lives on the `admin` router alongside `/admin/status` but
+as a separate path because the two return different shapes for
+different audiences (`/status` = ops health; `/stats` = corpus
+snapshot).
+
+**Rationale:**
+- Zero AI cost on home page load. Renders instantly.
+- Tiles double as nav — the inbox tile turns amber when non-zero, which
+  is a useful gentle signal to "go process some notes."
+- Future thematic analysis can land as a separate `/admin/themes`
+  endpoint and a new section on the dashboard; this ADR doesn't
+  preclude it.
+
+**Consequences:**
+- Counts come from cheap aggregate queries (`GROUP BY type`, `COUNT(*)`).
+  No new indexes needed.
+- The `count_by_type`, `count_inbox`, `last_processed_at` helpers live in
+  `node_repo`. `edge_repo.count`, `source_repo.count`, `tag_repo.count`
+  are simple `COUNT(*)` wrappers. Routes stay thin.
 
 ---
 

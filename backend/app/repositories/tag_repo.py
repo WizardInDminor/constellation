@@ -30,6 +30,12 @@ async def list_tags(db: aiosqlite.Connection) -> list[TagRef]:
     return [TagRef(id=r["id"], name=r["name"], color=r["color"]) for r in rows]
 
 
+async def count(db: aiosqlite.Connection) -> int:
+    cursor = await db.execute("SELECT COUNT(*) AS n FROM tags")
+    row = await cursor.fetchone()
+    return row["n"] if row else 0
+
+
 async def update(db: aiosqlite.Connection, tag_id: str, data: TagUpdate) -> TagRef | None:
     updates: dict[str, Any] = {}
     if data.name is not None:

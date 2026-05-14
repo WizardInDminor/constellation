@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { searchNodes } from "@/lib/api";
-import type { NodeRef } from "@/lib/api";
+import type { NodeRef, NodeSummary } from "@/lib/api";
+import { NotePreviewPopover } from "./NotePreviewPopover";
 
 const TYPE_COLORS: Record<string, string> = {
   fleeting: "bg-amber-100 text-amber-700",
@@ -15,9 +16,67 @@ interface NodePickerProps {
   onSelect: (node: NodeRef) => void;
   exclude?: string | string[];
   placeholder?: string;
+  /** When true, hovering a result mounts NotePreviewPopover for that row. */
+  previewOnHover?: boolean;
 }
 
-export function NodePicker({ onSelect, exclude, placeholder = "Search for a note…" }: NodePickerProps) {
+function NodePickerRow({
+  node,
+  onSelect,
+  previewOnHover,
+}: {
+  node: NodeRef;
+  onSelect: (node: NodeRef) => void;
+  previewOnHover: boolean;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [hovered, setHovered] = useState(false);
+
+  // NotePreviewPopover wants a NodeSummary; search returns NodeRef. The popover
+  // fetches NodeDetail on hover, so the missing fields below are unused.
+  const now = new Date().toISOString();
+  const summary: NodeSummary = {
+    id: node.id,
+    title: node.title,
+    type: node.type,
+    summary: null,
+    created_at: now,
+    updated_at: now,
+    processed_at: null,
+    tags: [],
+  };
+
+  return (
+    <li>
+      <button
+        ref={ref}
+        onClick={() => onSelect(node)}
+        onMouseEnter={previewOnHover ? () => setHovered(true) : undefined}
+        onMouseLeave={previewOnHover ? () => setHovered(false) : undefined}
+        onFocus={previewOnHover ? () => setHovered(true) : undefined}
+        onBlur={previewOnHover ? () => setHovered(false) : undefined}
+        className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
+      >
+        <span
+          className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+        >
+          {node.type}
+        </span>
+        <span className="truncate">{node.title}</span>
+      </button>
+      {previewOnHover && (
+        <NotePreviewPopover node={summary} anchorRef={ref} visible={hovered} />
+      )}
+    </li>
+  );
+}
+
+export function NodePicker({
+  onSelect,
+  exclude,
+  placeholder = "Search for a note…",
+  previewOnHover = false,
+}: NodePickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<NodeRef[]>([]);
   const [open, setOpen] = useState(false);
@@ -70,19 +129,12 @@ export function NodePicker({ onSelect, exclude, placeholder = "Search for a note
       {open && results.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-sm max-h-48 overflow-y-auto">
           {results.map((n) => (
-            <li key={n.id}>
-              <button
-                onClick={() => select(n)}
-                className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
-              >
-                <span
-                  className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[n.type] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {n.type}
-                </span>
-                <span className="truncate">{n.title}</span>
-              </button>
-            </li>
+            <NodePickerRow
+              key={n.id}
+              node={n}
+              onSelect={select}
+              previewOnHover={previewOnHover}
+            />
           ))}
         </ul>
       )}
