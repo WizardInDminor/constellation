@@ -20,7 +20,7 @@
 **Status as of 2026-05-15:**
 
 - ✅ **Slice 1 — A1 + A6 shipped** in commit `b5cf251`. ADR-051 and ADR-052 landed; ADR-036 superseded. 304 backend tests + 26 frontend tests pass.
-- ⏳ **Slice 2 — A8** (classifier rationale persistence) — pending.
+- ✅ **Slice 2 — A8 shipped** 2026-05-15. Migration `0005_classifier_rationale.sql`; rationale plumbed through models / repo / graph endpoint; graph EdgePanel displays it as a distinct block; bridge Apply no longer overwrites `note`. 308 backend tests + 26 frontend tests pass. No ADR (mechanical schema add).
 - ⏳ **Slice 3 — A2 + A3 + A4 + A5 + A7** (frontend QoL items) — pending.
 - ⏳ **Slice 4 — A9 + A10** (Ask mode-selector pattern). ADR-053 already drafted in `docs/decisions.md` against A9; A10 lands the third mode value in the same PR.
 
@@ -33,7 +33,7 @@ Originally scoped as one PR; broken into four independent slices during executio
 **Slice plan:**
 
 - **Slice 1** — A1 + A6 (one migration). ✅ Shipped 2026-05-15.
-- **Slice 2** — A8 alone (independent column-add migration).
+- **Slice 2** — A8 alone (independent column-add migration). ✅ Shipped 2026-05-15.
 - **Slice 3** — A2 + A3 + A4 + A5 + A7 (pure frontend, order-independent).
 - **Slice 4** — A9 + A10 (Ask mode-selector pattern, shares ADR-053).
 
@@ -87,7 +87,7 @@ Originally scoped as one PR; broken into four independent slices during executio
 - **Acceptance:** In a NodePicker (capture modal "related" field, EdgeForm target picker, or graph ConnectPanel), hover a result row → popover appears within ~300 ms showing title/content excerpt/tags. Stops on un-hover.
 - **ADR required:** None.
 
-### A8 — Persist classifier rationale on edge
+### A8 — Persist classifier rationale on edge ✅ shipped 2026-05-15
 
 - **Description:** When the AI bridge classifier (ADR-049) recommends an edge, its rationale is shown in the slide-out banner but discarded on apply. Add `classifier_rationale TEXT` to `edges`; populate it when the user clicks "Apply suggestion" in the bridge slide-out; render it on the EdgePanel and EdgeForm "note" hint when re-viewing.
 - **Cost:** 1 day. Migration (column add — straightforward, no CHECK rewrite), bridge-classifier route plumbing, EdgeForm prefill, EdgePanel display.

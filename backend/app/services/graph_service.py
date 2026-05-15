@@ -71,7 +71,7 @@ async def fetch_edges_by_ids(db: aiosqlite.Connection, edge_ids: list[str]) -> l
         return []
     placeholders = ",".join("?" * len(edge_ids))
     cursor = await db.execute(
-        f"SELECT id, from_id, to_id, type, note, created_at"  # noqa: S608
+        f"SELECT id, from_id, to_id, type, note, classifier_rationale, created_at"  # noqa: S608
         f" FROM edges WHERE id IN ({placeholders})",
         edge_ids,
     )
@@ -84,6 +84,7 @@ async def fetch_edges_by_ids(db: aiosqlite.Connection, edge_ids: list[str]) -> l
             to_id=r["to_id"],
             type=r["type"],
             note=r["note"],
+            classifier_rationale=r["classifier_rationale"],
             created_at=r["created_at"],
         )
         for eid in edge_ids

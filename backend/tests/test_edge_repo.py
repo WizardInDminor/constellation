@@ -97,3 +97,59 @@ async def test_expanded_edge_types_accepted(db, edge_type):
     fetched = await edge_repo.get_by_id(db, edge.id)
     assert fetched is not None
     assert fetched.type == edge_type
+
+
+async def test_classifier_rationale_persists_and_is_distinct_from_note(db):
+    """Bridge-classifier rationale survives create→get and stays separate from note."""
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(
+        db,
+        EdgeCreate(
+            from_id=a.id,
+            to_id=b.id,
+            type="ANALOGOUS_TO",
+            note="my own framing",
+            classifier_rationale="Both notes describe a feedback loop.",
+        ),
+    )
+    assert edge.note == "my own framing"
+    assert edge.classifier_rationale == "Both notes describe a feedback loop."
+
+    fetched = await edge_repo.get_by_id(db, edge.id)
+    assert fetched is not None
+    assert fetched.note == "my own framing"
+    assert fetched.classifier_rationale == "Both notes describe a feedback loop."
+
+
+async def test_classifier_rationale_defaults_to_none(db):
+    """Hand-authored edges have no rationale."""
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    assert edge.classifier_rationale is None
+
+
+async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
+    """Rationale rides along on get_neighbors / get_outgoing / get_incoming."""
+    a, b = await _two_nodes(db)
+    rationale = "Shared structural mechanism, not surface vocabulary."
+    await edge_repo.create(
+        db,
+        EdgeCreate(
+            from_id=a.id,
+            to_id=b.id,
+            type="ANALOGOUS_TO",
+            classifier_rationale=rationale,
+        ),
+    )
+
+    neighbors = await edge_repo.get_neighbors(db, a.id)
+    assert len(neighbors) == 1
+    assert neighbors[0].edge_classifier_rationale == rationale
+
+    outgoing = await edge_repo.get_outgoing(db, a.id)
+    assert len(outgoing) == 1
+    assert outgoing[0].classifier_rationale == rationale
+
+    incoming = await edge_repo.get_incoming(db, b.id)
+    assert len(incoming) == 1
+    assert incoming[0].classifier_rationale == rationale

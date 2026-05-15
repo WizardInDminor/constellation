@@ -33,6 +33,7 @@ class GraphEdgeRef(BaseModel):
     to_id: str
     type: GraphEdgeType
     note: str | None = None
+    classifier_rationale: str | None = None
 
 
 class GraphData(BaseModel):

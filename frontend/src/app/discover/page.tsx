@@ -80,6 +80,7 @@ function EdgeForm({
   onSuccess,
   initialType,
   initialNote,
+  classifierRationale,
   prefillKey,
 }: {
   fromId: string;
@@ -89,6 +90,7 @@ function EdgeForm({
   onSuccess: () => void;
   initialType?: EdgeType;
   initialNote?: string;
+  classifierRationale?: string;
   // Bumping this signals "external suggestion changed — reset edge type and note".
   // Direct equality on the initial* values would over-fire on every parent re-render.
   prefillKey?: string | number;
@@ -109,7 +111,13 @@ function EdgeForm({
     setSaving(true);
     setEdgeError(null);
     try {
-      await createEdge({ from_id: fromId, to_id: toId, type: edgeType, note: note || undefined });
+      await createEdge({
+        from_id: fromId,
+        to_id: toId,
+        type: edgeType,
+        note: note || undefined,
+        classifier_rationale: classifierRationale || undefined,
+      });
       onSuccess();
     } catch (e: unknown) {
       if (e instanceof Response && e.status === 409) {
@@ -145,6 +153,19 @@ function EdgeForm({
         </select>
         <p className="text-xs text-gray-500 mt-1">{EDGE_TYPE_META[edgeType].description}</p>
       </div>
+      {classifierRationale && (
+        <div className="border-l-2 border-indigo-300 bg-indigo-50/40 px-2 py-1.5 rounded-r">
+          <div className="text-xs uppercase tracking-wide text-indigo-600/80 font-medium">
+            Classifier rationale
+          </div>
+          <p className="text-xs text-gray-700 leading-relaxed italic mt-0.5">
+            {classifierRationale}
+          </p>
+          <p className="text-[10px] text-gray-400 mt-1">
+            Saved with the edge as Claude&apos;s justification — separate from your note below.
+          </p>
+        </div>
+      )}
       <div>
         <label className="text-xs text-gray-500 block mb-1">Note (optional)</label>
         <textarea
@@ -505,7 +526,7 @@ export default function DiscoverPage() {
     fromId: string;
     toId: string;
     edgeType: EdgeType;
-    note: string;
+    classifierRationale: string;
     key: number;
   } | null>(null);
   const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
@@ -712,7 +733,7 @@ export default function DiscoverPage() {
                 fromId: r.from_id,
                 toId: r.to_id,
                 edgeType: r.edge_type,
-                note: r.rationale,
+                classifierRationale: r.rationale,
                 key: Date.now(),
               });
             }}
@@ -724,7 +745,7 @@ export default function DiscoverPage() {
               toId={bridgePrefill?.toId ?? selectedBridge.node_b.id}
               excludeIds={[selectedBridge.node_a.id, selectedBridge.node_b.id]}
               initialType={bridgePrefill?.edgeType}
-              initialNote={bridgePrefill?.note}
+              classifierRationale={bridgePrefill?.classifierRationale}
               prefillKey={bridgePrefill?.key}
               onSuccess={() => {
                 // Remove this pair from the list

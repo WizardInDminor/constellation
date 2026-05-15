@@ -31,6 +31,7 @@ class EdgeSummary(BaseModel):
     id: str
     type: EdgeType
     note: str | None = None
+    classifier_rationale: str | None = None
     created_at: datetime
     neighbor: NodeRef
 
@@ -41,6 +42,7 @@ class EdgeDetail(BaseModel):
     to_id: str
     type: EdgeType
     note: str | None = None
+    classifier_rationale: str | None = None
     created_at: datetime
 
 
@@ -49,6 +51,7 @@ class EdgeCreate(BaseModel):
     to_id: str
     type: EdgeType
     note: str | None = None
+    classifier_rationale: str | None = None
 
 
 class NeighborResult(BaseModel):
@@ -56,4 +59,5 @@ class NeighborResult(BaseModel):
     edge_id: str
     edge_type: EdgeType
     edge_note: str | None = None
+    edge_classifier_rationale: str | None = None
     direction: Literal["outgoing", "incoming"]

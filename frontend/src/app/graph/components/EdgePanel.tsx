@@ -41,6 +41,17 @@ export function EdgePanel({ edge, fromTitle, toTitle, onClose }: Props) {
           </div>
         )}
 
+        {edge.classifier_rationale && (
+          <div className="border-l-2 border-indigo-500/60 pl-3">
+            <div className="text-xs text-indigo-300/80 mb-1 uppercase tracking-wide">
+              Classifier rationale
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed italic">
+              {edge.classifier_rationale}
+            </p>
+          </div>
+        )}
+
         <div className="space-y-2">
           <div>
             <div className="text-xs text-gray-400 mb-1">From</div>

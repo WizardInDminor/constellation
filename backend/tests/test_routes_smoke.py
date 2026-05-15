@@ -50,6 +50,25 @@ def test_delete_edge_not_found(client):
     assert client.delete("/api/v1/edges/ghost").status_code == 404
 
 
+def test_create_edge_accepts_classifier_rationale(client):
+    a, b = _two_nodes(client)
+    rationale = "Both describe converging-but-not-identical control loops."
+    r = client.post(
+        "/api/v1/edges",
+        json={
+            "from_id": a["id"],
+            "to_id": b["id"],
+            "type": "ANALOGOUS_TO",
+            "note": "interesting",
+            "classifier_rationale": rationale,
+        },
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["note"] == "interesting"
+    assert body["classifier_rationale"] == rationale
+
+
 # ── sources ───────────────────────────────────────────────────────────────────
 
 

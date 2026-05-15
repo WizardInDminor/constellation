@@ -172,6 +172,7 @@ export function createEdge(data: {
   to_id: string;
   type: EdgeType;
   note?: string;
+  classifier_rationale?: string;
 }): Promise<EdgeDetail> {
   return request("/api/v1/edges", {
     method: "POST",
