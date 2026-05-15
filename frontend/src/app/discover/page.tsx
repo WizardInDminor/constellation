@@ -137,7 +137,7 @@ function EdgeForm({
       {onPickTarget && (
         <div>
           <label className="text-xs text-gray-500 block mb-1">Connect to</label>
-          <NodePicker onSelect={onPickTarget} exclude={excludeIds} placeholder="Search for a note to link…" />
+          <NodePicker onSelect={onPickTarget} exclude={excludeIds} placeholder="Search for a note to link…" previewOnHover />
         </div>
       )}
       <div>

@@ -20,6 +20,8 @@ interface NodePickerProps {
   previewOnHover?: boolean;
 }
 
+const HOVER_DELAY_MS = 300;
+
 function NodePickerRow({
   node,
   onSelect,
@@ -31,6 +33,16 @@ function NodePickerRow({
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [hovered, setHovered] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleShow() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setHovered(true), HOVER_DELAY_MS);
+  }
+  function cancelAndHide() {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    setHovered(false);
+  }
 
   // NotePreviewPopover wants a NodeSummary; search returns NodeRef. The popover
   // fetches NodeDetail on hover, so the missing fields below are unused.
@@ -51,10 +63,10 @@ function NodePickerRow({
       <button
         ref={ref}
         onClick={() => onSelect(node)}
-        onMouseEnter={previewOnHover ? () => setHovered(true) : undefined}
-        onMouseLeave={previewOnHover ? () => setHovered(false) : undefined}
-        onFocus={previewOnHover ? () => setHovered(true) : undefined}
-        onBlur={previewOnHover ? () => setHovered(false) : undefined}
+        onMouseEnter={previewOnHover ? scheduleShow : undefined}
+        onMouseLeave={previewOnHover ? cancelAndHide : undefined}
+        onFocus={previewOnHover ? scheduleShow : undefined}
+        onBlur={previewOnHover ? cancelAndHide : undefined}
         className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
       >
         <span
