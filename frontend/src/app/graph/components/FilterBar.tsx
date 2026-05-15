@@ -119,6 +119,23 @@ export function FilterBar({ state, allTags, onChange }: Props) {
         onChange={(e) => onChange({ ...state, searchQuery: e.target.value })}
         className="bg-gray-800 border border-gray-600 text-gray-200 placeholder-gray-500 rounded px-2 py-0.5 text-xs w-40"
       />
+
+      {/* Focus chip (driven by ?ids= URL param) */}
+      {state.focusIds && state.focusIds.size > 0 && (
+        <div className="flex items-center gap-1.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 px-2 py-0.5">
+          <span>
+            Focused on {state.focusIds.size} node{state.focusIds.size === 1 ? "" : "s"} + neighbors
+          </span>
+          <button
+            onClick={() => onChange({ ...state, focusIds: null })}
+            className="text-indigo-200 hover:text-white"
+            aria-label="Clear focus"
+            title="Clear focus"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

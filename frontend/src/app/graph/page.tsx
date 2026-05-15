@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { createEdge, getGraphData, getNode, listTags, updateNode } from "@/lib/api";
 import type { EdgeType, GraphData, GraphEdgeRef, GraphNodeRef, NodeDetail, TagRef } from "@/lib/api";
@@ -19,11 +20,28 @@ const GraphCanvas = dynamic(
 );
 
 export default function GraphPage() {
+  return (
+    <Suspense fallback={null}>
+      <GraphPageInner />
+    </Suspense>
+  );
+}
+
+function GraphPageInner() {
+  const searchParams = useSearchParams();
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
+  const [filterState, setFilterState] = useState<FilterState>(() => {
+    const initial = initialFilterState();
+    const ids = searchParams.get("ids");
+    if (ids) {
+      const parsed = ids.split(",").map((s) => s.trim()).filter(Boolean);
+      if (parsed.length > 0) initial.focusIds = new Set(parsed);
+    }
+    return initial;
+  });
 
   const [selectedNode, setSelectedNode] = useState<GraphNodeRef | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdgeRef | null>(null);

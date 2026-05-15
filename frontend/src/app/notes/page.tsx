@@ -151,9 +151,19 @@ export default function NotesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Notes</h2>
-        <span className="text-sm text-gray-500">
-          {loading ? "Loading…" : isFiltered ? `${filtered.length} of ${notes.length}` : `${notes.length} saved`}
-        </span>
+        <div className="flex items-center gap-3">
+          {!loading && isFiltered && filtered.length > 0 && filtered.length <= 25 && (
+            <Link
+              href={`/graph?ids=${filtered.map((n) => n.id).join(",")}`}
+              className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+            >
+              Open in graph →
+            </Link>
+          )}
+          <span className="text-sm text-gray-500">
+            {loading ? "Loading…" : isFiltered ? `${filtered.length} of ${notes.length}` : `${notes.length} saved`}
+          </span>
+        </div>
       </div>
 
       {/* Type filter */}

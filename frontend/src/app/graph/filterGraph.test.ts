@@ -140,4 +140,45 @@ describe("applyFilters", () => {
     const result = applyFilters(DATA, initialFilterState());
     expect(result.edges.map((e) => e.id)).toContain("cites-l1");
   });
+
+  it("focusIds shows only the focus nodes and their 1-hop neighbors", () => {
+    // Focus on p1 → keep p1 + l1 (via SUPPORTS edge); drop f1 and s1 (no edge
+    // touches p1, and f1 is filtered out by default anyway)
+    const state = {
+      ...initialFilterState(),
+      nodeTypes: new Set(["permanent", "literature", "source"]),
+      focusIds: new Set(["p1"]),
+    };
+    const result = applyFilters(DATA, state);
+    expect(result.nodes.map((n) => n.id).sort()).toEqual(["l1", "p1"]);
+    expect(result.edges.map((e) => e.id)).toEqual(["e1"]);
+  });
+
+  it("focusIds keeps cross-edges only when an endpoint is in focus", () => {
+    // Focus on l1 → keep l1, p1 (via e1), s1 (via cites-l1). The "neighbor
+    // among neighbors" edge that doesn't touch l1 would be excluded — exercised
+    // here trivially because we have no such edge in DATA, but the filter
+    // logic must not pull in non-focus-touching edges. Verify by checking
+    // edges only.
+    const state = {
+      ...initialFilterState(),
+      nodeTypes: new Set(["permanent", "literature", "source"]),
+      focusIds: new Set(["l1"]),
+    };
+    const result = applyFilters(DATA, state);
+    for (const e of result.edges) {
+      expect(e.from_id === "l1" || e.to_id === "l1").toBe(true);
+    }
+  });
+
+  it("focusIds composes with node-type filter — hidden focus stays hidden", () => {
+    // Focus on f1 but fleeting is filtered out → f1 and its edges drop
+    const state = {
+      ...initialFilterState(), // fleeting hidden by default
+      focusIds: new Set(["f1"]),
+    };
+    const result = applyFilters(DATA, state);
+    expect(result.nodes.map((n) => n.id)).not.toContain("f1");
+    expect(result.edges).toHaveLength(0);
+  });
 });
