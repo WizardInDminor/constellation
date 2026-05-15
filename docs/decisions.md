@@ -1088,7 +1088,7 @@ clarifying to the model that the provided notes are intentionally the entire sco
 
 ## ADR-036 — Saved syntheses link to sources via `COLLECTS`
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-051](#adr-051--saved-syntheses-use-cites-not-collects-supersedes-adr-036)
 
 **Context:** When a RAG answer is saved as a permanent note via `POST /rag/save-answer`,
 the new note should record which existing notes it was synthesized from. The edge
@@ -2175,6 +2175,221 @@ The constraint set on the solution:
   valid follow-on, and the same Tailscale-reachable backend supports
   it without further changes. It is deliberately not in scope for
   this ADR.
+
+---
+
+## ADR-051 — Saved syntheses use `CITES`, not `COLLECTS` (supersedes ADR-036)
+
+**Status:** Accepted (supersedes [ADR-036](#adr-036--saved-syntheses-link-to-sources-via-collects))
+
+**Context:** [ADR-036](#adr-036--saved-syntheses-link-to-sources-via-collects)
+chose `COLLECTS` for the auto-edges created by `POST /rag/save-answer`
+(`backend/app/api/v1/rag.py:268-279`), reasoning that "a synthesis IS a
+collection by construction." The walkthrough of 2026-05-14 (Sc 4,
+finding #12) and the consolidated cross-cutting findings (2026-05-15)
+revisited this and surfaced two problems:
+
+1. Filtering the graph by `COLLECTS` mixes structure-note collections
+   (user-curated MOCs) with synthesis-note collections (AI-generated
+   answer provenance). ADR-036 acknowledged this as "acceptable" but
+   graph-as-maintenance-tool work (Sc 7) shows the conflation is
+   costly when the same filter is used to find orphan MOCs.
+2. `CITES` more accurately names the semantic relationship: a synthesis
+   cites its sources rather than collecting them; the auto-edge is
+   closer to a footnote than a curated inclusion.
+
+**Decision:** `POST /rag/save-answer` writes `CITES` edges from the
+synthesis note to each cited source. `CITES` is added to the EdgeType
+enum (Python `Literal` in `backend/app/models/edge.py`, SQL CHECK
+constraint via migration `0004_expanded_edge_types.sql` — shared with
+[ADR-052](#adr-052--expanded-edgetype-vocabulary-literature-stance)).
+
+**Rationale:**
+
+- **Semantic precision.** A synthesis note's relationship to its sources
+  is "cites" — it references them for support, not "collects" them as a
+  curated set. The distinction matters when both kinds of edges coexist
+  in the graph.
+- **Filter cleanliness.** Graph queries for `COLLECTS` now reliably
+  return MOC-style structure-note collections; queries for `CITES`
+  return synthesis provenance. The two readings stay separate.
+- **Frontend already half-aware.** `frontend/src/app/graph/filterGraph.ts`
+  and `frontend/src/app/graph/colors.ts` already reference `CITES`
+  because the graph-data endpoint uses it as a virtual edge type for
+  source → literature relationships (per
+  [ADR-034](#adr-034--virtual-source-nodes-in-the-graph-visualization)).
+  Adopting `CITES` as a real edge type aligns the model with what the
+  graph viz was already implying.
+- **Migration cost amortized with ADR-052.** `CITES` and the five
+  literature-stance verbs (`BUILDS_ON`, `APPLIES_TO`, `MEASURES`,
+  `EXTENDS`, `REFINES`) share migration `0004`. The SQLite CHECK-constraint
+  update is one table-recreate operation rather than two.
+
+**Consequences:**
+
+- Existing `COLLECTS` edges created by past `save-answer` calls remain
+  `COLLECTS`. A one-time backfill migration could rewrite them, but at
+  personal-tool scale (~20 such edges expected per quarter) the
+  backfill cost outweighs the consistency benefit. The decision is to
+  leave history alone; new syntheses use `CITES` going forward. Graph
+  filters that want both reads can union the two types.
+- `CITES` is now a first-class EdgeType in the backend, not just a
+  virtual graph-viz label. Any future code that consumes `EdgeType`
+  (e.g., edge-type chip metadata in `frontend/src/lib/edgeTypes.ts`)
+  must include `CITES`.
+- Suggest-links and bridge-classifier prompts (`_SUGGEST_LINKS_SYSTEM`
+  in `rag.py`, `_CLASSIFY_BRIDGE_SYSTEM` in `discover_service.py`) gain
+  `CITES` as an option. The prompts need to teach the model when to
+  pick `CITES` vs. `COLLECTS` vs. `SUPPORTS`; the difference is
+  intentional but subtle (citation = specific reference, collection =
+  curated bundle, support = evidential).
+
+---
+
+## ADR-052 — Expanded EdgeType vocabulary (literature stance)
+
+**Status:** Accepted
+
+**Context:** The walkthrough's finding #11 (2026-05-14, sharpened across
+Sc 4, Sc 9, Sc 12) names the EdgeType vocabulary as one-dimensional: it
+covers author-stance verbs (`SUPPORTS`, `CONTRADICTS`, `QUESTIONS`,
+`ANALOGOUS_TO`, `ELABORATES`, `INSPIRED_BY`) plus the structural verb
+`COLLECTS`, but misses literature-stance verbs that describe how a note
+BUILDS on, APPLIES, or MEASURES the ideas in another note. The gap
+shows up most in literature-review workflows (Sc 4): the natural verb
+for "this Razavi note builds on Gardner's earlier work" is `BUILDS_ON`,
+not `SUPPORTS`.
+
+The walkthrough also names evolution-stance verbs (`SUPERSEDED_BY`,
+`SCOPED_TO`, `REGIME_OF`, `RESOLVES`) as missing. Those are the subject
+of a separate decision (D1, scheduled for Phase 8.3 — see
+`docs/ux-build-plan.md`); they are gated on the resolved-edge state
+work and don't ship in Bucket A.
+
+**Decision:** Add five literature-stance verbs to the EdgeType enum:
+
+- `BUILDS_ON` — A → B: A advances or extends B's framework.
+- `APPLIES_TO` — A → B: A applies B's idea to a new domain or instance.
+- `MEASURES` — A → B: A is an empirical measurement of B's claim or
+  quantity.
+- `EXTENDS` — A → B: A adds scope or generality to B (less commonly
+  used than `BUILDS_ON`; useful when the extension is dimension-ward
+  rather than depth-ward).
+- `REFINES` — A → B: A sharpens or specializes B without contradicting
+  it.
+
+These ship together with `CITES`
+([ADR-051](#adr-051--saved-syntheses-use-cites-not-collects-supersedes-adr-036))
+in migration `0004_expanded_edge_types.sql`. The frontend `edgeTypes.ts`
+module gains color + label + description metadata for each.
+
+**Rationale:**
+
+- **Cover the literature-review use case.** Sc 4's PLL sprint surfaced
+  ~20 edges where neither `SUPPORTS` nor `ELABORATES` was quite right;
+  `BUILDS_ON` or `APPLIES_TO` would have fit. A vocabulary gap that
+  misroutes 20+ edges in a single domain is worth a schema add.
+- **Five verbs, not three or seven.** Pilot-tested against Sc 4's PLL
+  notes: `BUILDS_ON` and `APPLIES_TO` cover the bulk; `MEASURES` is
+  rare but specific; `EXTENDS` and `REFINES` cover the residual cases.
+  Fewer than five leaves common gaps; more than five becomes a
+  vocabulary the user has to memorize.
+- **Same migration as `CITES`.** SQLite CHECK constraint changes
+  require table-recreate; doing it once for six new edge types is
+  sixfold cheaper than six separate migrations. This is the first such
+  migration in the project; Phase 8.3 will reuse the pattern for
+  evolution verbs and resolved-edge state.
+- **Defer evolution verbs to Phase 8.** They're meaningless without
+  resolved-edge state and edge-aware retrieval. The walkthrough
+  explicitly notes (calibration §7) that shipping evolution verbs
+  alone is decorative. Phase 8.3 ships them with backing infrastructure.
+
+**Consequences:**
+
+- The `_SUGGEST_LINKS_SYSTEM` prompt (`rag.py:83-103`) and
+  `_CLASSIFY_BRIDGE_SYSTEM` prompt (`discover_service.py`) must be
+  updated to teach the model about the five new types. Prompt
+  expansion grows by ~5 lines.
+- Frontend `edgeTypes.ts` must include color + label + description for
+  each. The visual vocabulary on graph viz gains five colors (aim for
+  a coherent "literature" palette — earth tones — distinct from the
+  author-stance palette).
+- `EdgeForm`'s type picker grows from 7 options to 13 (the six new
+  types plus the existing seven). Once evolution verbs land in Phase
+  8.3 it grows to 17. Consider grouping in the picker UI (author-stance
+  / literature-stance / evolution-stance / structural).
+- Existing edges are unaffected. Migration only adds permitted values
+  to the CHECK constraint; no data backfill.
+- AI suggest-links and AI bridge-classifier outputs will start
+  surfacing the new types once the prompts are updated. The bridge
+  classifier ([ADR-049](#adr-049--ai-classified-bridges-on-demand-per-pair-no_connection-as-a-first-class-result))
+  returns `NO_CONNECTION` for pairs where no type fits — this remains
+  a first-class result; the broader vocabulary doesn't force a type
+  onto every pair.
+
+---
+
+## ADR-053 — Ask supports `mode={default,brief}`
+
+**Status:** Accepted
+
+**Context:** The walkthrough's Sc 12 (advocacy queries) and finding #30
+surfaced that `POST /rag/query` has a fixed system prompt instructing
+balanced summary with explicit "don't speculate" framing
+(`rag_service.py:17-26`). When the user explicitly wants a one-sided
+brief — "argue the case for X" — the prompt resists the instruction
+and continues introducing counterarguments. Sc 12's Path 1 verified
+this: explicit "don't be balanced; argue this position" instructions
+in the query body are partially honored by the model but the system
+prompt dominates.
+
+A simple fix: branch the system prompt based on a request-level `mode`
+flag.
+
+**Decision:** Add an optional
+`mode: Literal["default", "brief"] | None = None` field to `RagRequest`.
+When `mode="brief"`, `rag_service.query()` swaps the standard system
+prompt for an advocacy-mode variant:
+
+> "The user has explicitly asked for a one-sided brief in support of
+> their position. Do not introduce counterarguments unless the user
+> asks. Cite notes inline as [Note N]. Be concise and committed."
+
+UI: `/ask` page gains a small mode selector (radio or segmented
+control) next to the question input, defaulting to "default."
+
+**Rationale:**
+
+- **Smallest viable surface for advocacy.** Sc 12 showed that user
+  instructions in the query body get partially overridden by the
+  system prompt. A request-level flag is the right place to make the
+  prompt swap; it's a contract, not a hint.
+- **Doesn't break existing behavior.** Default mode is unchanged. The
+  flag is opt-in; existing API consumers see no change.
+- **Composable with Phase 8.** Phase 8 will likely add more retrieval
+  modes (scoped, edge-aware). Standardizing on a `mode` enum now keeps
+  that axis clean.
+- **Critic mode (A10) reuses the pattern.** A future `mode="critic"`
+  for "what reader questions does this provoke?" follows the same
+  shape. Building the mode-selector UI once amortizes across A9 and A10.
+
+**Consequences:**
+
+- The brief-mode prompt may produce overconfident output if the corpus
+  is thin. Mitigation: B5's negative-finding framing applies regardless
+  of mode; brief mode still hedges when retrieval confidence is low.
+  The hedge becomes "Your notes don't directly cover X; here is the
+  case for your position based on the closest related notes…"
+- If Phase 8 introduces edge-aware prompts, the brief-mode prompt may
+  need to be re-derived (e.g., should brief mode still elevate
+  CONTRADICTS-linked neighbors? Probably no — that's the whole point
+  of brief mode). The Phase 8 ADR (ADR-058) will revisit this.
+- `mode` becomes part of the saved-answer metadata. Future feature: a
+  brief-mode flag on the saved synthesis so a reader can tell "this
+  was generated as an argument, not a summary."
+- Critic mode (A10) is a third `mode` value scheduled to ship in the
+  same PR. Sequencing: A9 ships the request-model + selector + default
+  + brief; A10 adds the critic mode value and prompt.
 
 ---
 
