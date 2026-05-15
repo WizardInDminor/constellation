@@ -10,20 +10,34 @@
 
 **Sequencing:**
 
-1. **Bucket A** — one PR, ~5–7 working days. Ten small-but-leveraged items. Includes the first CHECK-constraint migration (A1 + A6 combined) which de-risks Phase 8's resolved-edge migration.
+1. **Bucket A** — ten small-but-leveraged items, broken into four independent slices. Includes the first CHECK-constraint migration (A1 + A6 combined) which de-risks Phase 8's resolved-edge migration.
 2. **Bucket B** — five standalone PRs, ~3 days each, run sequentially. ~3 weeks of clock.
 3. **Phase 8 — edge-semantics-into-RAG** — multi-week, gated by a 1-week prototype. Folds in C1, the resolved-edge schema, and D1.
 4. **Bucket C / Bucket D placement:** see §5/§6.
 
 **Total effort, Buckets A + B: ~4 working weeks of one-engineer time, end-to-end.**
 
+**Status as of 2026-05-15:**
+
+- ✅ **Slice 1 — A1 + A6 shipped** in commit `b5cf251`. ADR-051 and ADR-052 landed; ADR-036 superseded. 304 backend tests + 26 frontend tests pass.
+- ⏳ **Slice 2 — A8** (classifier rationale persistence) — pending.
+- ⏳ **Slice 3 — A2 + A3 + A4 + A5 + A7** (frontend QoL items) — pending.
+- ⏳ **Slice 4 — A9 + A10** (Ask mode-selector pattern). ADR-053 already drafted in `docs/decisions.md` against A9; A10 lands the third mode value in the same PR.
+
 ---
 
-## 2. Bucket A — Small wins (single PR, ~5–7 working days)
+## 2. Bucket A — Small wins (four slices, ~5–7 working days total)
 
-Ship as one PR with three attached ADRs (ADR-051, ADR-052, ADR-053). Items are independent except where noted.
+Originally scoped as one PR; broken into four independent slices during execution since the items naturally group by subsystem. Three ADRs (ADR-051, ADR-052, ADR-053) are pre-drafted in `docs/decisions.md`.
 
-### A1 — Save-answer auto-edges use `CITES`, not `COLLECTS`
+**Slice plan:**
+
+- **Slice 1** — A1 + A6 (one migration). ✅ Shipped 2026-05-15.
+- **Slice 2** — A8 alone (independent column-add migration).
+- **Slice 3** — A2 + A3 + A4 + A5 + A7 (pure frontend, order-independent).
+- **Slice 4** — A9 + A10 (Ask mode-selector pattern, shares ADR-053).
+
+### A1 — Save-answer auto-edges use `CITES`, not `COLLECTS` ✅ shipped (b5cf251)
 
 - **Description:** `POST /rag/save-answer` writes `COLLECTS` edges from the synthesis note to each cited source (`backend/app/api/v1/rag.py:268-279`). Replace with `CITES`. Requires expanding the EdgeType enum (sibling work to A6, shared migration).
 - **Cost:** Half-day (2h impl, 1h ADR superseding ADR-036, 1h test).
@@ -31,7 +45,7 @@ Ship as one PR with three attached ADRs (ADR-051, ADR-052, ADR-053). Items are i
 - **Acceptance:** Save an /ask answer with provenance to ≥2 notes; verify in DB or graph viz that the new edges are typed `CITES` and the synthesis note has no `COLLECTS` outgoing edges to those sources.
 - **ADR required:** **ADR-051 — Saved syntheses use `CITES` (supersedes ADR-036).**
 
-### A6 — Literature-shaped edge types
+### A6 — Literature-shaped edge types ✅ shipped (b5cf251)
 
 - **Description:** Add `BUILDS_ON`, `APPLIES_TO`, `MEASURES`, `EXTENDS`, `REFINES` to EdgeType. **Combine with A1 into one migration** (`0004_expanded_edge_types.sql`) — the SQLite CHECK constraint can only be modified by table recreate, so we pay that ceremony once for both items.
 - **Cost:** Half-day on top of A1 — 4h (most of it is `frontend/src/lib/edgeTypes.ts` color + label + description for the 5 new types, plus prompt updates in `rag.py:_SUGGEST_LINKS_SYSTEM` and `discover_service.py:_CLASSIFY_BRIDGE_SYSTEM`).
@@ -251,9 +265,9 @@ ADR-060 is D1's formal commit.
 
 | # | Title | Trigger | Pre-work or inline? |
 |---|---|---|---|
-| **ADR-051** | Saved syntheses use `CITES` (supersedes ADR-036) | Bucket A — A1 | Inline with Bucket A PR (drafted alongside this plan) |
-| **ADR-052** | Expanded EdgeType vocabulary (literature stance) | Bucket A — A6 | Inline with Bucket A PR (drafted alongside this plan) |
-| **ADR-053** | Ask supports `mode={default,brief}` | Bucket A — A9 | Inline with Bucket A PR (drafted alongside this plan) |
+| **ADR-051** | Saved syntheses use `CITES` (supersedes ADR-036) | Bucket A — A1 | ✅ landed in commit b5cf251 |
+| **ADR-052** | Expanded EdgeType vocabulary (literature stance) | Bucket A — A6 | ✅ landed in commit b5cf251 |
+| **ADR-053** | Ask supports `mode={default,brief}` | Bucket A — A9 | Drafted in `docs/decisions.md`; awaiting A9 implementation (Slice 4) |
 | **ADR-054** | "Recent activity" windowing semantics on Home | Bucket B — B1 | Inline with B1 PR |
 | **ADR-055** | Notes-filter API contract | Bucket B — B2 | Inline with B2 PR |
 | **ADR-056** | Triangle-completion ranking semantics | Bucket B — B4 | Inline with B4 PR |
