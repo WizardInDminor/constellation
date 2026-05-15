@@ -8,8 +8,10 @@ from app.models.discover import (
     TriangleCandidate,
 )
 from app.models.edge import (
+    RESOLVABLE_EDGE_TYPES,
     EdgeCreate,
     EdgeDetail,
+    EdgeResolveRequest,
     EdgeSummary,
     EdgeType,
     NeighborResult,
@@ -93,9 +95,11 @@ __all__ = [
     "StructureCreate",
     "EdgeCreate",
     "EdgeDetail",
+    "EdgeResolveRequest",
     "EdgeSummary",
     "EdgeType",
     "NeighborResult",
+    "RESOLVABLE_EDGE_TYPES",
     "SourceCreate",
     "SourceDetail",
     "SourceRef",

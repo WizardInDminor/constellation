@@ -699,6 +699,122 @@ def test_critic_prompt_does_not_include_edge_aware_block(captured_system_prompts
 
 
 # ---------------------------------------------------------------------------
+# ADR-059 — resolved-edge annotation in `_build_context`
+# ---------------------------------------------------------------------------
+# Unit-level tests so the annotation format is pinned without needing to run
+# the full retrieval+generation pipeline. The default-mode RAG prompt must
+# also instruct the model on the `[resolved]` marker.
+
+
+from datetime import UTC, datetime as _dt  # noqa: E402
+
+from app.models.edge import EdgeDetail as _EdgeDetail  # noqa: E402
+from app.models.node import NodeDetail as _NodeDetail  # noqa: E402
+from app.services.rag_service import _build_context  # noqa: E402
+
+
+def _make_node(node_id: str, title: str, content: str = "irrelevant") -> _NodeDetail:
+    now = _dt.now(UTC)
+    return _NodeDetail(
+        id=node_id,
+        type="permanent",
+        title=title,
+        content=content,
+        summary=None,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _make_edge(
+    *,
+    edge_id: str,
+    from_id: str,
+    to_id: str,
+    edge_type: str = "CONTRADICTS",
+    note: str | None = None,
+    resolved_at: _dt | None = None,
+    resolved_by_node_id: str | None = None,
+) -> _EdgeDetail:
+    return _EdgeDetail(
+        id=edge_id,
+        from_id=from_id,
+        to_id=to_id,
+        type=edge_type,
+        note=note,
+        resolved_at=resolved_at,
+        resolved_by_node_id=resolved_by_node_id,
+        created_at=_dt.now(UTC),
+    )
+
+
+def test_build_context_unresolved_edge_has_no_marker():
+    a = _make_node("a", "A")
+    b = _make_node("b", "B")
+    edge = _make_edge(edge_id="e1", from_id="a", to_id="b", note="tension")
+    context, _ = _build_context([a, b], [], [edge])
+    assert "→ CONTRADICTS Note 2 (tension)" in context
+    assert "[resolved" not in context
+
+
+def test_build_context_resolved_edge_without_resolver_uses_bare_marker():
+    a = _make_node("a", "A")
+    b = _make_node("b", "B")
+    edge = _make_edge(
+        edge_id="e1",
+        from_id="a",
+        to_id="b",
+        note="tension",
+        resolved_at=_dt.now(UTC),
+        resolved_by_node_id=None,
+    )
+    context, _ = _build_context([a, b], [], [edge])
+    assert "→ CONTRADICTS [resolved] Note 2 (tension)" in context
+
+
+def test_build_context_resolved_edge_with_in_context_resolver_includes_note_pointer():
+    a = _make_node("a", "A")
+    b = _make_node("b", "B")
+    synth = _make_node("synth", "Synthesis")
+    edge = _make_edge(
+        edge_id="e1",
+        from_id="a",
+        to_id="b",
+        note="tension",
+        resolved_at=_dt.now(UTC),
+        resolved_by_node_id="synth",
+    )
+    # synth shows up as a neighbor → note 3 in numbering
+    context, _ = _build_context([a, b], [synth], [edge])
+    assert "→ CONTRADICTS [resolved → Note 3] Note 2 (tension)" in context
+
+
+def test_build_context_resolved_edge_with_out_of_context_resolver_falls_back_to_bare_marker():
+    a = _make_node("a", "A")
+    b = _make_node("b", "B")
+    edge = _make_edge(
+        edge_id="e1",
+        from_id="a",
+        to_id="b",
+        resolved_at=_dt.now(UTC),
+        resolved_by_node_id="not-in-context",
+    )
+    context, _ = _build_context([a, b], [], [edge])
+    assert "→ CONTRADICTS [resolved] Note 2" in context
+    assert "[resolved → Note" not in context
+
+
+def test_default_prompt_explains_resolved_marker(captured_system_prompts):
+    """ADR-059: default prompt must tell the model what `[resolved]` means."""
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "anything"})
+    assert resp.status_code == 200
+    prompt = captured[0]
+    assert "[resolved]" in prompt
+    assert "[resolved → Note N]" in prompt
+
+
+# ---------------------------------------------------------------------------
 # Scoped RAG — uses an explicit list of node IDs, no retrieval/expansion
 # ---------------------------------------------------------------------------
 

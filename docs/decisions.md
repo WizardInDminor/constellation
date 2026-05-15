@@ -2908,6 +2908,250 @@ character, and event nodes.
 
 ---
 
+## ADR-059 — Resolved-edge state
+
+**Status:** Accepted; shipped 2026-05-15 (Phase 8.3 — backend + RAG annotation).
+Companion to ADR-060 (D1 evolution edge types).
+
+**Context:** A typed edge captures a relationship between two notes at the
+time it was created, but the relationship may evolve. The most acute case is
+`CONTRADICTS`: the user writes a synthesis note that supersedes the tension,
+or simply moves past it intellectually, and the active tension annotation
+becomes historical noise. ADR-058 (Phase 8.1) made typed edges semantically
+load-bearing in RAG context assembly — which means historical tension is now
+*more* visible to the model than before, and an "active vs. historical"
+distinction is needed.
+
+Two related questions surface together:
+
+1. **State.** Should "resolved" be a separate edge type, a flag on the edge,
+   or a graph relationship encoded as a new edge to a third node?
+2. **Vocabulary.** Phase 8.3's planned D1 set originally included a
+   `RESOLVES` edge type. With a resolved-edge state column, the type
+   becomes redundant.
+
+**Decision:**
+
+- Add two nullable columns to `edges`:
+  - `resolved_at TEXT` — ISO 8601 timestamp; NULL when the edge is active.
+  - `resolved_by_node_id TEXT REFERENCES nodes(id)` — optional FK to a
+    synthesis note that supersedes the tension.
+- Resolution is **scoped to tension-bearing edge types in the API** —
+  `RESOLVABLE_EDGE_TYPES = {"CONTRADICTS", "QUESTIONS"}`. The schema does
+  not enforce this restriction (the column is generic across types) so a
+  future re-scoping does not require another CHECK-constraint
+  table-recreate; the restriction lives in `app/api/v1/edges.py` and is
+  testable.
+- `resolved_by_node_id` is **optional**. Sometimes a tension becomes
+  dormant without a specific synthesis note; the user can mark it resolved
+  without pointing at anything. When present, the FK must reference a
+  non-deleted node (validated in the route handler).
+- Two endpoints carry resolution:
+  - `POST /edges/{id}/resolve` — body `{ "resolved_by_node_id": ... | null }`.
+    Idempotent on re-call; new values overwrite. 422 on non-resolvable edge
+    type or unknown resolver node.
+  - `DELETE /edges/{id}/resolve` — clears both columns. 200 with the
+    updated edge body; 404 if the edge does not exist.
+- **RAG context assembly annotates resolved edges**, per ADR-058's prompt
+  scaffolding. The annotation format is positional and explicit:
+  - `→ CONTRADICTS [resolved] Note N (note text)` — when `resolved_at` is
+    set but `resolved_by_node_id` is NULL or the resolving node is not in
+    the current context window.
+  - `→ CONTRADICTS [resolved → Note M] Note N (note text)` — when the
+    resolving node is in the context window. The `Note M` reference points
+    the model at the superseding note directly.
+- `_DEFAULT_PROMPT` gains one sentence: "An edge annotated `[resolved]`
+  (or `[resolved → Note N]`) is historical: the user has marked this
+  tension as no longer active, optionally because Note N supersedes it.
+  Treat the original tension as background context, not as an active
+  position the user holds today; when present, the resolving note
+  describes the current view." Brief and critic prompts continue to omit
+  edge instructions per ADR-058.
+- **`RESOLVES` is intentionally absent from the EdgeType vocabulary** —
+  see ADR-060 for the full count-of-four (SUPERSEDED_BY, SCOPED_TO,
+  REGIME_OF, FOLLOWS_FROM). Resolution is a property of a *specific
+  tension edge*, scoped to the relationship, not a generic relationship
+  between two notes. The column captures the scope; an edge type would not.
+
+**Rationale:**
+
+- **Why a column, not a soft-delete flag.** `deleted_at`-style soft delete
+  hides the edge from views. Resolved state keeps the edge visible
+  (intellectual history matters) and annotates the model's reading of it.
+  These are different operations with different consequences; a single
+  flag would conflate them.
+- **Why optional `resolved_by_node_id`.** The required-FK variant forces
+  every resolution to point at a synthesis note, which would be the
+  zettelkasten-disciplined choice — but the user reported that tensions
+  often just become dormant without producing a synthesis, and forcing a
+  pointer turns "mark resolved" into "draft a new note." Optional FK
+  preserves the disciplined path (pick or create a synthesis) while
+  permitting the lightweight path.
+- **Why annotate rather than omit.** Omitting a resolved CONTRADICTS edge
+  would silently erase intellectual history that is often the most
+  valuable content — "this tension existed, and here's how it resolved"
+  is frequently more useful than either side of the tension in isolation.
+  The `[resolved]` annotation preserves the history while telling the
+  model the tension is not load-bearing for current reasoning.
+- **Why `[resolved → Note M]` when the resolver is in context.** Without
+  the pointer, the model would have to scan the context window for a
+  note that looks like a resolution, which is unreliable. The explicit
+  reference removes the inference: the model can attend to Note M as
+  "the current view" directly.
+- **Why scope the action to CONTRADICTS / QUESTIONS in the API.**
+  Resolution semantics make sense only for tension-bearing relationships.
+  "Marking a SUPPORTS edge resolved" has no clear meaning; the user
+  testimony in Phase 8.3 planning made this explicit. Locking the action
+  at the route boundary is light, easy to relax later if a real use case
+  surfaces.
+- **Why drop `RESOLVES` from EdgeType.** The companion ADR-060 covers
+  this in detail. Short version: a `RESOLVES` edge would be
+  underspecified ("A RESOLVES B" — about which aspect? in what context?
+  resolving which tension?). The column scopes resolution to a specific
+  tension edge, which is what carries the answers to those questions.
+
+**Consequences:**
+
+- **Frontend:** EdgePanel grows a "mark resolved" action visible only on
+  CONTRADICTS / QUESTIONS edges; the action takes an optional
+  NodePicker for the resolving synthesis note. Resolved edges render
+  with visual differentiation. (Phase 8.3 frontend work — separate
+  commit.)
+- **Migration:** `0006_resolved_edges.sql` is a table-recreate
+  (CHECK-constraint expansion for D1 is paid in the same trip). Two new
+  indexes: `idx_edges_resolved_at` (partial index on non-NULL) for any
+  future "show me my open tensions" view.
+- **Graph viz:** resolved edges may want visual differentiation in
+  `/graph` (greyed line, dashed stroke). Deferred to the Phase 8.3
+  frontend pass; not in scope of this ADR.
+- **Discover:** the bridges/triangles tabs probably should hide resolved
+  CONTRADICTS pairs by default (they're no longer active tension). Not
+  in scope of this ADR; will be picked up when the Discover surface is
+  next revised.
+- **Re-resolution.** `POST /edges/{id}/resolve` is idempotent: re-calling
+  overwrites the resolver. This allows the user to update the
+  resolving-note pointer if the synthesis evolves. The original
+  `resolved_at` is overwritten by the new call's timestamp — if a
+  history of resolution events becomes desirable, an audit table is the
+  right shape, but not in v1.
+- **Tests:** unit tests on `_build_context` pin the annotation format;
+  route tests cover resolve / unresolve / 404 / 422 / non-resolvable type
+  / unknown resolver. The default-prompt regression test extended to
+  verify the `[resolved]` instruction is present.
+- **No interaction with ADR-057 hedging.** The low-confidence hedge fires
+  on default mode based on top-seed similarity; resolved-edge annotation
+  is independent.
+
+---
+
+## ADR-060 — D1 evolution edge types
+
+**Status:** Accepted; shipped 2026-05-15 (Phase 8.3 — same migration as
+ADR-059). Companion to ADR-059.
+
+**Context:** Phase 8.3's "D1" was the build plan's umbrella for the next
+expansion of the EdgeType vocabulary, after ADR-052's literature-stance
+verbs (BUILDS_ON, EXTENDS, REFINES, APPLIES_TO, MEASURES). The original
+D1 list was `SUPERSEDED_BY`, `SCOPED_TO`, `REGIME_OF`, `RESOLVES`, plus
+`FOLLOWS_FROM` (added by the user during the build-plan corrections at
+the start of the Phase 8 session; required by Phase 9's narrative
+timeline for discourse-order chaining between events).
+
+ADR-059 drops `RESOLVES` from the vocabulary because resolution is a
+property of a specific tension edge, carried by a column on `edges`,
+not a generic relationship between two notes. This ADR commits the
+remaining four types.
+
+**Decision:**
+
+Add the following edge types to the `EdgeType` enum and the `edges.type`
+CHECK constraint:
+
+- **`SUPERSEDED_BY`** — A → B: A's content has been replaced or
+  outdated by B. The user has moved on from A to B. Differs from
+  `EXTENDS` (which keeps A as the foundation) in that A is no longer
+  the current position.
+- **`SCOPED_TO`** — A → B: A applies within the scope or boundary
+  established by B. Captures "A holds when B holds" — a methodology
+  scoped to a domain, a claim scoped to a regime, a method valid only
+  inside a specific context. Distinct from `APPLIES_TO` (which is "A
+  applies the idea/method of B to a specific case") in that the
+  direction is constraint-imposing, not application-of.
+- **`REGIME_OF`** — A → B: A defines the regime, frame, or operative
+  conditions under which B is meaningful. The complement of
+  `SCOPED_TO` from the other end — "B is the frame; A is what it
+  enables." Useful for capturing meta-level scoping notes whose primary
+  semantic is "here are the rules in force when reading the things this
+  collects."
+- **`FOLLOWS_FROM`** — A → B: A follows from B causally, logically,
+  or temporally. **Provenance note:** this type is included in the
+  Phase 8.3 / D1 migration not because it emerged from the resolved-edge
+  design work, but because Phase 9's narrative-timeline concept
+  (`docs/constellation-phase9-concept.md` §8) requires it for
+  discourse-order chaining between events. Folding it in here pays the
+  CHECK-constraint table-recreate ceremony once instead of twice.
+
+The number of D1 types is therefore **four**, not five as the build
+plan originally suggested. The vocabulary now totals **17 types** —
+keep this number in mind when reviewing future additions; the
+vocabulary should grow only when a proposed type carries semantics
+that none of the existing types can express without ambiguity.
+
+**Rationale:**
+
+- **Why these four together.** `SUPERSEDED_BY` is the evolution
+  counterpart to `EXTENDS` / `REFINES` — captures "the user's thinking
+  has moved on" rather than "the user has refined." `SCOPED_TO` and
+  `REGIME_OF` are duals (the same scoping relationship seen from
+  opposite ends); they belong together because committing to one and
+  not the other forces the user to express the scoped relationship in
+  a fixed direction, which fights how knowledge naturally flows.
+  `FOLLOWS_FROM` is the temporal/causal sequencer Phase 9 needs.
+- **Why drop `RESOLVES` here, not in a separate ADR.** The
+  vocabulary-shape decision is inseparable from the resolved-edge-state
+  decision; both are answering "where does resolution live in the
+  schema." Keeping them in companion ADRs lets each focus on its own
+  surface (state vs. vocabulary) while making the cross-reference
+  explicit.
+- **Why `FOLLOWS_FROM` in this migration and not later.** SQLite
+  CHECK-constraint changes require table recreation; the operation is
+  cheap on a small DB but doubles when paid twice. The build-plan
+  correction at the start of the Phase 8 session named this
+  explicitly: include `FOLLOWS_FROM` in 0006 to avoid a 0007 that
+  recreates the table again for one more type.
+- **Why not include `CAUSED_BY`, `PRECEDES`, `CONCURRENT_WITH`, or
+  other temporal types.** `FOLLOWS_FROM` covers causal-and-temporal-and-
+  logical succession with sufficient generality. Phase 9's planning
+  exercise will revisit if the narrative timeline turns up genuinely
+  distinct uses; for now, one verb is enough.
+
+**Consequences:**
+
+- **Frontend** (`frontend/src/lib/edgeTypes.ts`) gets four new entries
+  with colour, label, and description. The EdgeForm picker grows to
+  17 options; UX discomfort with the size may eventually motivate a
+  picker redesign (sectioned by category, search-filter). Not in scope
+  of this ADR.
+- **Bridge classifier prompt** (`discover_service._CLASSIFY_BRIDGE_SYSTEM`)
+  needs to be reviewed to ensure the new types are available to the
+  classifier and that their semantics are described accurately. May
+  need a follow-on prompt iteration; not in scope of this ADR.
+- **Migration 0006** lifts the CHECK constraint to the full 17-type
+  set and is the single source of truth for the vocabulary count.
+  Future additions must update both the `EdgeType` Literal and the
+  migration's CHECK clause via a new migration.
+- **Phase 9 narrative timeline can begin.** The discourse-order
+  chaining infrastructure (`FOLLOWS_FROM` edges between adjacent
+  events) is now schema-ready. Whether Phase 9 actually starts in
+  this position depends on the Phase 9 planning exercise; the
+  vocabulary cost is paid either way.
+- **Documentation drift.** `docs/architecture.md` §1 edge-type table
+  has been stale since ADR-052; this ADR is the trigger to update it
+  to the full 17-type set along with the schema updates (Phase 8.3
+  ships an architecture-doc refresh).
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

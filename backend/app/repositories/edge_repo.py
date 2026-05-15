@@ -5,16 +5,13 @@ import aiosqlite
 
 from app.models import EdgeCreate, EdgeDetail, EdgeSummary, NeighborResult, NodeRef, RecentEdge
 
+_SELECT_COLUMNS = (
+    "id, from_id, to_id, type, note, classifier_rationale, "
+    "resolved_at, resolved_by_node_id, created_at"
+)
 
-async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None:
-    cursor = await db.execute(
-        "SELECT id, from_id, to_id, type, note, classifier_rationale, created_at"
-        " FROM edges WHERE id = ?",
-        (edge_id,),
-    )
-    row = await cursor.fetchone()
-    if row is None:
-        return None
+
+def _row_to_detail(row) -> EdgeDetail:
     return EdgeDetail(
         id=row["id"],
         from_id=row["from_id"],
@@ -22,8 +19,19 @@ async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None
         type=row["type"],
         note=row["note"],
         classifier_rationale=row["classifier_rationale"],
+        resolved_at=row["resolved_at"],
+        resolved_by_node_id=row["resolved_by_node_id"],
         created_at=row["created_at"],
     )
+
+
+async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None:
+    cursor = await db.execute(
+        f"SELECT {_SELECT_COLUMNS} FROM edges WHERE id = ?",  # noqa: S608
+        (edge_id,),
+    )
+    row = await cursor.fetchone()
+    return _row_to_detail(row) if row is not None else None
 
 
 async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
@@ -54,6 +62,38 @@ async def delete(db: aiosqlite.Connection, edge_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+async def resolve(
+    db: aiosqlite.Connection,
+    edge_id: str,
+    *,
+    resolved_by_node_id: str | None,
+) -> EdgeDetail | None:
+    """Mark an edge resolved (ADR-059). Sets `resolved_at` to now and stores
+    the optional resolving-node FK. Idempotent: re-resolving overwrites the
+    timestamp and FK with the new values."""
+    now = datetime.now(UTC).isoformat()
+    cursor = await db.execute(
+        "UPDATE edges SET resolved_at = ?, resolved_by_node_id = ? WHERE id = ?",
+        (now, resolved_by_node_id, edge_id),
+    )
+    await db.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_by_id(db, edge_id)
+
+
+async def unresolve(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None:
+    """Clear resolved-state on an edge (ADR-059). No-op on already-unresolved edges."""
+    cursor = await db.execute(
+        "UPDATE edges SET resolved_at = NULL, resolved_by_node_id = NULL WHERE id = ?",
+        (edge_id,),
+    )
+    await db.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_by_id(db, edge_id)
+
+
 async def count(db: aiosqlite.Connection) -> int:
     cursor = await db.execute("SELECT COUNT(*) AS n FROM edges")
     row = await cursor.fetchone()
@@ -81,6 +121,7 @@ async def get_neighbors(
 
     cursor = await db.execute(
         f"""SELECT e.id, e.type, e.note, e.classifier_rationale,
+                   e.resolved_at, e.resolved_by_node_id,
                    n.id AS nid, n.title, n.type AS ntype
             FROM edges e JOIN nodes n ON e.to_id = n.id
             WHERE e.from_id = ? {type_clause} AND n.deleted_at IS NULL""",  # noqa: S608
@@ -90,6 +131,7 @@ async def get_neighbors(
 
     cursor = await db.execute(
         f"""SELECT e.id, e.type, e.note, e.classifier_rationale,
+                   e.resolved_at, e.resolved_by_node_id,
                    n.id AS nid, n.title, n.type AS ntype
             FROM edges e JOIN nodes n ON e.from_id = n.id
             WHERE e.to_id = ? {type_clause} AND n.deleted_at IS NULL""",  # noqa: S608
@@ -106,6 +148,8 @@ async def get_neighbors(
                 edge_type=r["type"],
                 edge_note=r["note"],
                 edge_classifier_rationale=r["classifier_rationale"],
+                edge_resolved_at=r["resolved_at"],
+                edge_resolved_by_node_id=r["resolved_by_node_id"],
                 direction="outgoing",
             )
         )
@@ -117,6 +161,8 @@ async def get_neighbors(
                 edge_type=r["type"],
                 edge_note=r["note"],
                 edge_classifier_rationale=r["classifier_rationale"],
+                edge_resolved_at=r["resolved_at"],
+                edge_resolved_by_node_id=r["resolved_by_node_id"],
                 direction="incoming",
             )
         )
@@ -126,6 +172,7 @@ async def get_neighbors(
 async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSummary]:
     cursor = await db.execute(
         """SELECT e.id, e.type, e.note, e.classifier_rationale, e.created_at,
+                  e.resolved_at, e.resolved_by_node_id,
                   n.id AS nid, n.title, n.type AS ntype
            FROM edges e JOIN nodes n ON e.to_id = n.id
            WHERE e.from_id = ? AND n.deleted_at IS NULL
@@ -139,6 +186,8 @@ async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSumma
             type=r["type"],
             note=r["note"],
             classifier_rationale=r["classifier_rationale"],
+            resolved_at=r["resolved_at"],
+            resolved_by_node_id=r["resolved_by_node_id"],
             created_at=r["created_at"],
             neighbor=NodeRef(id=r["nid"], title=r["title"], type=r["ntype"]),
         )
@@ -181,6 +230,7 @@ async def list_recent(
 async def get_incoming(db: aiosqlite.Connection, node_id: str) -> list[EdgeSummary]:
     cursor = await db.execute(
         """SELECT e.id, e.type, e.note, e.classifier_rationale, e.created_at,
+                  e.resolved_at, e.resolved_by_node_id,
                   n.id AS nid, n.title, n.type AS ntype
            FROM edges e JOIN nodes n ON e.from_id = n.id
            WHERE e.to_id = ? AND n.deleted_at IS NULL
@@ -194,6 +244,8 @@ async def get_incoming(db: aiosqlite.Connection, node_id: str) -> list[EdgeSumma
             type=r["type"],
             note=r["note"],
             classifier_rationale=r["classifier_rationale"],
+            resolved_at=r["resolved_at"],
+            resolved_by_node_id=r["resolved_by_node_id"],
             created_at=r["created_at"],
             neighbor=NodeRef(id=r["nid"], title=r["title"], type=r["ntype"]),
         )

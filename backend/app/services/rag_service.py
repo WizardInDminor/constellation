@@ -29,6 +29,7 @@ Some notes carry a `Connections:` line listing typed edges to other notes, forma
 - **SUPPORTS / BUILDS_ON / EXTENDS / REFINES / APPLIES_TO**: treat as evidence-of, not as independent parallel claims. Aggregate, do not double-count.
 - **ANALOGOUS_TO**: state the structural parallel explicitly and consider whether the pattern transfers across the domains involved.
 - **COLLECTS**: organisational membership in a structure note; not a substantive claim — do not over-read.
+- An edge annotated `[resolved]` (or `[resolved → Note N]`) is historical: the user has marked this tension as no longer active, optionally because Note N supersedes it. Treat the original tension as background context, not as an active position the user holds today; when present, the resolving note describes the current view.
 - The parenthesised text after the type label is the user's own one-line rationale for why the edge exists; it is often more load-bearing than the type alone. Read it.
 
 Rules:
@@ -135,12 +136,24 @@ def _build_context(
     # Build a map of node_id → note number for cross-referencing edges
     note_num: dict[str, int] = {n.id: i + 1 for i, (n, _) in enumerate(all_nodes)}
 
-    # Build edge lookup keyed by (from_id, to_id) for annotation
+    # Build edge lookup keyed by (from_id, to_id) for annotation.
+    # ADR-059: edges with resolved_at set get a `[resolved]` marker, and when
+    # the resolving node is in the current context window, the marker becomes
+    # `[resolved → Note N]` to give the model a direct pointer to the
+    # superseding note. The marker sits immediately after the edge type so
+    # the prompt instruction can reference it positionally.
     edge_annotations: dict[str, list[str]] = {}  # node_id → list of "→ [TYPE] Note N"
     for e in edges:
         fn, tn = e.from_id, e.to_id
         if fn in note_num and tn in note_num:
-            annotation = f"→ {e.type} Note {note_num[tn]}"
+            resolved_marker = ""
+            if getattr(e, "resolved_at", None) is not None:
+                resolver_id = getattr(e, "resolved_by_node_id", None)
+                if resolver_id is not None and resolver_id in note_num:
+                    resolved_marker = f" [resolved → Note {note_num[resolver_id]}]"
+                else:
+                    resolved_marker = " [resolved]"
+            annotation = f"→ {e.type}{resolved_marker} Note {note_num[tn]}"
             if e.note:
                 annotation += f" ({e.note})"
             edge_annotations.setdefault(fn, []).append(annotation)

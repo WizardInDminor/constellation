@@ -69,6 +69,100 @@ def test_create_edge_accepts_classifier_rationale(client):
     assert body["classifier_rationale"] == rationale
 
 
+def test_create_edge_accepts_d1_evolution_types(client):
+    """ADR-060: SUPERSEDED_BY / SCOPED_TO / REGIME_OF / FOLLOWS_FROM."""
+    a, b = _two_nodes(client)
+    for edge_type in ("SUPERSEDED_BY", "SCOPED_TO", "REGIME_OF", "FOLLOWS_FROM"):
+        r = client.post(
+            "/api/v1/edges",
+            json={"from_id": a["id"], "to_id": b["id"], "type": edge_type},
+        )
+        # Either 201 on first or 409 on duplicate — both prove the type is accepted.
+        assert r.status_code in (201, 409), (edge_type, r.json())
+
+
+def test_resolves_is_not_a_valid_edge_type(client):
+    """ADR-059: RESOLVES is intentionally absent from EdgeType."""
+    a, b = _two_nodes(client)
+    r = client.post(
+        "/api/v1/edges", json={"from_id": a["id"], "to_id": b["id"], "type": "RESOLVES"}
+    )
+    assert r.status_code == 422
+
+
+# ── edges: resolve / unresolve (ADR-059) ─────────────────────────────────────
+
+
+def _contradicts_edge(client):
+    a, b = _two_nodes(client)
+    edge = client.post(
+        "/api/v1/edges",
+        json={"from_id": a["id"], "to_id": b["id"], "type": "CONTRADICTS"},
+    ).json()
+    return a, b, edge
+
+
+def test_resolve_contradicts_without_synthesis_note(client):
+    a, b, edge = _contradicts_edge(client)
+    r = client.post(f"/api/v1/edges/{edge['id']}/resolve", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["resolved_at"] is not None
+    assert body["resolved_by_node_id"] is None
+
+
+def test_resolve_contradicts_with_synthesis_note(client):
+    a, b, edge = _contradicts_edge(client)
+    synthesis = client.post(
+        "/api/v1/nodes/fleeting", json={"title": "Synthesis", "content": "Resolution."}
+    ).json()
+    r = client.post(
+        f"/api/v1/edges/{edge['id']}/resolve",
+        json={"resolved_by_node_id": synthesis["id"]},
+    )
+    assert r.status_code == 200
+    assert r.json()["resolved_by_node_id"] == synthesis["id"]
+
+
+def test_resolve_rejects_non_resolvable_edge_type(client):
+    """ADR-059: only CONTRADICTS / QUESTIONS carry resolvable semantics."""
+    a, b = _two_nodes(client)
+    edge = client.post(
+        "/api/v1/edges",
+        json={"from_id": a["id"], "to_id": b["id"], "type": "SUPPORTS"},
+    ).json()
+    r = client.post(f"/api/v1/edges/{edge['id']}/resolve", json={})
+    assert r.status_code == 422
+
+
+def test_resolve_rejects_unknown_resolver_node(client):
+    _, _, edge = _contradicts_edge(client)
+    r = client.post(
+        f"/api/v1/edges/{edge['id']}/resolve",
+        json={"resolved_by_node_id": "no-such-node"},
+    )
+    assert r.status_code == 422
+
+
+def test_resolve_404_for_missing_edge(client):
+    r = client.post("/api/v1/edges/ghost/resolve", json={})
+    assert r.status_code == 404
+
+
+def test_unresolve_clears_state(client):
+    _, _, edge = _contradicts_edge(client)
+    client.post(f"/api/v1/edges/{edge['id']}/resolve", json={})
+    r = client.delete(f"/api/v1/edges/{edge['id']}/resolve")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["resolved_at"] is None
+    assert body["resolved_by_node_id"] is None
+
+
+def test_unresolve_404_for_missing_edge(client):
+    assert client.delete("/api/v1/edges/ghost/resolve").status_code == 404
+
+
 # ── sources ───────────────────────────────────────────────────────────────────
 
 

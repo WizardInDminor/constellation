@@ -31,6 +31,11 @@ and Maps of Content (`structure` nodes), not from sequence numbering.
 
 ### Edge types
 
+The vocabulary is intentionally lean. Each type earns its place by carrying
+semantics no other type can express. Adding a new type requires an ADR.
+
+**Author-stance verbs** (the original Luhmann-shaped vocabulary):
+
 | Type           | Direction & meaning                                       |
 |----------------|-----------------------------------------------------------|
 | `SUPPORTS`     | A → B: A provides evidence/argument for B                |
@@ -39,11 +44,47 @@ and Maps of Content (`structure` nodes), not from sequence numbering.
 | `ANALOGOUS_TO` | A ↔ B: structural similarity, often across domains       |
 | `QUESTIONS`    | A → B: A raises a problem with or about B                |
 | `INSPIRED_BY`  | A → B: looser creative/associative link                   |
+
+**Structural verbs:**
+
+| Type           | Direction & meaning                                       |
+|----------------|-----------------------------------------------------------|
 | `COLLECTS`     | A → B: A (structure note) includes B in its map          |
+| `CITES`        | A → B: A (synthesis) cites B as a source (ADR-051)       |
+
+**Literature-stance verbs** (ADR-052):
+
+| Type           | Direction & meaning                                       |
+|----------------|-----------------------------------------------------------|
+| `BUILDS_ON`    | A → B: A builds further argument or system on B          |
+| `APPLIES_TO`   | A → B: A applies the idea or method of B to a case       |
+| `MEASURES`     | A → B: A operationalises B (defines a test/metric)       |
+| `EXTENDS`      | A → B: A extends B's scope or claims                      |
+| `REFINES`      | A → B: A refines or sharpens B without overturning it    |
+
+**Evolution / D1 verbs** (ADR-060):
+
+| Type            | Direction & meaning                                       |
+|-----------------|-----------------------------------------------------------|
+| `SUPERSEDED_BY` | A → B: A is replaced or outdated by B                    |
+| `SCOPED_TO`     | A → B: A applies within the scope/boundary of B           |
+| `REGIME_OF`     | A → B: A defines the regime/frame under which B holds    |
+| `FOLLOWS_FROM`  | A → B: A follows from B (causal/logical/temporal)         |
+
+`RESOLVES` is **intentionally absent** from the vocabulary — resolution is
+a property of a specific tension edge, captured by the `resolved_at` /
+`resolved_by_node_id` columns on `edges`. See ADR-059.
 
 Every edge has an optional free-text `note` field explaining *why* the edge
 exists. This is critical context that is often more valuable than the link
 itself six months later.
+
+Tension-bearing edges (`CONTRADICTS`, `QUESTIONS`) additionally carry a
+**resolved-edge state** (ADR-059): the user can mark a tension as no longer
+active, optionally pointing at a synthesis note that supersedes it. RAG
+context assembly annotates resolved edges as `[resolved]` or
+`[resolved → Note N]` so the model treats them as historical rather than
+active tension.
 
 ---
 
@@ -115,23 +156,37 @@ END;
 
 -- ================================================================
 -- EDGES
+-- The CHECK clause grew with ADR-051/052 (CITES + literature verbs)
+-- and ADR-060 (D1 evolution verbs). RESOLVES is intentionally absent
+-- per ADR-059. Two columns added in Phase 8.3 (ADR-059) track the
+-- resolved-edge state; classifier_rationale was added in Slice 2 of
+-- Bucket A to persist the bridge-classifier's reasoning at apply time.
 -- ================================================================
 CREATE TABLE edges (
-    id         TEXT PRIMARY KEY,
-    from_id    TEXT NOT NULL REFERENCES nodes(id),
-    to_id      TEXT NOT NULL REFERENCES nodes(id),
-    type       TEXT NOT NULL CHECK(type IN (
-                   'SUPPORTS', 'CONTRADICTS', 'ELABORATES',
-                   'ANALOGOUS_TO', 'QUESTIONS',
-                   'INSPIRED_BY', 'COLLECTS')),
-    note       TEXT,                          -- why does this edge exist?
-    created_at TEXT NOT NULL,
+    id                   TEXT PRIMARY KEY,
+    from_id              TEXT NOT NULL REFERENCES nodes(id),
+    to_id                TEXT NOT NULL REFERENCES nodes(id),
+    type                 TEXT NOT NULL CHECK(type IN (
+                              'SUPPORTS', 'CONTRADICTS', 'ELABORATES',
+                              'ANALOGOUS_TO', 'QUESTIONS',
+                              'INSPIRED_BY', 'COLLECTS',
+                              'CITES',
+                              'BUILDS_ON', 'APPLIES_TO', 'MEASURES',
+                              'EXTENDS', 'REFINES',
+                              'SUPERSEDED_BY', 'SCOPED_TO',
+                              'REGIME_OF', 'FOLLOWS_FROM')),
+    note                 TEXT,                       -- why does this edge exist?
+    classifier_rationale TEXT,                       -- AI bridge classifier's apply-time reasoning (ADR-049)
+    resolved_at          TEXT,                       -- ISO 8601; NULL when edge is active (ADR-059)
+    resolved_by_node_id  TEXT REFERENCES nodes(id),  -- optional synthesis-note FK (ADR-059)
+    created_at           TEXT NOT NULL,
     UNIQUE(from_id, to_id, type)
 );
 
-CREATE INDEX idx_edges_from ON edges(from_id);
-CREATE INDEX idx_edges_to ON edges(to_id);
-CREATE INDEX idx_edges_type ON edges(type);
+CREATE INDEX idx_edges_from        ON edges(from_id);
+CREATE INDEX idx_edges_to          ON edges(to_id);
+CREATE INDEX idx_edges_type        ON edges(type);
+CREATE INDEX idx_edges_resolved_at ON edges(resolved_at) WHERE resolved_at IS NOT NULL;
 
 -- ================================================================
 -- SOURCES
@@ -315,9 +370,16 @@ GET    /nodes                       # paginated list with filters
 ```
 POST   /edges                       # create edge with type + optional note
 DELETE /edges/{id}
+POST   /edges/{id}/resolve          # mark tension edge resolved (ADR-059)
+DELETE /edges/{id}/resolve          # clear resolved state
 GET    /nodes/{id}/neighbors        # all connected nodes
 GET    /nodes/{id}/neighbors?type=SUPPORTS  # filtered by edge type
 ```
+
+The `/resolve` endpoints are restricted to `CONTRADICTS` and `QUESTIONS`
+edge types (validated in the route, not the schema). The optional
+`resolved_by_node_id` body field points to a synthesis note that
+supersedes the tension.
 
 ### Sources
 
