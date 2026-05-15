@@ -713,7 +713,568 @@ Discover finds what you're missing.**
 
 ---
 
-## Cross-cutting findings — consolidated after scenarios 4–6
+## Scenario 7 — The graph as maintenance tool
+
+The previous cross-cut framed the graph as audit/navigation, not discovery.
+Today I test the audit half directly. Three maintenance goals: (a) find
+orphan permanents — nodes with no edges in or out — that drifted loose
+when their originating fleeting was processed; (b) find edges whose
+endpoints have drifted (the source or target was substantially edited
+after the edge was made); (c) find permanents with no `summary` field.
+
+### What I do
+
+Open `/graph`. Default load: ~855 nodes. The force layout takes ~7s to
+settle. Toggle off literature (~625 visible). Toggle off the source
+virtual nodes (~545). Still a hairball. The filter bar offers: type
+chips (permanent/literature/structure), a single-tag chip, a recency
+range. It does *not* offer "has no outgoing edges," "has no `summary`,"
+or "has no edges of any kind."
+
+I try the closest visual proxy. Filter type=`permanent`, tag cleared.
+The graph *shows* orphans implicitly — they sit on the periphery,
+drifting outside the dense central blob. But I can't *select* them as
+a set. I shift-click ~6 obvious-looking peripheral nodes; the
+BatchPanel opens — Tag, Delete, Group, Export. None of those is "open
+for side-by-side review." For maintenance, batch-review is the
+operation; batch-tag is the wrong primitive.
+
+Bail to `/notes`. Filter bar: type / tag / age / search string. Sort:
+created_at, updated_at, title. **No "orphan" filter. No "no summary"
+filter. No "no outgoing edges" filter. No edge-count sort.** Right —
+Notes is a *list*, not a maintenance dashboard.
+
+Open a terminal. Drop into the SQLite file directly:
+
+```sql
+SELECT id, title FROM nodes
+WHERE deleted_at IS NULL
+  AND type = 'permanent'
+  AND id NOT IN (SELECT source_id FROM edges WHERE deleted_at IS NULL)
+  AND id NOT IN (SELECT target_id FROM edges WHERE deleted_at IS NULL)
+ORDER BY created_at DESC LIMIT 200;
+```
+
+23 rows. Now I have my orphan list — but I had to bypass the app
+entirely. The repository layer is there, the schema is there, the
+predicates are one-line filters; the abstraction is missing at the
+API + UI boundary.
+
+For "no summary" — same story, different one-liner:
+
+```sql
+SELECT id, title FROM nodes
+WHERE deleted_at IS NULL
+  AND (summary IS NULL OR summary = '')
+  AND type = 'permanent'
+ORDER BY created_at;
+```
+
+87 rows. Most are old; my early-month notes skipped `summary` because
+I hadn't internalized it as a field yet. **One Notes-filter checkbox
+("summary missing") would expose all of them — it doesn't exist.**
+
+For stale edges — the trickiest of the three — the signal I want is
+`edge.created_at < min(source.updated_at, target.updated_at) - 60d`:
+
+```sql
+SELECT e.id, e.edge_type, s.title, t.title
+FROM edges e
+JOIN nodes s ON s.id = e.source_id
+JOIN nodes t ON t.id = e.target_id
+WHERE e.deleted_at IS NULL
+  AND e.created_at < datetime(
+        CASE WHEN s.updated_at < t.updated_at
+             THEN s.updated_at ELSE t.updated_at END,
+        '-60 days');
+```
+
+71 candidate stale edges. I sample 10 — 4 are genuinely outdated (the
+source note shifted scope and the edge no longer applies); 6 are still
+accurate. **A "review stale edges" surface would land — and the
+underlying signal is one SQL view away from being first-class.**
+
+Back to the graph for the actual cleanup. I have a list of 23 orphan
+node IDs and would love to *open exactly these in the graph*, walk
+each, drag-suggest a nearby cluster, and link. But the URL accepts
+`?focus=<id>` for a single node — it doesn't accept `?ids=a,b,c` for
+a set. **The graph isn't addressable for a result set.** My options:
+(a) add a shared one-off tag to all 23 and filter by it (pollutes the
+tag taxonomy), (b) walk each through `/nodes/[id]` instead. I do (b).
+Each orphan: open detail, click **Find related**, accept 1–2 Suggest
+links suggestions, move on. ~3 minutes per node. **70 minutes for 23
+orphans — and the graph never enters the loop.** The whole reason I
+opened the graph was to use it for the cleanup it visually suggested
+existed.
+
+### Inefficiencies and UX pains
+
+1. **Notes has no schema-level filters.** "No summary," "no outgoing
+   edges," "no edges either," "edge-count=0," "summary length <50,"
+   "created with no edits since" — each is a one-line predicate against
+   the existing repository layer. They'd replace a dozen ad-hoc SQL
+   queries with one chip row.
+
+2. **The graph isn't addressable for an arbitrary result set.** A
+   `?ids=a,b,c` URL param would make the graph *composable* with Notes
+   ("run a Notes query, open these IDs in graph"). Today, addressing
+   a custom set requires temporary tag pollution.
+
+3. **The graph's visual vocabulary commits entirely to topology.** No
+   coloring by "has summary y/n," no edge-thickness by recency, no
+   dimming of stale edges. Attributes have no visual channel.
+   **Confirms finding #13 from a new angle: the graph is well-fitted
+   to "what's near what?" questions and ill-fitted to "what's old,
+   thin, dangling?" questions. Two scenarios in agreement now.**
+
+4. **BatchPanel is for tagging, not for review.** Tag/Delete/Group/
+   Export. No "open in side-by-side review," no "queue into a process
+   flow," no "run Suggest links on all selected." For maintenance,
+   the verb is *review*.
+
+5. **The "stale edge" concept isn't first-class.** It's derivable in
+   one SQL query, but no service surfaces it. A
+   `GET /maintenance/stale-edges?threshold=60` endpoint plus a
+   Discover-side tab ("Hygiene") would unlock the workflow with very
+   little code.
+
+6. **I dropped into raw SQL three times in one maintenance pass.**
+   That's the diagnostic. The data is there; the API surface and the
+   UI are not. **Confirms finding #10 (coverage density / data
+   quality unmeasured) for a third time — flagged.**
+
+7. **No periodic maintenance prompt.** I went looking today because
+   something else reminded me. A monthly corpus-health digest —
+   orphan count, summary-coverage %, stale-edge count, edges-per-node
+   trend — would push the maintenance moment instead of waiting on me
+   to remember to pull it.
+
+### Verdict
+
+**Confirmed: the graph is well-fitted to navigation and ill-fitted to
+maintenance.** The maintenance surface is missing wholesale — Notes is
+a list, the graph is a navigator, the SQL shell is the actual
+maintenance tool. The leverage is in expressing maintenance predicates
+as first-class Notes filters and graph overlays, not in building a
+new surface. The fixes are small; the absence is large.
+
+---
+
+## Scenario 8 — Onboarding control theory from zero
+
+I've just gotten interested in control theory — tangentially relevant
+to the Eurorack work (envelope shaping, feedback) and to a robotics
+side-project I'm noodling on. Goal today: go from zero notes on the
+topic to a usable first foothold in the graph in one session.
+
+Sources on disk:
+
+1. `astrom-feedback-ch2.md` — 18pp, Åström & Murray *Feedback Systems*
+   Ch. 2, clean H2/H3 conversion.
+2. `mit-6302-lecture-notes.md` — 32pp, lecture-notes PDF→MD; some
+   figure captions promoted to headings by the converter.
+3. `pid-survey-2018.md` — 14pp, survey paper, clean.
+4. `wikipedia-pid-controller.md` — 8pp, pasted from Wikipedia.
+5. `podcast-rodney-brooks-feedback.md` — 22-minute podcast transcript I
+   extracted by hand from a recording app. No headings, just paragraphs.
+
+### What I do
+
+**Imports.** One by one.
+
+```
+$ con import astrom-feedback-ch2.md \
+    --source-title "Feedback Systems, Ch. 2: System Modeling" \
+    --source-type book --source-author "Åström & Murray"
+```
+
+~6s. 11 candidates. I uncheck the chapter summary, rename two generic
+titles ("State Space Description" → "State-space form — the matrix
+recipe and what it preserves"). Auto-tag: `control-theory`. Hub note on,
+hub title pre-filled. Source row, 10 literature notes, hub structure
+note, 10 COLLECTS edges.
+
+`mit-6302-lecture-notes.md`. ~9s. 24 candidates. Five chunks split on
+figure captions ("Fig. 3.2 — Closed-loop transfer function") because
+the PDF converter promoted bold-italic captions to H3s. Two of the
+resulting chunks are 4 lines long. I lump-accept anyway — same auto-tag,
+same hub. 22 literature notes.
+
+`pid-survey-2018.md`. Clean. 9 candidates, 8 accepted.
+
+`wikipedia-pid-controller.md`. Clean. 6 candidates, 5 accepted.
+
+`podcast-rodney-brooks-feedback.md`. The painful one.
+
+```
+$ con import podcast-rodney-brooks-feedback.md \
+    --source-title "Rodney Brooks on feedback in robotics (podcast)" \
+    --source-type article --source-author "Brooks"
+```
+
+The chunker sees no H2/H3 anywhere. It falls back to MAX_CHARS=2400
+cuts. 4 candidates appear, each ~2400 chars, each containing 3–4
+distinct ideas the speaker raised. **The review UI lets me edit
+content in-place but not split a card.** I can't take "Brooks-Chunk-1"
+and break out the four ideas inside it. Choices: (a) accept four
+chunky, multi-idea cards and live with bad atomicity, (b) paste back
+to `$EDITOR`, insert H3 headings between ideas, re-import.
+
+I do (b). ~8 minutes of manual heading insertion. Re-import. ~7s. 11
+candidates. Accept 9. **Confirms finding #16 with new evidence: the
+chunker's failure mode is predictable on transcripts, podcasts, blog
+posts, any prose without sub-headings — and the review UI does
+nothing to recover from it.**
+
+Final state of the new domain: 1 tag, 5 sources, 5 hub structure
+notes, ~54 literature notes, ~54 COLLECTS edges, zero cross-source
+edges, zero connections to my existing 850-node corpus.
+
+**Tagging.** With 54 notes I'd naturally carve sub-topics: ~10 on
+classical PID, ~12 on state-space, ~8 on stability, ~6 on system
+identification, ~10 on robotics-applied, ~8 on background math. Six
+natural sub-tags. The flat-tag model forces a choice: (a) keep
+`control-theory` as the sole tag and lose sub-topic resolution, (b)
+invent prefixed tags `control-theory-pid`, `control-theory-ss`, …
+(tag bloat: 40 → 46, with no enforced parent relationship), (c) use
+only sub-tags and lose the cross-cutting topical tag. I pick (a) and
+already regret it before the session is over. **Confirms finding #8
+(tags want hierarchy) for the third time — flagged.**
+
+**Linking pass.** I run Suggest links on the 5 hub notes. Each call
+~7–8s. Suggestions are entirely within the new cluster — Åström-state-
+space ↔ MIT-state-space, Wikipedia-PID ↔ survey-PID-tuning. Zero
+suggestions back to my existing 850-node corpus. That's correct
+(my corpus has no control-theory priors), but it means Suggest links
+provides no cross-corpus seeding. **If I were to run it on all 54
+notes, that's ~54 × ~8s ≈ 7 minutes of API time with massive
+within-cluster redundancy (Razavi-A → Razavi-B suggestion appearing
+again as Razavi-B → Razavi-A on the reverse pass).** Confirms
+finding #9 (no cluster mode) with a second data point — the case for
+a `POST /rag/suggest-links/cluster` taking a tag and deduplicating
+internally compounds across two scenarios.
+
+I add ~25 manual within-cluster edges via the graph: `/graph`, filter
+`control-theory`, `E`-key, click target. ~3–4 minutes for 25 edges.
+This part is cheap and pleasant.
+
+**First synthesis.** `/synthesize`. tag=`control-theory`, recency=Any.
+Pool: 54 (under cap). Add all to scope. Question: *"Give me a coherent
+introduction to control theory: PID, state-space, stability, system
+identification. Show me the canonical structure of the field — what
+should I learn next?"* Custom prompt: *"Sections: Vocabulary → PID →
+State-space → Stability → System identification → Open problems for
+further study. Cite [Note N] freely. ~1500 words."*
+
+~14s. Output is good — *structurally*. Sections flow, citations are
+dense, 41 of 54 scope notes are cited. **But I cannot evaluate the
+accuracy.** With the PLLs scenario (Sc 4) and the RAG-post scenario
+(Sc 5), I had domain priors — I could tell when Claude was right vs.
+confabulating. Here I'm a newcomer. The output asserts things like
+*"Ziegler-Nichols tuning is widely regarded as a starting heuristic
+but underdamps modern processes"* — is that coming from my notes or
+from Claude's training? Each line cites a [Note N], but to verify
+~19 claims paragraph-by-paragraph I'd need to read all 54 notes I
+just imported. **This is the silent-confabulation failure mode named
+in Sc 5, sharpened: the lower my prior knowledge, the more I need
+paragraph-level provenance, the more "Note N + confidence" gloss on
+each output line matters. Confirms finding #14 for a second time
+and complicates it — the failure mode is monotonic in corpus
+thinness, not just in notes-per-claim density.**
+
+**First Ask.** `/ask`. *"What's the difference between PID and state-
+space control?"* — a canonical newcomer question. ~9s. 350 words. 6
+citations including [3] (Wikipedia) and [22] (MIT). Reading cold, I
+can't tell which sentences are paraphrasing my Wikipedia note and
+which are Claude generalizing. Retrieval is grounded; prose is
+blended. Same failure mode at smaller scale.
+
+**The workflow I want and the app doesn't offer.** After importing 54
+notes from 5 sources on a fresh topic, the first thing I'd actually
+want is a *guided foothold*: Claude proposes "here's the canonical
+sub-topic structure of this field, here's how your imports map onto
+it, here are the gaps." That's a *structural* output, not a 1500-word
+essay. Synthesize approximates it via custom prompt, but the output
+is prose, not a structural map. **A `POST /synthesize/scaffold` taking
+a tag and emitting a canonical TOC + per-node coverage labels +
+gap list is the workflow this scenario wants. New finding.**
+
+### Inefficiencies and UX pains
+
+1. **No "domain scaffolding" affordance for fresh corpora.** When the
+   corpus is empty, the first synthesis you want isn't a 1500-word
+   essay — it's a structural map. The app forces prose. **New
+   finding.**
+
+2. **Chunker fails predictably on transcripts and conversational
+   prose.** The podcast import lost atomicity because H2/H3-or-
+   MAX_CHARS doesn't work on heading-less prose. A transcript-aware
+   mode (segment by speaker turn, paragraph cluster, or topic shift
+   via embedding distance) would address this. The user-side
+   workaround (insert headings in `$EDITOR`, re-import) is fine
+   occasionally and terrible if podcasts/blogs are the bulk of one's
+   reading. **Confirms finding #16 from new evidence.**
+
+3. **Suggest-links cost is linear in cluster size with significant
+   redundancy.** Same evidence as Sc 4, second scenario. **Confirms
+   finding #9.**
+
+4. **Flat tags force a binary between resolution and tag-bloat.**
+   Six natural sub-topics in `control-theory` can't be expressed
+   without prefixed-tag dance. **Confirms finding #8 a third time —
+   flagged.**
+
+5. **Silent confabulation is monotonic in corpus thinness.**
+   New-domain users have no priors and are the worst-positioned
+   reviewers of generated text — and they're exactly the users who
+   most need the synthesis to be reliable. **Confirms finding #14
+   with sharpened evidence.**
+
+6. **Import is per-source; no "bundle" mode.** Five sources, five
+   wizard rounds, ~25 minutes total in the wizards. A `con import-dir`
+   taking a directory + a single auto-tag + per-file source metadata
+   (sidecar `.json` or YAML frontmatter) would compress this to ~5
+   minutes. One afternoon's CLI work.
+
+7. **No post-import cross-domain bridges pass.** After importing 54
+   control-theory notes, I'd want Discover to run once over (new
+   cluster × existing 850 nodes) and flag mid-similarity pairs. Today,
+   Discover ranks all pairs together; the 54 new notes will dominate
+   top-rank within-domain pairs and any cross-domain pair will be
+   buried far down the list. A "post-import bridges" flow that
+   explicitly cross-products new × old, sorted by mid-similarity,
+   would invert the bias.
+
+### Verdict
+
+The app is built for *enriching an existing corpus*, not for *seeding
+a new one*. The primitives carry me a long way — import, synthesize,
+link — but the curve from zero to first foothold has more friction
+than the curve from foothold to expert. Scaffolding, transcript-
+friendly chunking, batch suggest-links, bundle import, and post-import
+cross-domain bridges are all missing pieces of the same shape. **The
+marginal value of new-domain onboarding affordances is high precisely
+because the app's strength — dense-cluster Synthesize (finding #18) —
+is unavailable until you've reached density.** Sc 4 said this strength
+exists; Sc 8 says how much it costs to get there from zero.
+
+---
+
+## Scenario 9 — A contradiction across a year of notes
+
+Two notes I have, in tension:
+
+- **N1** (2025-10-12): *"Voltage-controlled filters — thermal drift
+  requires session calibration. Most VCFs drift 5–30 cents/°C; expect
+  to retune the cutoff every 30–60 min during a session, especially
+  if the room is warming up. Practical rule: trim the bias resistor
+  warm, then offset by 0.7%/°C from cold."*
+- **N2** (2026-04-28): *"Modern VCF designs use temperature-compensated
+  current sources and trimmer-free architectures. Drift across 0–50°C
+  falls below the 1-cent threshold on production silicon (e.g., SSM2024
+  successors, AS3320). Calibration-free at session scale."*
+
+These contradict at the surface. N1 is implicitly scoped to through-hole
+/ discrete-transistor VCFs; N2 to modern integrated ASIC VCFs. I didn't
+notice the contradiction when I wrote N2 — I was reading a datasheet,
+took the note, moved on. Today I walk the full lifecycle: notice,
+model, query, resolve.
+
+### (a) Noticing — does the app help?
+
+`/discover/bridges`. Top pairs sorted by cosine similarity descending.
+N1 and N2 share heavy terminology (VCF, drift, calibration, cents,
+temperature). They should be high-similarity-and-unlinked. They appear
+at rank 17, similarity ~0.74. Click. Slide-out: both NodeDetails
+side-by-side, lazy-fetched via `Promise.all`. Click **Ask Claude to
+classify this pair**. ~5s. Returns:
+
+> `edge_type: CONTRADICTS`
+> *"N1 describes legacy through-hole / discrete-transistor VCF circuits
+> where bias-resistor calibration compensates for transistor thermal
+> drift. N2 describes modern integrated VCF ASICs with on-die
+> temperature compensation that obviates session-scale calibration.
+> The two notes make incompatible claims about whether VCFs require
+> calibration — but the apparent contradiction is resolved by
+> recognizing that 'VCF' refers to different circuit families in each.
+> Recommend: model as CONTRADICTS, with explicit scope-narrowing notes
+> on each."*
+
+**The classifier nailed it.** Not just "these contradict" but the
+underlying scope mismatch. **Confirms finding #6 a third time —
+flagged — and adds positive evidence: the classifier reasons well
+about scope.**
+
+### (b) Modeling — does the edge type carry the meaning?
+
+Click **Apply suggestion**. EdgeForm prefills: source=N1, target=N2,
+type=CONTRADICTS, note=empty. I write: *"N1 is through-hole / discrete
+designs; N2 is integrated ASICs. The 'contradiction' is real but each
+note's scope is narrower than its prose admits."* Submit.
+
+Edge created. The graph now shows a CONTRADICTS arrow between N1 and
+N2 carrying my one-line note. But:
+
+- N1's content still reads as a *universal claim*: "VCFs drift." A
+  reader opening N1 cold has no signal there's a contradicting newer
+  note unless they scroll the **Outgoing edges** sidebar.
+- N2 has the same problem from the other side.
+- The right model isn't "N1 ↔ CONTRADICTS ↔ N2" alone. The right
+  model is: N1 SCOPED_TO `through-hole VCFs`, N2 SCOPED_TO `ASIC
+  VCFs`, with a synthesis note N3 covering both regimes and
+  SUPERSEDES on the originals.
+
+**The EdgeType enum has SUPPORTS, CONTRADICTS, ELABORATES,
+ANALOGOUS_TO, INSPIRED_BY, COLLECTS, CITES — but no SUPERSEDED_BY,
+SCOPED_TO, REGIME_OF, RESOLVES.** Sc 4 said edge vocabulary is
+author-stance and missing literature-stance verbs (BUILDS_ON,
+APPLIES_TO…). Sc 9 says it's missing knowledge-evolution-stance verbs
+too. **Complicates finding #11 in a third direction.**
+
+### (c) Querying — does Ask honor the typed edge?
+
+`/ask`: *"Do voltage-controlled filters need periodic recalibration
+during a session?"* ~8s. ~280 words:
+
+> *"Whether VCFs need recalibration depends on the design. Through-
+> hole and discrete-transistor VCFs exhibit thermal drift on the
+> order of 5–30 cents/°C and benefit from periodic retuning during
+> long sessions [Note 14]. Modern integrated VCF designs use
+> temperature-compensated current sources and remain stable below the
+> 1-cent threshold over typical operating temperatures, eliminating
+> practical recalibration needs [Note 87]. In practice, builders
+> running discrete designs should plan to retune every 30–60 minutes;
+> builders specifying modern ASIC VCFs (SSM/AS-series) can largely
+> skip this step."*
+
+Provenance: 6 nodes including both N1 and N2.
+
+**The answer is correct, but the correctness is accidental.** Why?
+
+- Retrieval pulled both N1 and N2 because both have high similarity to
+  the question. Claude read both, noticed the surface tension, and
+  *resolved it from the prose itself* — inferring "through-hole vs
+  ASIC" from N1 and N2's content.
+- The CONTRADICTS edge I just added was **not used as a signal
+  anywhere in the answer pipeline.** RAG context assembly retrieves by
+  similarity + graph-expansion (BFS, edge-type-agnostic). Edge
+  semantics don't influence what gets surfaced or how it's framed.
+
+**Test the inverse.** Soft-delete the CONTRADICTS edge. Re-run the
+same Ask query. **Same retrieval, same 6 citations, same answer
+prose.** The edge had literally zero effect on the output. **New
+finding: typed edges are structurally present but semantically
+invisible to the RAG pipeline.**
+
+(I re-add the edge.)
+
+This is a major gap if the typed-edge model is meant to deliver on
+the adversarial-knowledge promise. The point of CONTRADICTS as a
+modeled relationship — vs. just "two semantically-close notes" — is
+that *generation should treat the pair specially*: surface both
+viewpoints, flag the tension explicitly, prefer the resolution if
+one exists. None of that happens.
+
+### (d) Resolving — when the contradiction is structural
+
+I write N3, a synthesis: *"VCF calibration — regime-dependent.
+Through-hole / discrete VCF designs (pre-2010 hobbyist circuits,
+classical Moog/ARP topologies) require session-scale calibration;
+see N1. Modern integrated VCF ASICs (SSM2024, AS3320, et al.) are
+calibration-free over 0–50°C; see N2. The 'contradiction' in older
+notes is a scope omission, not a factual disagreement."*
+
+Save as permanent. Tag `eurorack` and `electronics`. Now I'd like
+the graph to reflect:
+
+- N1 SUPERSEDED_BY N3 (or REGIME_NARROWED_BY)
+- N2 SUPERSEDED_BY N3 (same)
+- N3 SUPPORTS N1 (within its through-hole scope)
+- N3 SUPPORTS N2 (within its ASIC scope)
+- The original N1↔N2 CONTRADICTS edge marked *resolved-by N3* — still
+  present as a historical record, but no longer "live."
+
+The model lets me do half of this. SUPPORTS edges N3→N1 and N3→N2:
+fine, two clicks each. SUPERSEDED_BY: doesn't exist; closest is
+ELABORATES, which doesn't capture "this newer note supersedes the
+old one's scope." A "mark this edge resolved" affordance on the
+existing CONTRADICTS edge: doesn't exist. **Edges have
+`created_at`/`updated_at` but no `resolved_at` / `resolved_by_node_id`.
+The schema can't model knowledge evolution as a first-class event.**
+
+I fall back to a structure note "Contradiction resolution log" with
+COLLECTS edges to {N1, N2, N3}. But the structure-note pattern is
+for *collections of related notes*, not for *time-ordered resolution
+traces*. The semantics don't fit, and a reader navigating the graph
+to N1 or N2 still won't see "this has been resolved."
+
+### Inefficiencies and UX pains
+
+1. **Typed edges are dead weight in the RAG pipeline.** The
+   CONTRADICTS edge had zero effect on Ask. Edge semantics are stored
+   but not honored. A first-pass fix: when retrieval surfaces N, also
+   surface CONTRADICTS-linked neighbors and tag the pair in the
+   prompt context ("these notes are in tension — present both and
+   the resolution if one exists"). SUPPORTS could co-elevate; CITES
+   could weight downstream synthesis appropriately. **New finding —
+   the single biggest miss in the typed-edge model.**
+
+2. **Edge vocabulary missing knowledge-evolution verbs.**
+   SUPERSEDED_BY, SCOPED_TO, REGIME_OF, RESOLVES — none exist.
+   They're the natural verbs when notes evolve over time.
+   **Complicates finding #11 in a third direction. Author-stance
+   (#11 original), literature-stance (Sc 4 addition), and
+   evolution-stance (Sc 9 addition) verbs are all under-covered.**
+
+3. **Edges can't carry "resolved" state.** A `resolved_at` +
+   `resolved_by_node_id` pair on edges would let CONTRADICTS edges
+   age into "historical" status without being deleted — preserving
+   the corpus history while signaling "this tension has been worked
+   through." Soft-delete is too coarse; the resolution is information
+   I want to keep.
+
+4. **Notes inherit a universal voice they shouldn't.** N1 says "VCFs
+   drift"; what it means is "through-hole VCFs drift." This is a
+   writing-discipline problem more than a tool problem — but the tool
+   could help. A subtle save-time prompt ("does this claim hold
+   universally, or under a narrower scope?") or a Discover-driven
+   nag ("this note conflicts with a more recent note; reconsider both")
+   would shape behavior over time.
+
+5. **Discover is the contradiction-noticing engine.** N1 and N2 sat
+   in my corpus unrelated for seven months; Bridges surfaced them
+   the first time I scrolled past rank 17. **Finding #6 confirmed a
+   third time — flagged.** The combination of similarity-ranking +
+   AI classifier is doing exactly what it should.
+
+6. **The classifier rationale is discarded.** The slide-out shows
+   Claude's reasoning ("the apparent contradiction is resolved by
+   recognizing that 'VCF' refers to different circuit families…")
+   but only at classification time. Once the edge is applied, the
+   rationale is gone. Storing it as a structured `classifier_rationale`
+   field on the edge would let graph traversal carry the reasoning
+   forward — into Ask context, into future Synthesize scopes, into
+   the slide-out next time the pair is revisited. **A small schema
+   addition with compounding value.**
+
+### Verdict
+
+Discover catches the contradiction; the classifier reasons well about
+scope; the edge model lets me write down CONTRADICTS. **But the
+contradiction never reaches the answer pipeline, and the schema can't
+model resolution as a first-class event.** The typed-edge promise —
+that the graph *means something* to retrieval and generation — is
+half-fulfilled: edges are stored but not honored. The single
+highest-leverage fix is plumbing edge semantics (at minimum
+CONTRADICTS, SUPPORTS, CITES, and the new SUPERSEDED_BY) into RAG
+context assembly. Until that happens, typed edges are a graph-
+topology feature pretending to be a knowledge-modeling feature.
+
+---
+
+## Cross-cutting findings — consolidated after scenarios 4–9
+
+Findings marked **★ 3×** are now confirmed across three or more scenarios.
 
 | # | Theme | Where it shows up |
 |---|---|---|
@@ -722,19 +1283,24 @@ Discover finds what you're missing.**
 | 3 | **No free-writing surface; no iteration on synthesis** | Scenarios 3, 5 — confirmed and sharpened |
 | 4 | **Inbox is FIFO and lonely** | Scenario 1 |
 | 5 | **Source content is invisible to RAG; literature notes are the only entry point** | Scenarios 2, 4 — confirmed |
-| 6 | **Discover is reactive — *and is the actual serendipity engine*** | Scenarios 1, 6 — Sc 6 reframes this: Discover is *more* important than originally credited; the graph is *less* |
-| 7 | **Keyboard nav stops at two shortcuts** | Scenarios 1, 4 (heavy click work during link curation) |
-| 8 | **Tags are flat; sub-topics, themes, projects all want hierarchy** | Scenarios 1, 3, 6 — confirmed three times |
-| 9 | **Linking is per-node; no cluster operations (batch suggest-links, dedup)** | Scenario 4 — new |
-| 10 | **Coverage density and gaps aren't visualized anywhere** | Scenarios 4, 5 — new |
-| 11 | **Edge-type vocabulary is author-stance; literature relationships want different verbs (BUILDS_ON, APPLIES_TO, MEASURES…)** | Scenario 4 — new |
-| 12 | **Saved syntheses use the *wrong* edge verb (COLLECTS instead of CITES/DERIVES_FROM)** | Scenario 4 — new |
-| 13 | **Graph at corpus scale (~850 nodes) is a hairball; no community detection, no cross-domain affordances** | Scenario 6 — new |
-| 14 | **Silent confabulation in synthesis when coverage is thin; no paragraph-level provenance** | Scenario 5 — new |
-| 15 | **`EditableField` blur-to-save is wrong for long-form editing** | Scenario 5 — new |
-| 16 | **Import chunker quality is locked at import time (no split/merge in review UI)** | Scenario 4 — new |
+| 6 | **★ 3× Discover is the actual serendipity *and* contradiction-noticing engine** | Scenarios 1, 6, 9 — Sc 9 sharpens further: AI classifier reasons well about scope mismatch on contradictions |
+| 7 | **Keyboard nav stops at two shortcuts** | Scenarios 1, 4 (link curation), 7 (maintenance click work) |
+| 8 | **★ 3× Tags are flat; sub-topics, themes, projects, sub-domains all want hierarchy** | Scenarios 1, 3, 6, 8 — confirmed four times |
+| 9 | **Linking is per-node; no cluster operations (batch suggest-links, dedup)** | Scenarios 4, 8 — second data point, redundancy bites worse at higher cluster size |
+| 10 | **★ 3× Coverage density / data quality / maintenance signals aren't visualized or filterable anywhere** | Scenarios 4, 5, 7 — Sc 7 sharpens: I dropped into raw SQL three times in one pass |
+| 11 | **Edge-type vocabulary is one-dimensional — author-stance only; missing literature-stance (BUILDS_ON, APPLIES_TO, MEASURES) *and* evolution-stance (SUPERSEDED_BY, SCOPED_TO, RESOLVES) verbs** | Scenarios 4, 9 — complicated in a third direction by Sc 9 |
+| 12 | **Saved syntheses use the *wrong* edge verb (COLLECTS instead of CITES/DERIVES_FROM)** | Scenario 4 |
+| 13 | **Graph at corpus scale is a hairball; visual vocabulary commits to topology, ill-fitted to maintenance** | Scenarios 6 (discovery), 7 (maintenance) — same shortfall from two angles |
+| 14 | **Silent confabulation in synthesis; failure mode is monotonic in corpus thinness** | Scenarios 5, 8 — Sc 8 sharpens: new-domain users have no priors and are the worst-positioned reviewers |
+| 15 | **`EditableField` blur-to-save is wrong for long-form editing** | Scenario 5 |
+| 16 | **Import chunker locked at import time; fails predictably on transcripts/prose-without-headings** | Scenarios 4, 8 — Sc 8 confirms with a new failure mode (podcast transcripts) |
 | 17 | **`save-answer` works (auto-edges, embed-inline) — a quiet win** | Scenario 4 — positive |
-| 18 | **Synthesize-over-dense-cluster is a quiet win — the workflow Synthesize is actually great at** | Scenario 4 — positive |
+| 18 | **Synthesize-over-dense-cluster is a quiet win — *but unavailable until density is reached*** | Scenario 4 (positive); Sc 8 (inverse: cost of getting to density from zero) |
+| 19 | **No maintenance filters/predicates in Notes; graph isn't addressable for an arbitrary result set** | Scenario 7 — new |
+| 20 | **No "domain scaffolding" affordance for fresh corpora — Synthesize forces prose where a structural map is wanted** | Scenario 8 — new |
+| 21 | **Typed edges are structurally present but semantically invisible to the RAG pipeline (CONTRADICTS has zero effect on Ask)** | Scenario 9 — new; the single biggest miss in the typed-edge model |
+| 22 | **Schema has no knowledge-evolution model: no SUPERSEDED_BY edges, no `resolved_at`/`resolved_by_node_id` on edges, classifier rationale discarded after apply** | Scenario 9 — new |
+| 23 | **AI bridge classifier reasons well about scope mismatch and gives honest negatives — positive** | Scenarios 6 (NO_CONNECTION on shallow analogies), 9 (correct scope-mismatch read on the VCF contradiction) — positive, twice |
 
 ---
 
@@ -751,21 +1317,30 @@ Discover finds what you're missing.**
 - **Quick-switcher** (Cmd+P over notes + structure notes + sources).
 - **Batch suggest-links endpoint** (`POST /rag/suggest-links/cluster`
   taking a list of node IDs or a tag, returning deduped proposed
-  edges). New, from Sc 4.
+  edges). From Sc 4; now compounded by Sc 8.
 - **Triangle-completion tab on Discover** (A-C-B paths where A↔B
-  missing). The BFS engine already exists in `graph_service`. New,
-  from Sc 6.
+  missing). The BFS engine already exists in `graph_service`. From Sc 6.
 - **Union-mode tag selection in Synthesize scope-builder** (multi-tag
-  OR). New, from Sc 6.
+  OR). From Sc 6.
 - **Literature-shaped edge types** (BUILDS_ON, APPLIES_TO, MEASURES,
-  EXTENDS, REFINES) added to the EdgeType enum + the type chips. New,
-  from Sc 4.
+  EXTENDS, REFINES) added to the EdgeType enum + the type chips. From Sc 4.
+- **Evolution-shaped edge types** (SUPERSEDED_BY, SCOPED_TO, REGIME_OF,
+  RESOLVES) added to the EdgeType enum + the type chips. New, from Sc 9.
 - **Use `CITES` (not `COLLECTS`) for `save-answer` auto-edges.** Tiny
-  patch to `rag.py:268`; meaningful for graph semantics. New, from
-  Sc 4.
+  patch to `rag.py:268`; meaningful for graph semantics. From Sc 4.
 - **"Critic mode" on `/ask` or `/nodes/[id]`** that takes the current
   note as input and lists likely reader questions. Largely a custom
-  prompt + a button. New, from Sc 5.
+  prompt + a button. From Sc 5.
+- **Schema-level Notes filters**: "no summary," "no outgoing edges,"
+  "no edges either," "edge-count = 0," "summary length < N." One chip
+  row over the existing repository layer. New, from Sc 7.
+- **`?ids=a,b,c` URL param on `/graph`** to make the graph composable
+  with an arbitrary result set (run a Notes query, open these in
+  graph). New, from Sc 7.
+- **Persist classifier rationale on the edge.** Add a
+  `classifier_rationale` TEXT column to edges; show it in the side
+  panel next time the pair is revisited. Tiny schema migration,
+  compounding value. New, from Sc 9.
 
 **Tier 2 — multi-day, high payoff:**
 
@@ -774,21 +1349,40 @@ Discover finds what you're missing.**
 - **Synthesis iteration / multi-turn mode** — "expand section N",
   "regenerate paragraph N", "given this draft, write the next 200
   words." Probably needs a small state machine + UI; the underlying
-  RAG service already supports custom prompts. New, from Sc 4, 5.
+  RAG service already supports custom prompts. From Sc 4, 5.
 - **Coverage-density overlay on Graph and Notes** — edges/node within
   a tag, or median pairwise similarity. Visual: cluster heatmap or
-  density chip on tag chips. New, from Sc 4, 5.
+  density chip on tag chips. From Sc 4, 5, 7 (now ★ 3×).
 - **Re-chunkable candidates on `/ingest`** — "split here" and "merge
-  with next" buttons on candidate cards. New, from Sc 4.
+  with next" buttons on candidate cards. From Sc 4; sharpened by
+  Sc 8 (podcast transcript failure mode).
+- **Transcript-aware chunker mode** for sources without H2/H3 structure
+  (segment by speaker turn, paragraph cluster, or topic shift via
+  embedding distance). New, from Sc 8.
 - **Community detection on the graph** (Louvain or Leiden, colored
-  overlay, toggle "show only cross-community edges"). New, from Sc 6.
+  overlay, toggle "show only cross-community edges"). From Sc 6.
 - **Long-form editor mode on `/nodes/[id]`** — drop the `EditableField`
   for content fields ≥500 chars, render a real textarea + live
-  markdown preview, autosave on debounce. New, from Sc 5.
+  markdown preview, autosave on debounce. From Sc 5.
 - **Batch classify on Discover/Bridges** — "classify the top N
   mid-similarity pairs, show me the ones rated cross-domain with high
   confidence." Endpoint exists per-pair; needs a batch wrapper and a
-  confidence sort. New, from Sc 6.
+  confidence sort. From Sc 6.
+- **`POST /synthesize/scaffold`** — given a tag, emit a canonical
+  sub-topic TOC + per-node coverage labels + gap list. The "fresh
+  domain" workflow. New, from Sc 8.
+- **`GET /maintenance/stale-edges`** + a Discover "Hygiene" tab.
+  Surfaces edges whose endpoints have drifted past a configurable
+  threshold. New, from Sc 7.
+- **Plumb edge semantics into RAG context assembly.** When retrieval
+  surfaces N, also surface CONTRADICTS-linked neighbors and tag the
+  pair in the prompt ("these notes are in tension — present both and
+  the resolution if one exists"). SUPPORTS / CITES could weight
+  downstream synthesis similarly. New, from Sc 9 — the single biggest
+  miss in the typed-edge model.
+- **`resolved_at` + `resolved_by_node_id` on edges** + UI for the
+  resolved-edge state. Lets CONTRADICTS edges age into "historical"
+  without being deleted. New, from Sc 9.
 
 **Tier 3 — bigger; re-shapes the model:**
 
@@ -800,23 +1394,42 @@ Discover finds what you're missing.**
   cross-domain bridges, triangle-completion suggestions, stale notes
   worth revisiting. Push the discovery surface rather than waiting for
   user pull.
+- **Monthly corpus-health digest** — orphan count, summary-coverage %,
+  stale-edge count, edges-per-node trend. Push the maintenance moment
+  the same way the serendipity digest pushes discovery. New, from Sc 7.
 - **Source content into RAG** — when a literature note's source is a
   markdown/text file, optionally include source excerpts in the RAG
   context. Embeddings on chunks already exist via the import pipeline;
   the gap is plumbing into context assembly.
 - **Hierarchical tags** (`philosophy/mind`, `philosophy/ethics`,
-  `eurorack/firmware`, `eurorack/dsp`). Confirms across Sc 1, 3, 6.
+  `eurorack/firmware`, `eurorack/dsp`, `control-theory/pid`,
+  `control-theory/state-space`). ★ 3× across Sc 1, 3, 6, 8.
 - **Voice profile mechanism** — a structure note tagged `voice-sample`
-  always included as context when drafting. New, from Sc 5.
+  always included as context when drafting. From Sc 5.
 - **Paragraph-level provenance** in synthesis output — annotate each
   paragraph with confidence or with the specific cited notes that
   produced it, so I can tell where my coverage stops and Claude's
-  training takes over. New, from Sc 5.
+  training takes over. From Sc 5; failure mode now ★ 2× sharpened by
+  Sc 8 (worst-positioned reviewers are new-domain users).
+- **Edge semantics broadly honored in RAG** (not just CONTRADICTS —
+  also SUPPORTS, BUILDS_ON, SUPERSEDED_BY). Generation should
+  *behave differently* in the presence of typed edges, not just
+  retrieve and ignore. New, from Sc 9 — the deeper version of the
+  Tier-2 plumbing recommendation.
 - **A Discover-as-default model** — if Discover is the actual
-  serendipity engine, it deserves more prime real estate. Move it
-  earlier in the nav, surface its content on Home, treat the graph as
-  an audit/navigation surface rather than the discovery surface. New,
-  from Sc 6 — biggest re-shape of all.
+  serendipity *and* contradiction-noticing engine, it deserves more
+  prime real estate. Move it earlier in the nav, surface its content
+  on Home, treat the graph as an audit/navigation surface rather than
+  the discovery surface. From Sc 6, ★ 3× confirmed by Sc 9 — biggest
+  re-shape of all.
+- **`con import-dir` bundle import** — drop a directory of MD files
+  with a single auto-tag and per-file source metadata (sidecar
+  `.json` or YAML frontmatter); one CLI invocation, one wizard pass.
+  Useful for new-domain onboarding. New, from Sc 8.
+- **Post-import cross-domain bridges pass** — after importing a new
+  cluster, Discover runs (new × existing) only, sorted by
+  mid-similarity. Inverts the within-domain dominance bias that buries
+  cross-corpus pairs at the bottom of the Bridges list. New, from Sc 8.
 
 ---
 
@@ -826,3 +1439,21 @@ the code than a real long-term user would be, so some of these pains
 may be one-edit fixes I'm overestimating, and the positive observations
 (`save-answer` auto-edges, dense-cluster Synthesize, the AI classifier
 on Bridges) may be more important than I've credited.*
+
+*Second addendum captured 2026-05-15, the next day. Three more scenarios
+deeper. The pattern holds: positive observations keep adding up — the
+AI bridge classifier reasoning correctly about scope mismatch in Sc 9
+(a real moment), and Discover catching the year-old VCF contradiction
+that I'd never noticed. The biggest new finding is the gap between
+the typed-edge model and the answer pipeline (#21): the graph stores
+semantics that the RAG layer doesn't use. That's a half-finished
+promise sitting in plain sight. Second pattern: maintenance and
+new-domain onboarding are both materially under-served by surfaces
+that work fine in the steady-state-enrichment case — Notes is a list,
+the graph is a navigator, Synthesize forces prose. Three findings are
+now ★ 3× confirmed (Discover-is-the-engine, flat-tag-hierarchy-needed,
+data-quality-not-visualized); each was named earlier but only after
+Sc 7–9 is the evidence broad enough to treat as settled. The original
+caveat carries forward: as the author of these scenarios I see the
+code beneath the surface, so some pains may be one-edit fixes
+overestimated and some positives may be under-credited.*
