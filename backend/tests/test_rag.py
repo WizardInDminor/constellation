@@ -653,6 +653,52 @@ def test_rag_query_explicit_default_mode_matches_implicit(captured_system_prompt
 
 
 # ---------------------------------------------------------------------------
+# ADR-058 — edge-aware prompt regression checks
+# ---------------------------------------------------------------------------
+# Structural guard for Phase 8.1: the default-mode prompt must instruct the
+# model on the `Connections:` annotations `_build_context` writes into each
+# note. The behaviour-level regression target is `evals/phase8_prototype/`
+# (F3 fixture: model must respect encoded structure, not invent it).
+
+
+def test_default_prompt_includes_edge_aware_block(captured_system_prompts):
+    """ADR-058: default mode tells the model how to read the `Connections:` line."""
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "anything"})
+    assert resp.status_code == 200
+    prompt = captured[0]
+    assert "Connections:" in prompt
+    assert "CONTRADICTS" in prompt
+    assert "SUPPORTS" in prompt
+    assert "ANALOGOUS_TO" in prompt
+    assert "COLLECTS" in prompt
+    # The parenthesised note-text reminder is the most load-bearing token.
+    assert "parenthesised text" in prompt.lower() or "parenthesized text" in prompt.lower()
+
+
+def test_brief_prompt_does_not_include_edge_aware_block(captured_system_prompts):
+    """ADR-058: brief mode intentionally omits the edge-aware block — the
+    CONTRADICTS-naming instruction conflicts with brief's one-sided contract."""
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "argue for X", "mode": "brief"})
+    assert resp.status_code == 200
+    prompt = captured[0]
+    # The diagnostic token chosen here is the literal "Connections:" header,
+    # which only appears in the edge-aware block.
+    assert "Connections:" not in prompt
+
+
+def test_critic_prompt_does_not_include_edge_aware_block(captured_system_prompts):
+    """ADR-058: critic mode operates on the input, not the retrieved corpus,
+    so edge-type reasoning over neighbours is not the primary signal."""
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "review this", "mode": "critic"})
+    assert resp.status_code == 200
+    prompt = captured[0]
+    assert "Connections:" not in prompt
+
+
+# ---------------------------------------------------------------------------
 # Scoped RAG — uses an explicit list of node IDs, no retrieval/expansion
 # ---------------------------------------------------------------------------
 

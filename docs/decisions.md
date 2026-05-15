@@ -2757,6 +2757,157 @@ their ID-only contract.
 
 ---
 
+## ADR-058 — Edge semantics in RAG context assembly
+
+**Status:** Accepted; shipped 2026-05-15 (Phase 8.1 — prompt-side edge
+semantics). Phase 8.2 (retrieval-side) conditionally deferred per the
+reactivation criterion below.
+
+**Context:** The UX walkthrough's finding #21 identified that typed edges
+are stored on every retrieved note but the RAG pipeline does not use
+their semantics — Sc 9 verified that soft-deleting an edge does not
+change Ask output. Code inspection
+(`backend/app/services/rag_service.py:_build_context`, lines 129–132)
+showed edge type *and* the user-authored edge `note` field are already
+assembled into the prompt context as a `Connections:` line per note,
+formatted `→ TYPE Note N (note)`. The default system prompt at lines
+17–26 says nothing about how to interpret these annotations.
+
+Phase 8 was framed as "make typed edges semantically load-bearing in
+RAG," with the prototype gate intended to demonstrate that an
+edge-aware prompt materially changes Ask output. The gate was run
+twice and the framing was revised in between:
+
+- **v0 (heavy rewrite, ~500-word edge-vocabulary rubric)** produced
+  output substantively equivalent to the default across all three
+  fixtures. The default prompt was already citing edge labels verbatim
+  when seen in context — the model reads the `Connections:` line
+  without being told to.
+- **v1 (minimal-additive, ~5-line block instructing on edge-type
+  reasoning shapes)** shows a different, narrower effect: the model
+  becomes more disciplined about respecting the user's encoded
+  structure rather than inventing parallel structure.
+
+The retrieval-side hypothesis was tested separately by the no-LLM
+probe `evals/phase8_prototype/probe_retrieval.py`. On the current
+corpus the neighbour-cap (`_MAX_NEIGHBOR_NODES = 12` in
+`rag_service.py`) only binds on F1; the dropped neighbours are
+dominated by COLLECTS, and every CONTRADICTS/SUPPORTS edge in
+retrieved context has endpoint cosine similarity ≥ 0.66 — well above
+the 0.6 threshold below which retrieval-side edge ranking would
+plausibly help. Retrieval-side is therefore deferred, not cancelled.
+
+**Decision:**
+
+- **Phase 8.1 ships the v1 candidate prompt by promoting it into
+  `rag_service._DEFAULT_PROMPT`.** A tight ~5-line block, inserted
+  between the opening "You are a zettelkasten assistant…" sentence
+  and the rules list, instructs the model on the `Connections:`
+  annotations it is already seeing — naming the reasoning shape for
+  CONTRADICTS / QUESTIONS, SUPPORTS-family (SUPPORTS / BUILDS_ON /
+  EXTENDS / REFINES / APPLIES_TO), ANALOGOUS_TO, and COLLECTS, and
+  flagging that the parenthesised edge `note` is the user's own
+  rationale and is often more load-bearing than the type alone.
+- **Scope is limited to `_DEFAULT_PROMPT` (Ask default mode + the
+  Synthesize flow, since `query_scoped` reuses `_SYSTEM_PROMPT` =
+  `_DEFAULT_PROMPT`).** Brief and critic modes are intentionally left
+  unchanged: brief mode (ADR-053) is one-sided by contract and the
+  CONTRADICTS-handling instruction would actively conflict with it;
+  critic mode operates on the input, not the retrieved corpus, so
+  edge-type reasoning over neighbours is not the primary signal. If
+  a future need surfaces, those prompts get their own ADR.
+- **Phase 8.2 (retrieval-side edge expansion) is conditionally
+  deferred** with a concrete, probe-detectable reactivation criterion
+  (see below).
+
+**Phase 8.2 reactivation criterion (concrete):**
+
+> Phase 8.2 reactivates when `evals/phase8_prototype/probe_retrieval.py`
+> shows the neighbour cap binding on `CONTRADICTS` or `SUPPORTS` edges
+> on **at least two fixtures** where the connected notes have
+> **cosine similarity below 0.6** (the same L2-to-cosine projection
+> `rag_service._distance_to_similarity` uses).
+
+This is the signal that cross-domain typed-edge relationships exist
+whose endpoints are not similarity-discoverable, which is the case
+retrieval-side ranking would help. The probe is the standing
+diagnostic; re-run it after material corpus growth or after Phase 9's
+narrative timeline introduces cross-domain edges between thematic,
+character, and event nodes.
+
+**Rationale:**
+
+- **F3 (ANALOGOUS_TO, looper / hands-free timing capture) is the
+  primary evidence the gate passes.** The default prompt identified
+  *three* "patterns" in the user's looper notes by inventing a third
+  pattern (an external clock port) that the user had not encoded as
+  analogous to anything. The v1 candidate stayed disciplined to the
+  *two* patterns the user actually marked `ANALOGOUS_TO`, named the
+  explicit/implicit axis the user had written into the edge note,
+  and treated the third hardware-spec note as a coexisting input
+  rather than as a parallel pattern. This is the load-bearing
+  behavioural claim Phase 8.1 makes: **the edge-aware prompt causes
+  the model to respect the user's encoded structure rather than
+  inventing its own.** F1 (CONTRADICTS) and F2 (SUPPORTS) corroborate
+  more subtly — F1 gains "load-bearing" meta-framing of the encoded
+  tension; F2 marginally aggregates SUPPORTS-chain citations.
+- **Soft-delete on F1 confirms the edge is doing structural work.**
+  With the single CONTRADICTS edge filtered from the edges list, the
+  v1 candidate still names the tension (the content makes it
+  inferrable), but loses the meta-level framing that referenced the
+  user's deliberate authorial choice. The presence or absence of the
+  edge label measurably shapes the output.
+- **Why "minimal-additive" rather than "heavy rewrite."** v0
+  demonstrated that the model already understands edge-type
+  semantics — what it lacks is a discipline to defer to the user's
+  encoding. A short, targeted instruction does that work; an
+  elaborate rubric does not. The Phase 8.1 prompt is roughly 90 words
+  longer than the previous default, not 500.
+- **Brief and critic intentionally not extended.** ADR-053's
+  consequences anticipated that "if Phase 8 introduces edge-aware
+  prompts, the brief-mode prompt may need to be re-derived." The
+  derivation is: brief mode doesn't want the CONTRADICTS-naming
+  behaviour, so the block doesn't fit. Critic mode operates on the
+  input rather than the retrieved corpus, so the edge instructions
+  apply weakly at best. Keep both modes as-is.
+- **Retrieval-side deferred-not-cancelled because the diagnostic is
+  legible.** The probe encodes the exact corpus condition under
+  which the original Phase 8.2 design would pay off; it removes the
+  open-ended "when is it time to reconsider?" question and replaces
+  it with a script that returns a boolean.
+
+**Consequences:**
+
+- **Regression target.** The F3 fixture is the canonical
+  "model should not invent ANALOGOUS_TO patterns" check. If a future
+  prompt change reintroduces the three-pattern invention behaviour on
+  F3, the regression is detectable by re-running
+  `evals/phase8_prototype/run.py`. A lightweight structural unit test
+  (`tests/test_rag.py`) verifies the edge-aware block tokens remain
+  in `_DEFAULT_PROMPT`; the eval harness is the behaviour-level
+  check, re-runnable on demand.
+- **ADR-053's "Phase 8 may revisit brief mode" note is closed.**
+  This ADR decides brief and critic do *not* get the edge-aware
+  block; if that changes, a new ADR captures the choice.
+- **Token cost grows modestly.** The new block adds ~90 words to
+  every default-mode `/ask` and every Synthesize call. At Sonnet 4.6
+  this is negligible per request but worth noting if a future audit
+  looks at system-prompt cost.
+- **Phase 8.2 reactivation is now an event the user can trigger
+  intentionally** (or detect via periodic probe runs in CI / a
+  scheduled job). The probe script is the contract — if its output
+  semantics drift, a new ADR is required.
+- **The mode-prompt symmetry is broken.** Default has the edge block,
+  brief and critic do not. The asymmetry is intentional but worth
+  noting: any new mode added in the future has to make this
+  decision explicitly.
+- **The brief-mode hedging interaction with edge semantics is
+  untouched.** ADR-057's low-confidence hedge fires on default mode
+  only; ADR-053's brief mode is a separate axis. Phase 8.1 does not
+  affect either.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

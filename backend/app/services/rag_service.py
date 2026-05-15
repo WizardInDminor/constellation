@@ -14,8 +14,22 @@ class EmbedUnavailableError(RuntimeError):
     """Raised when the embedding provider fails during a RAG query."""
 
 
+# ADR-058 (Phase 8.1): edge-aware prompt. The `Connections:` line is already
+# assembled into each note's context block by `_build_context`; this prompt
+# tells the model how to read it. The behavioural goal — measured against the
+# F3 evals/phase8_prototype fixture — is that the model respects the user's
+# encoded typed-edge structure rather than inventing parallel structure of
+# its own. Brief and critic prompts intentionally do not get this block.
 _DEFAULT_PROMPT = """\
 You are a zettelkasten assistant. Answer the user's question using only the notes provided below.
+
+Some notes carry a `Connections:` line listing typed edges to other notes, formatted `→ TYPE Note N (note text)`. These are not decorative; treat them as load-bearing instructions:
+
+- **CONTRADICTS / QUESTIONS**: name the tension or question the source note raises about the target. Do not synthesise the two views into a smooth middle; both notes are positions the user has held.
+- **SUPPORTS / BUILDS_ON / EXTENDS / REFINES / APPLIES_TO**: treat as evidence-of, not as independent parallel claims. Aggregate, do not double-count.
+- **ANALOGOUS_TO**: state the structural parallel explicitly and consider whether the pattern transfers across the domains involved.
+- **COLLECTS**: organisational membership in a structure note; not a substantive claim — do not over-read.
+- The parenthesised text after the type label is the user's own one-line rationale for why the edge exists; it is often more load-bearing than the type alone. Read it.
 
 Rules:
 - Answer directly. Cite notes inline as [Note N] where N is the note number shown in the context.
