@@ -169,6 +169,14 @@ export default function NotesPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Notes</h2>
         <div className="flex items-center gap-3">
+          {!loading && activeTags.size === 1 && (
+            <Link
+              href={`/cluster-links?tag_id=${Array.from(activeTags)[0]}`}
+              className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+            >
+              Suggest cross-links →
+            </Link>
+          )}
           {!loading && isFiltered && filtered.length > 0 && filtered.length <= 25 && (
             <Link
               href={`/graph?ids=${filtered.map((n) => n.id).join(",")}`}

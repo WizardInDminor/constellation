@@ -23,6 +23,8 @@ export type RagResponse = components["schemas"]["RagResponse"];
 export type RagMode = NonNullable<components["schemas"]["RagRequest"]["mode"]>;
 export type ActivityFeed = components["schemas"]["ActivityFeed"];
 export type RecentEdge = components["schemas"]["RecentEdge"];
+export type ClusterSuggestResponse = components["schemas"]["ClusterSuggestResponse"];
+export type ClusterLinkProposal = components["schemas"]["ClusterLinkProposal"];
 export type NodeUsed = components["schemas"]["NodeUsed"];
 export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
@@ -339,6 +341,15 @@ export function classifyBridge(
   return request("/api/v1/discover/bridges/classify", {
     method: "POST",
     body: JSON.stringify({ node_a_id: nodeAId, node_b_id: nodeBId }),
+  });
+}
+
+export function clusterSuggestLinks(
+  body: { node_ids?: string[]; tag_id?: string },
+): Promise<ClusterSuggestResponse> {
+  return request("/api/v1/rag/suggest-links/cluster", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

@@ -38,6 +38,9 @@ from app.models.node import (
     StructureCreate,
 )
 from app.models.rag import (
+    ClusterLinkProposal,
+    ClusterSuggestRequest,
+    ClusterSuggestResponse,
     EdgeTraversed,
     LinkSuggestion,
     NodeUsed,
@@ -98,6 +101,9 @@ __all__ = [
     "SuggestPermanentResponse",
     "LinkSuggestion",
     "SuggestLinksResponse",
+    "ClusterSuggestRequest",
+    "ClusterLinkProposal",
+    "ClusterSuggestResponse",
     "RagRequest",
     "RagResponse",
     "ScopedRagRequest",

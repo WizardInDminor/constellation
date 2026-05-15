@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.models.edge import EdgeType
-from app.models.node import NodeType
+from app.models.node import NodeRef, NodeType
 
 
 class PermanentCandidate(BaseModel):
@@ -28,6 +28,33 @@ class LinkSuggestion(BaseModel):
 class SuggestLinksResponse(BaseModel):
     source_id: str
     suggestions: list[LinkSuggestion]
+
+
+# ---------------------------------------------------------------------------
+# Cluster suggest-links — batch the per-node suggestion across a scope
+# ---------------------------------------------------------------------------
+
+
+class ClusterSuggestRequest(BaseModel):
+    """Scope for batch suggest-links. Exactly one of node_ids or tag_id is required."""
+
+    node_ids: list[str] | None = None
+    tag_id: str | None = None
+
+
+class ClusterLinkProposal(BaseModel):
+    """A single proposed edge from the cluster suggestion run. Deduped per
+    canonical (from, to) pair across all source perspectives — see B3."""
+
+    from_node: NodeRef
+    to_node: NodeRef
+    edge_type: EdgeType
+    rationale: str
+
+
+class ClusterSuggestResponse(BaseModel):
+    proposals: list[ClusterLinkProposal]
+    scope_size: int
 
 
 # ---------------------------------------------------------------------------

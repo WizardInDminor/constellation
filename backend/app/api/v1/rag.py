@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 
@@ -5,8 +6,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from app.core.deps import DB, EmbedProvider, GenProvider
-from app.models import EdgeCreate, NodeDetail, PermanentCreate
+from app.models import EdgeCreate, NodeDetail, NodeRef, PermanentCreate
 from app.models.rag import (
+    ClusterLinkProposal,
+    ClusterSuggestRequest,
+    ClusterSuggestResponse,
     LinkSuggestion,
     RagRequest,
     RagResponse,
@@ -15,7 +19,8 @@ from app.models.rag import (
     SuggestLinksResponse,
     SuggestPermanentResponse,
 )
-from app.repositories import edge_repo, node_repo
+from app.providers.base import EmbeddingProvider, GenerationProvider
+from app.repositories import edge_repo, node_repo, tag_repo
 from app.services import embedding_service, generation_service, rag_service
 
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -109,23 +114,22 @@ Return ONLY valid JSON — no markdown fences, no commentary:
 """
 
 
-@router.post("/suggest-links/{node_id}")
-async def suggest_links(
-    node_id: str, db: DB, embed_provider: EmbedProvider, gen_provider: GenProvider
-) -> SuggestLinksResponse:
-    node = await node_repo.get_by_id(db, node_id)
-    if node is None:
-        raise HTTPException(404, "Node not found")
-    if node.type == "fleeting":
-        raise HTTPException(422, "Fleeting notes cannot be used as link suggestion sources")
-
-    # Embed source inline — always fresh so we don't depend on a stored vector
-    vector = await embed_provider.embed(f"{node.title}\n\n{node.content}")
-    candidate_ids = await embedding_service.find_similar(db, vector, exclude_id=node_id, limit=10)
+async def _suggest_links_for_node(
+    db,
+    source: NodeDetail,
+    embed_provider: EmbeddingProvider,
+    gen_provider: GenerationProvider,
+) -> list[LinkSuggestion]:
+    """Per-node suggest-links body, extracted so both the singular and cluster
+    endpoints share the same retrieval + LLM call + parsing logic.
+    """
+    vector = await embed_provider.embed(f"{source.title}\n\n{source.content}")
+    candidate_ids = await embedding_service.find_similar(
+        db, vector, exclude_id=source.id, limit=10
+    )
     if not candidate_ids:
-        return SuggestLinksResponse(source_id=node_id, suggestions=[])
+        return []
 
-    # Fetch full content for each candidate
     candidates = []
     for cid in candidate_ids:
         c = await node_repo.get_by_id(db, cid)
@@ -137,7 +141,7 @@ async def suggest_links(
         for i, c in enumerate(candidates)
     )
     user_msg = (
-        f"SOURCE NOTE:\nTitle: {node.title}\nContent: {node.content}"
+        f"SOURCE NOTE:\nTitle: {source.title}\nContent: {source.content}"
         f"\n\nCANDIDATES:\n{candidate_blocks}"
     )
 
@@ -161,9 +165,8 @@ async def suggest_links(
         import logging
 
         logging.getLogger(__name__).error("Unparseable suggest-links response: %r", raw)
-        raise HTTPException(500, "AI returned unparseable response") from exc
+        raise ValueError("AI returned unparseable response") from exc
 
-    # Enrich with title/type from the candidates we already have in memory
     candidates_by_id = {c.id: c for c in candidates}
     suggestions: list[LinkSuggestion] = []
     for s in raw_suggestions:
@@ -183,6 +186,90 @@ async def suggest_links(
             )
         except (ValidationError, KeyError):
             continue
+    return suggestions
+
+
+_CLUSTER_MAX_SCOPE = 50
+
+
+@router.post("/suggest-links/cluster")
+async def suggest_links_cluster(
+    body: ClusterSuggestRequest,
+    db: DB,
+    embed_provider: EmbedProvider,
+    gen_provider: GenProvider,
+) -> ClusterSuggestResponse:
+    """Run suggest-links over a scope (explicit node_ids or a tag).
+
+    Per-source results are deduped by canonical (sorted) pair-key so the user
+    sees one row per pair-of-notes, not two from different source perspectives.
+    First-seen wins; the input order is the request's `node_ids` list or the
+    tag-resolved order (oldest-first by created_at).
+    """
+    if body.node_ids and body.tag_id:
+        raise HTTPException(422, "Provide either node_ids or tag_id, not both")
+    if not body.node_ids and not body.tag_id:
+        raise HTTPException(422, "Provide either node_ids or tag_id")
+
+    if body.tag_id is not None:
+        ids = await tag_repo.list_node_ids_for_tag(db, body.tag_id, limit=_CLUSTER_MAX_SCOPE)
+    else:
+        ids = (body.node_ids or [])[:_CLUSTER_MAX_SCOPE]
+
+    # Resolve to NodeDetail, skip fleeting (suggest-links rejects them) and missing
+    sources: list[NodeDetail] = []
+    for nid in ids:
+        n = await node_repo.get_by_id(db, nid)
+        if n is not None and n.type != "fleeting":
+            sources.append(n)
+
+    if not sources:
+        return ClusterSuggestResponse(proposals=[], scope_size=0)
+
+    # Per-source suggest-links in parallel; any single failure becomes empty list
+    results = await asyncio.gather(
+        *(_suggest_links_for_node(db, s, embed_provider, gen_provider) for s in sources),
+        return_exceptions=True,
+    )
+
+    # Flatten + dedupe by canonical pair-key (sorted), first-seen wins
+    seen_pairs: set[tuple[str, str]] = set()
+    proposals: list[ClusterLinkProposal] = []
+    sources_by_id = {s.id: s for s in sources}
+    for source, result in zip(sources, results, strict=True):
+        if isinstance(result, Exception):
+            continue
+        for s in result:
+            pair_key = tuple(sorted([source.id, s.node_id]))
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            proposals.append(
+                ClusterLinkProposal(
+                    from_node=NodeRef(id=source.id, title=source.title, type=source.type),
+                    to_node=NodeRef(id=s.node_id, title=s.node_title, type=s.node_type),
+                    edge_type=s.edge_type,
+                    rationale=s.rationale,
+                )
+            )
+
+    return ClusterSuggestResponse(proposals=proposals, scope_size=len(sources))
+
+
+@router.post("/suggest-links/{node_id}")
+async def suggest_links(
+    node_id: str, db: DB, embed_provider: EmbedProvider, gen_provider: GenProvider
+) -> SuggestLinksResponse:
+    node = await node_repo.get_by_id(db, node_id)
+    if node is None:
+        raise HTTPException(404, "Node not found")
+    if node.type == "fleeting":
+        raise HTTPException(422, "Fleeting notes cannot be used as link suggestion sources")
+
+    try:
+        suggestions = await _suggest_links_for_node(db, node, embed_provider, gen_provider)
+    except ValueError as exc:
+        raise HTTPException(500, "AI returned unparseable response") from exc
 
     return SuggestLinksResponse(source_id=node_id, suggestions=suggestions)
 

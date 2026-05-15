@@ -769,3 +769,147 @@ def test_save_answer_records_summary(rag_query_client):
     summary = resp.json()["summary"]
     assert "1 notes" in summary
     assert "What is X" in summary
+
+
+# ---------------------------------------------------------------------------
+# Cluster suggest-links (Bucket B — B3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cluster_suggest_client(tmp_path, monkeypatch):
+    """A test client whose gen provider routes per-source to a configurable
+    response, so dedup behaviour can be exercised across multiple sources.
+
+    Set `gen.responses_by_source[source_id] = candidate_id` before calling
+    the cluster endpoint; the provider's `complete` sniffs the user prompt
+    for the source's title and returns a suggestion pointing at the configured
+    candidate.
+    """
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _RoutedGen:
+        model_id = "fake-gen"
+
+        def __init__(self):
+            # Maps source-title-substring → candidate_id for the returned suggestion
+            self.candidate_for_title: dict[str, str] = {}
+
+        async def complete(self, messages, system, max_tokens=1024):
+            user_msg = messages[0]["content"]
+            for title_marker, cid in self.candidate_for_title.items():
+                if f"Title: {title_marker}" in user_msg.split("\n\nCANDIDATES:")[0]:
+                    return VALID_LINKS_RESPONSE.replace("__PLACEHOLDER__", cid)
+            return json.dumps({"suggestions": []})
+
+    _gen = _RoutedGen()
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _gen
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c, _gen
+
+    cfg.get_settings.cache_clear()
+
+
+def test_cluster_suggest_requires_node_ids_or_tag(cluster_suggest_client):
+    c, _ = cluster_suggest_client
+    resp = c.post("/api/v1/rag/suggest-links/cluster", json={})
+    assert resp.status_code == 422
+
+
+def test_cluster_suggest_rejects_both_inputs(cluster_suggest_client):
+    c, _ = cluster_suggest_client
+    resp = c.post(
+        "/api/v1/rag/suggest-links/cluster",
+        json={"node_ids": ["x"], "tag_id": "y"},
+    )
+    assert resp.status_code == 422
+
+
+def test_cluster_suggest_returns_proposals_with_endpoint_titles(cluster_suggest_client):
+    c, gen = cluster_suggest_client
+    a = _create_permanent(c, "Note A", "x")
+    b = _create_permanent(c, "Note B", "y")
+    # A's suggest-links call will return a suggestion pointing at B
+    gen.candidate_for_title = {"Note A": b["id"]}
+    resp = c.post("/api/v1/rag/suggest-links/cluster", json={"node_ids": [a["id"], b["id"]]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["scope_size"] == 2
+    assert len(body["proposals"]) == 1
+    p = body["proposals"][0]
+    assert p["from_node"]["title"] == "Note A"
+    assert p["to_node"]["title"] == "Note B"
+    assert p["edge_type"] == "SUPPORTS"
+
+
+def test_cluster_suggest_dedupes_reciprocal_pairs(cluster_suggest_client):
+    """If A→B and B→A both surface, only one proposal survives."""
+    c, gen = cluster_suggest_client
+    a = _create_permanent(c, "Note A", "x")
+    b = _create_permanent(c, "Note B", "y")
+    # Both A's and B's calls produce a suggestion pointing at the other
+    gen.candidate_for_title = {"Note A": b["id"], "Note B": a["id"]}
+    resp = c.post("/api/v1/rag/suggest-links/cluster", json={"node_ids": [a["id"], b["id"]]})
+    body = resp.json()
+    assert len(body["proposals"]) == 1
+    # First-seen wins → A is the source
+    assert body["proposals"][0]["from_node"]["id"] == a["id"]
+
+
+def test_cluster_suggest_excludes_fleeting_from_scope(cluster_suggest_client):
+    c, gen = cluster_suggest_client
+    fleeting = c.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "x"}).json()
+    perm = _create_permanent(c, "Perm", "y")
+    resp = c.post(
+        "/api/v1/rag/suggest-links/cluster",
+        json={"node_ids": [fleeting["id"], perm["id"]]},
+    )
+    body = resp.json()
+    # Fleeting filtered out → scope is just the permanent note
+    assert body["scope_size"] == 1
+
+
+def test_cluster_suggest_via_tag_resolves_nodes(cluster_suggest_client):
+    c, gen = cluster_suggest_client
+    tag = c.post("/api/v1/tags", json={"name": "topic"}).json()
+    a = _create_permanent(c, "Note A", "x")
+    b = _create_permanent(c, "Note B", "y")
+    # Attach the tag to both
+    for n in (a, b):
+        r = c.patch(f"/api/v1/nodes/{n['id']}", json={"tag_ids": [tag["id"]]})
+        assert r.status_code == 200
+    gen.candidate_for_title = {"Note A": b["id"]}
+    resp = c.post("/api/v1/rag/suggest-links/cluster", json={"tag_id": tag["id"]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["scope_size"] == 2
+    assert len(body["proposals"]) == 1
+
+
+def test_cluster_suggest_empty_scope_returns_no_proposals(cluster_suggest_client):
+    c, _ = cluster_suggest_client
+    resp = c.post("/api/v1/rag/suggest-links/cluster", json={"node_ids": []})
+    # Empty node_ids is the same as not providing it → 422 per the contract
+    assert resp.status_code == 422

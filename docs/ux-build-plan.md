@@ -139,7 +139,7 @@ One at a time, ~3 days each. ADRs ship inside the relevant PR.
 - **Acceptance:** Apply "no summary" + tag `eurorack` together; result list shows only eurorack-tagged notes with NULL summary. Clear filter → list resets.
 - **ADR required:** **ADR-055 — Notes-filter API contract.** How new predicates compose with existing tag/type/age/search filters; whether filters AND or OR within a category.
 
-### B3 — Batch suggest-links endpoint + review UI
+### B3 — Batch suggest-links endpoint + review UI ✅ shipped 2026-05-15
 
 - **Description:** `POST /rag/suggest-links/cluster` takes a list of node IDs (or a tag) and returns deduped edge proposals. Parallel per-node calls with undirected-pair dedup. Review UI: accept-all, per-edge accept/reject, per-edge edge-type override.
 - **Cost:** 3 days. ~1 day backend (asyncio.gather + dedup), ~2 days review UI.

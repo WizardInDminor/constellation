@@ -61,6 +61,27 @@ async def delete(db: aiosqlite.Connection, tag_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+async def list_node_ids_for_tag(
+    db: aiosqlite.Connection,
+    tag_id: str,
+    *,
+    exclude_fleeting: bool = True,
+    limit: int = 50,
+) -> list[str]:
+    """Node IDs carrying the given tag. Used by the cluster suggest-links endpoint."""
+    type_clause = "AND n.type != 'fleeting'" if exclude_fleeting else ""
+    cursor = await db.execute(
+        f"""SELECT n.id FROM nodes n
+            JOIN node_tags nt ON nt.node_id = n.id
+            WHERE nt.tag_id = ? AND n.deleted_at IS NULL {type_clause}
+            ORDER BY n.created_at ASC
+            LIMIT ?""",  # noqa: S608
+        (tag_id, limit),
+    )
+    rows = await cursor.fetchall()
+    return [r["id"] for r in rows]
+
+
 async def get_tags_for_node(db: aiosqlite.Connection, node_id: str) -> list[TagRef]:
     cursor = await db.execute(
         """SELECT t.id, t.name, t.color
