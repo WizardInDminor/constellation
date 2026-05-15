@@ -186,17 +186,17 @@ the app has to a creative workspace.
 ```
 ┌─ Project: Short story — entropy & the listener ──────────┐
 │  [Hub note: live outline + status]                       │
-│                                                           │
-│  ┌── Pinned scope ───────┐  ┌── Free-writing pad ─────┐ │
+│                                                          │
+│  ┌── Pinned scope ───────┐  ┌── Free-writing pad ─────┐  │
 │  │ • Hub note            │  │ [markdown editor]        │ │
 │  │ • 4 theme permanents  │  │ - autosaves              │ │
 │  │ • 2 literature notes  │  │ - "Promote to permanent" │ │
 │  │ • 1 source (Borges)   │  │ - "Save as source"       │ │
 │  │ [Edit scope]          │  │ - "Synthesize with this  │ │
 │  └───────────────────────┘  │   as the seed"           │ │
-│                              └──────────────────────────┘ │
-│  ┌── Recent in project ──┐  ┌── Bridges within scope ─┐ │
-│  │ Captures, edits, …    │  │ Pairs to consider       │ │
+│                             └──────────────────────────┘ │
+│  ┌── Recent in project ──┐  ┌── Bridges within scope ─┐  │
+│  │ Captures, edits, …    │  │ Pairs to consider       │  │
 │  └───────────────────────┘  └──────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -263,3 +263,566 @@ surface.**
 *Caveat: this is the view from inside daily use. Some pains may be one-edit
 fixes that I'm overestimating; some "small" wins may have backend implications
 I haven't traced.*
+
+---
+
+## Scenario 4 — Literature review sprint (phase-locked loops)
+
+I've spent two days reading on PLLs — relevant to the Eurorack project's clock
+recovery. Five sources in my queue, all as markdown: Razavi's 1996 JSSC paper
+on CMOS phase noise, Gardner's 1980 TCOM paper on charge-pump PLLs, a 30-page
+chapter from Best's *Phase-Locked Loops* textbook, an Analog Devices AN-1001
+app note, and the PLL section of the AD9959 datasheet that I'd extracted by
+hand into a clean markdown file.
+
+### What I do
+
+Terminal:
+
+```
+$ con import phase-noise-razavi.md \
+    --source-title "A Study of Phase Noise in CMOS Oscillators" \
+    --source-type article --source-author "B. Razavi"
+```
+
+`POST /ingest/document` hits the chunker (`doc_chunker.py`, H2/H3 boundaries,
+MAX_CHARS=2400). Browser opens to `/ingest?source_id=…`. ~5-7s end-to-end for
+a 12-page paper. The review wizard renders ~8 candidate cards: editable
+title, content, summary, default-on Accept checkbox.
+
+I uncheck the abstract and conclusion. I rename one chunk from the chunker's
+generic "Phase Noise Model" to "Leeson's equation — physical intuition." One
+candidate is 2380 chars and is really two ideas; I'd love to split it but the
+UI only edits content, doesn't re-chunk. I paste half into the title-editing
+of a sibling candidate. Lossy.
+
+In the **Import options** section: auto-tag `pll`, hub note checkbox on, hub
+title pre-filled from source title. I rename the hub to "Razavi 1996 — phase
+noise." Click Accept. ~4-6s: source row, ~5 literature notes, hub structure
+note, COLLECTS edges. The hub note's content is empty by default — it's just
+a parent in the COLLECTS topology, with no TOC, no narrative.
+
+Repeat for Gardner, Best, AN-1001, AD9959. ~40 minutes total. The AN-1001 was
+a messy PDF→markdown conversion; the chunker split on stray figure-caption
+headings, producing one 4-line chunk and one over-long chunk. I lump-accept
+and tell myself I'll clean it later. I won't.
+
+Final state: ~22 new literature notes, 5 sources, 5 hub structure notes,
+~22 COLLECTS edges. All tagged `pll`. Zero cross-source edges yet.
+
+**Linking pass.** Open one Razavi note. Click **Suggest links**. ~7-8s Claude
+call. Returns 5 suggestions: 2 to other Razavi notes, 2 to Gardner notes, 1
+to a year-old permanent of mine on phase detectors. Accept 4. Repeat on ~10
+nodes — every call takes ~7-8s, the second pass on Gardner-A surfaces a link
+to Gardner-B that I already accepted from Gardner-B's pass. Net: lots of API
+time, lots of mental dedup.
+
+For the rest I use the graph. `/graph`, filter `pll`, layout settles in ~2s
+at 22+pre-existing nodes (fine at this scale). Press `E`, click target,
+ConnectPanel opens — pick edge type, optional note, submit. ~3 clicks per
+edge. I add ~15 manual edges this way.
+
+**Edge type vocabulary friction.** Trying to link Gardner's charge-pump
+architecture to Razavi's analysis of charge-pump noise. What edge type fits?
+SUPPORTS feels too strong (Razavi doesn't *defend* Gardner; he analyzes the
+topology Gardner introduced). ELABORATES is too generic. ANALOGOUS_TO is
+plain wrong. INSPIRED_BY is closest in spirit but the word feels off for a
+direct technical descendant. I pick ELABORATES and move on, but the edge is
+under-described.
+
+**Synthesize.** /synthesize, tag=`pll`, recency=Any. Pool of 22, under the
+200 cap. Add all to scope. Search-add 4 pre-existing signal-processing
+permanents. Final scope: 26. Question: *"Summarize what I now know about
+PLLs — fundamentals, noise sources, charge-pump architecture, and a practical
+design approach."* Custom prompt: *"Use sections: Fundamentals → Noise model
+→ Charge-pump topology → Stability trade-offs → Practical walk-through. Cite
+[Note N] freely. ~1500 words."*
+
+~12s. **The output is genuinely good.** Coherent, well-organized, citations
+dense in the technical sections, 19 of 26 scope notes cited. I save as note.
+The save creates the synthesis as a permanent and auto-links it via
+`COLLECTS` edges to each cited node (`rag.py` `save_answer`).
+
+### Inefficiencies and UX pains
+
+1. **Suggest-links is per-node; there's no cluster mode.** Importing a
+   22-note cluster, the natural action is "find probable edges within this
+   set." Today: ~22 sequential ~7-8s calls with significant overlap. A
+   `POST /rag/suggest-links/cluster` taking a list of node IDs (or a tag),
+   running once, deduplicating internally, and returning a flat list of
+   proposed edges would compress this 20-minute grind to a 30-second review.
+
+2. **Chunker quality is locked at import time.** A chunk that's too long
+   (two ideas in one) or too short (a figure caption) can't be re-split or
+   merged in the review UI — only the content edited in-place. For PDF
+   conversions, this is a frequent failure mode. The fix is a "split here"
+   button on the candidate (insert a new candidate with the after-cursor
+   content) and a "merge with next" button.
+
+3. **Edge vocabulary is author-stance, not literature-stance.** SUPPORTS /
+   CONTRADICTS / ELABORATES describe what one *claim* does to another. For
+   literature relationships, the natural verbs are different: BUILDS_ON,
+   APPLIES_TO, MEASURES, EXTENDS, REFINES, GENERALIZES. I forced ELABORATES
+   and INSPIRED_BY repeatedly, knowing they undercount the relationship.
+
+4. **Hub notes are empty containers.** The auto-created hub is a structure
+   note with COLLECTS edges but no content. Ideal would be: Claude proposes
+   a TOC ordered by inferred narrative ("start with fundamentals, then
+   topology, then noise…"), with a one-line annotation per child note. I
+   end up writing this scaffold by hand or leaving the hub empty.
+
+5. **No coverage-density visualization.** After 22 notes I want a glance-view
+   answer to "what's covered, what's thin?" The graph shows topology but
+   doesn't *label* density. Edges-per-node within a tag, or a heatmap by
+   sub-topic, would directly target where to study or import next.
+
+6. **Synthesize over a dense, freshly-imported cluster is a quiet win.**
+   When coverage is dense and tag-scoped, retrieval noise collapses and the
+   output is consistently coherent. This is the workflow Synthesize is
+   *actually* great at. The whole grindy linking + tagging investment pays
+   off here in one move.
+
+7. **The saved synthesis has COLLECTS edges to its sources — but the verb is
+   wrong.** `save-answer` correctly inserts edges from the new node back to
+   each cited node, but uses `COLLECTS` (the structure-note collection
+   relationship). A synthesis isn't a collection; it's a *derivation*. The
+   verb mismatch muddies graph views: a permanent that "collects" 19 nodes
+   looks like a structure-note in topology terms. A DERIVES_FROM or CITES
+   edge type would model the relationship more honestly.
+
+8. **No iteration on synthesis.** "Same scope, emphasize noise more and
+   topology less" — easy re-prompt. "Regenerate just the noise section" or
+   "given this draft, write a 300-word abstract" — impossible. One-shot
+   only.
+
+### What this revealed
+
+Dense, freshly-imported, tag-scoped clusters are where Synthesize shines.
+The pain is in *getting* to the dense cluster — the import-and-link grind.
+Speeding up cluster-building (batch suggest-links, re-chunkable candidates,
+literature-shaped edge vocabulary) compounds across every subsequent
+synthesis. **The marginal value of new linking primitives is higher than
+the marginal value of new generation primitives at my corpus scale.**
+
+---
+
+## Scenario 5 — Writing a blog post on RAG for a smart non-specialist
+
+This is the topic I have the densest coverage on. ~18 permanents on
+embedding similarity, RRF merging, FTS5 sanitization, graph expansion,
+citation grounding, hallucination control, plus 3 structure notes (RAG
+decisions log, RAG pipeline overview, post-mortems). Goal: ~1500 words
+of flowing prose, narrative arc, my voice. Audience: knows ML basics,
+not RAG.
+
+### What I do
+
+Open `/notes`, filter `rag`. 18 results. Hover-preview a few to refresh
+memory. I notice the orphan note "Why we don't stream RAG responses" — six
+months old, never linked to anything. Useful flag from the Notes filter
+alone.
+
+**Audit pass.** Open `/graph`, filter tag=`rag`. ~18 nodes, ~25 edges. The
+layout settles in ~1.5s at this scale. I can read the visual: two tight
+clusters (retrieval, generation), three loose outliers, one orphan. The
+retrieval cluster has 7 nodes and ~10 internal edges — dense, mature. The
+generation cluster has 5 nodes and ~3 edges — same node count, half the
+connectivity. I read this as "thinner mental model for generation" — but
+that's me eyeballing. The app doesn't tell me.
+
+**Draft via Synthesize.** Add all 18 + the 2 structure notes to scope.
+Question: *"Draft a 1500-word blog post for a smart reader who knows ML
+basics but not RAG specifically. Use a narrative arc: motivation → mechanics
+→ why it works → trade-offs. Flowing prose, no bullet lists. Cite [Note N]
+freely."*
+
+~15s. Output: 1820 words. Reads coherently. Citations dense in the retrieval
+section, sparse in the generation section — Claude is silently filling in
+the thin parts from general RAG knowledge. **I can't tell where my notes
+stop and Claude's training takes over** without paragraph-by-paragraph
+cross-check against the provenance panel. The provenance is at the
+note-level, not the paragraph-level.
+
+Save as note. Open in `/nodes/[id]`. Read.
+
+**Voice mismatch.** My notes are written for memory: "RRF k=60: 60 is an
+internet default. Tested k=10,30,60,100 — no meaningful difference at our
+scale." The draft reads textbook: "Reciprocal Rank Fusion uses a smoothing
+constant k, conventionally set to 60." Accurate, but anodyne. To pull my
+voice through I'd need either (a) prose-style notes in scope as voice
+samples, or (b) an explicit custom-prompt instruction ("blunt, opinionated,
+first-person"). Option (b) works partially — gets the diction closer but
+not the rhythm.
+
+**Reader-perspective check.** I want to ask: *"What would a reader find
+confusing in this draft?"* The natural verb is `/ask`. But Ask is RAG over
+my corpus — it can't ingest "this draft" because the draft only just
+exists. So I detour back to `/synthesize`, scope = [the freshly saved
+draft note] + 4 foundational permanents, custom prompt: *"Read the draft.
+List 8 questions a reader unfamiliar with RAG would have. Don't answer
+them — just list them."*
+
+Actually useful output. Questions like *"What does 'hybrid' mean here —
+both run, or one with fallback? "*, *"Why FTS5 and not BM25?"*, *"How big
+is the corpus you're testing on?"* — questions I'd genuinely want to
+address. **But the workflow is a hack.** A "stress-test this note from a
+reader's perspective" affordance should be native.
+
+**Iteration.** I want to expand the trade-offs section to address the new
+questions. Synthesize is single-shot. Options:
+- Manually rewrite the section in-place. The `/nodes/[id]` editor is the
+  `EditableField` blur-to-save textarea — usable for one paragraph, painful
+  for an 800-word section.
+- Re-run Synthesize with a more focused prompt: *"Write only the
+  trade-offs section as 400 words, addressing these questions: …"* —
+  works, but I have to copy-paste back into the saved draft manually.
+- Copy the draft out to `$EDITOR` (vim), edit, paste back via the
+  `EditableField` (which has no autosave on programmatic-paste behavior
+  I trust).
+
+I do option C. Lossy. The round-trip would be smoother if there were a
+"send to $EDITOR" affordance or a real markdown editor mode on
+`/nodes/[id]`.
+
+### Inefficiencies and UX pains
+
+1. **Voice mismatch is a soft-but-real failure.** Atomic notes are
+   memory-shorthand; Claude defaults to neutral-textbook prose. Custom
+   prompts mitigate partially. A "voice profile" mechanism — a structure
+   note tagged `voice-sample` that's always included in scope when
+   drafting — could be a one-edit fix.
+
+2. **No paragraph-level provenance.** The provenance panel shows nodes
+   used; it can't tell me which *paragraph* of the output came from notes
+   vs. Claude's general knowledge. For drafting where you publish, this
+   is the difference between "my view" and "Claude's view." A
+   confidence-or-citation gloss on each output paragraph would help.
+
+3. **No coverage-density audit (again).** The graph hints at cluster
+   density visually but doesn't label it. A simple metric (edges/node
+   within tag, or median pairwise similarity within tag) shown on Notes
+   or Graph would directly target where to study before drafting.
+
+4. **No reader-perspective lens.** "What would confuse a reader?" requires
+   hacking through Synthesize with the draft as scope. A native "critic
+   mode" on `/ask` (or on `/nodes/[id]`) would be obvious and useful.
+
+5. **No iteration on synthesis.** Single-shot. Confirmed again — this is
+   the same finding as Scenario 4, and it bites harder for writing than
+   for summarization because writing is intrinsically multi-turn.
+
+6. **The `EditableField` blur-to-save is wrong for long-form editing.**
+   It's optimized for one-line edits and short summaries. For an
+   800-word section it's painful: no preview while editing markdown, no
+   undo across saves, no autosave checkpointing. A node-detail "edit
+   long content" mode that drops into a proper textarea + markdown
+   preview would help, even before any free-writing-pad work.
+
+7. **Notes-for-self ≠ notes-for-readers.** Confirms Scenario 3's finding.
+   The atomic-note discipline is right for personal recall, wrong for
+   explaining-to-others without a translation layer. The translation
+   layer today is Synthesize + custom prompting; it's better than
+   nothing, much less than enough.
+
+### Verdict
+
+Three categories of friction surface: (a) voice (a prompt-engineering and
+context-shaping problem), (b) coverage diagnostics (a visualization gap),
+(c) iteration (a missing primitive). Of these, **iteration is the
+deepest**. Single-shot synthesis is fine for *answering*; it's wrong for
+*writing*. Until writing becomes a multi-turn workflow inside the app,
+prose-for-readers will keep being a round-trip task.
+
+---
+
+## Scenario 6 — Deep serendipity session (no agenda)
+
+The app's premise — Luhmann + RAG — promises serendipity. This scenario
+tests that directly. No agenda; I want to find a connection between two
+notes from genuinely unrelated parts of the corpus.
+
+### What I do
+
+Open `/graph`. No filters. ~855 nodes total (~600 permanents + ~150
+literature + ~25 structure + ~80 source virtual nodes). The
+force-directed layout takes ~6-8s to settle with `cooldownTime=1500`,
+and the visual is a hairball: dense central blob, peripheral tendrils.
+Hovering nodes is sluggish — 300ms `NotePreviewPopover` delay + the
+lazy `getNode` round-trip (~150-250ms) on top of a render with 855
+hover targets stacked. Toggling literature off thins to ~625 and
+helps, but I still can't see *topical* communities — only structural
+ones.
+
+I shift-click 4 nodes that look like a peripheral cluster — they
+turn out to be cooking notes (I have ~12 on baking technique, gluten
+development, fermentation). The BatchPanel opens — useful for
+*tagging* but irrelevant to what I'm doing now. I close.
+
+**Switch to `/discover/bridges`.** This is where the AI bridge
+classifier lives (Phase C). Pairs sorted by similarity descending.
+The top 10 are mostly within-domain near-misses: two RAG notes I
+forgot to link, two PLL notes I forgot to link. Useful as hygiene,
+boring as serendipity.
+
+I scroll down past the obvious pairs. The interesting band is
+mid-similarity — visually around row 30-60, similarity ~0.55-0.70.
+The pairings get weirder. One catches: **"Aliasing as a moral
+parable"** (a permanent I wrote a year ago, riffing on Nyquist:
+"information below the sampling threshold is *gone*, not noisy —
+the threshold is sharp; below it the world is invisible to the
+sampler") paired with **"Bergson — perception as filtering"** (a
+literature note from a philosophy reading sprint: "perception is
+subtractive; the mind filters most of reality, and the unconscious
+of perception isn't noise — it's everything not selected").
+
+Click the pair. Slide-out opens, both NodeDetails lazy-fetched via
+`Promise.all`. Read side-by-side. Click **Ask Claude to classify
+this pair**. ~5s. Returns:
+
+> `edge_type: ANALOGOUS_TO`
+> *"Both notes treat informational loss as a fundamental rather
+> than incidental phenomenon. Aliasing is the mathematical ceiling
+> on what a sampler can perceive; Bergson's filtering is the
+> experiential floor on what a mind can perceive. The two notes
+> frame perception (sampler-sense and mind-sense) as selection —
+> with what is excluded being categorically gone, not merely
+> degraded."*
+
+**This is the app doing exactly what its premise promises.** Click
+**Apply suggestion**. EdgeForm prefills. I edit the note ("aliasing
+↔ filtering: both as selection, exclusion as categorical loss"),
+submit.
+
+I want another. Scroll Discover, find a second mid-similarity pair:
+**"Bread dough autolyse — gluten develops without kneading"** and
+**"Embedded init code: let the oscillator settle before the
+clock-divider engages."** Click classify. ~5s. Returns
+`NO_CONNECTION` with rationale: "Both involve a passive waiting
+period before active processing, but the analogy is too shallow —
+many physical systems require settling. The pair doesn't warrant
+an edge."
+
+**Honest negative.** The classifier didn't force a link. Good signal.
+
+I keep scrolling. Find a third pair, borderline within-domain. The
+classifier returns ANALOGOUS_TO with a weak rationale. I apply
+anyway because the rationale at least gives me language.
+
+**~25 minutes in. Two cross-domain edges made. The friction is
+scroll-and-judge on Discover.**
+
+**Try `/ask` speculatively.** Query: *"What unexpected connections
+exist between my DSP notes and my philosophy notes?"* RAG embeds
+the query, retrieves seeds (likely notes that explicitly mention
+both, of which there's now exactly one — the pair I just linked,
+plus generic mentions). Graph-expansion fills out. Answer: thin.
+~400 words speculating about possible connections, citing 8 nodes,
+only 2 of which directly matched. Claude says: *"It's possible the
+discipline of signal filtering shares conceptual ground with
+theories of perception…"* — speculative, ungrounded. **Ask is bad
+at this query shape** because RAG retrieval rewards on-topic
+matching, not cross-domain ideation.
+
+**Try Synthesize.** Toggle tag `dsp` (~30 notes), then tag
+`philosophy` (~22 notes). Add all from each in sequence (no union
+mode — two passes). Scope = 52. Question: *"What thematic patterns
+or analogies emerge across these two sets? Be speculative. List
+5-10 specific cross-pollinations, each citing notes from both
+sides."* ~18s.
+
+**Much better.** 7 cross-pollinations, each with concrete dual-side
+citations. Three are forced ("both DSP and Buddhism value
+impermanence" — eh). Four are genuinely surprising and immediately
+useful for thinking. The output works because the scope manually
+forces cross-domain context into the retrieval window — bypassing
+the same-topic bias of vector search.
+
+But I had to invent this workflow. The app doesn't say "use
+Synthesize for cross-domain ideation with this prompt template."
+
+### Inefficiencies and UX pains
+
+1. **The graph at full scale is a hairball.** ~855 nodes, no
+   community detection, no cross-domain edge highlighting, no
+   semantic-density coloring. The force-graph cooldown is 1.5s but
+   convergence takes longer; hover-preview latency stacks
+   `NotePreviewPopover`'s 300ms delay onto `getNode`'s round-trip.
+   Pretty, exploratorily weak.
+
+2. **Bridges over-weights within-domain hygiene.** Top similarity
+   pairs are "you forgot to link these." The *serendipitous* pairs
+   sit in the mid-similarity band (~0.55-0.70). The single
+   highest-leverage Discover enhancement would be a **"hide
+   pairs that share a tag" toggle** — i.e., surface only
+   cross-domain-by-tag pairs.
+
+3. **No cross-domain scope shortcut in Synthesize.** Building a
+   "tag X UNION tag Y" scope requires two toggle-and-add passes.
+   A union mode (multi-select tags, OR by default) would make
+   cross-domain ideation a 2-click setup instead of a 4-click one.
+
+4. **Ask is bad at speculative queries.** RAG retrieval is a
+   same-topic matcher. Speculative cross-domain prompts get thin
+   retrieval and Claude confabulates plausibly. Synthesize-with-
+   explicit-scope is the workaround, but the user has to know
+   this. A small banner on `/ask` ("For cross-domain or
+   speculative questions, build an explicit scope on Synthesize")
+   would route correctly.
+
+5. **No serendipity push.** Discover requires me to remember to
+   look. A "10 surprising bridges this week" digest on Home, or a
+   weekly notification, would surface this without me reaching.
+
+6. **No triangle-completion discovery.** If A links C and B links
+   C but A↔B doesn't exist, the triangle is a strong serendipity
+   signal — and one that vector similarity often misses (the
+   missing edge is structural, not semantic). `graph_service`
+   already has BFS expansion; a "missing-edge triangles" query
+   could be a fourth Discover tab and would likely surface
+   different pairs than Bridges.
+
+7. **Tags are flat — again.** With ~40 tags, `philosophy` sweeps
+   in both philosophy-of-mind and ethics notes, different
+   sub-topics. Hierarchical tags (`philosophy/mind`,
+   `philosophy/ethics`) would let me build sharper scopes for
+   cross-domain ideation. Confirms Scenario 1 finding from a new
+   angle.
+
+8. **Classify is per-pair.** For exploring serendipity at scale,
+   "classify the top 50 mid-similarity pairs, show me the ones
+   the classifier rated as cross-domain with high confidence"
+   would compress hours of scroll-and-click into one review pass.
+   The endpoint is a per-pair `POST /discover/bridges/classify`;
+   a batch variant + a confidence sort would unlock the workflow.
+
+### Verdict — on the app's premise
+
+The constellation thinker framing implies *"the graph reveals
+patterns you didn't see."* Today, the graph is more *record* than
+*revelation*. The actual revelation engine is Discover/Bridges +
+the AI classifier — that pairing genuinely produces moments of
+insight. Every cross-domain edge I've made in the last two months
+came from Discover, not from staring at the graph.
+
+If serendipity is a core value of the project, the implication is
+clear: invest in Discover (cross-domain filtering, triangle
+completion, batch classification, push surfacing). Keep the graph
+as a navigation and audit tool, but stop expecting it to drive
+discovery at corpus scale. **The graph visualizes what you have;
+Discover finds what you're missing.**
+
+---
+
+## Cross-cutting findings — consolidated after scenarios 4–6
+
+| # | Theme | Where it shows up |
+|---|---|---|
+| 1 | **Project context is implicit, not first-class** | Scenarios 1, 2, 3 — and 4 (hub notes are empty containers, no narrative scaffolding) |
+| 2 | **Ask is narrow** — no scope, no iteration, no reader-mode, no speculative-mode | Scenarios 2, 5, 6 |
+| 3 | **No free-writing surface; no iteration on synthesis** | Scenarios 3, 5 — confirmed and sharpened |
+| 4 | **Inbox is FIFO and lonely** | Scenario 1 |
+| 5 | **Source content is invisible to RAG; literature notes are the only entry point** | Scenarios 2, 4 — confirmed |
+| 6 | **Discover is reactive — *and is the actual serendipity engine*** | Scenarios 1, 6 — Sc 6 reframes this: Discover is *more* important than originally credited; the graph is *less* |
+| 7 | **Keyboard nav stops at two shortcuts** | Scenarios 1, 4 (heavy click work during link curation) |
+| 8 | **Tags are flat; sub-topics, themes, projects all want hierarchy** | Scenarios 1, 3, 6 — confirmed three times |
+| 9 | **Linking is per-node; no cluster operations (batch suggest-links, dedup)** | Scenario 4 — new |
+| 10 | **Coverage density and gaps aren't visualized anywhere** | Scenarios 4, 5 — new |
+| 11 | **Edge-type vocabulary is author-stance; literature relationships want different verbs (BUILDS_ON, APPLIES_TO, MEASURES…)** | Scenario 4 — new |
+| 12 | **Saved syntheses use the *wrong* edge verb (COLLECTS instead of CITES/DERIVES_FROM)** | Scenario 4 — new |
+| 13 | **Graph at corpus scale (~850 nodes) is a hairball; no community detection, no cross-domain affordances** | Scenario 6 — new |
+| 14 | **Silent confabulation in synthesis when coverage is thin; no paragraph-level provenance** | Scenario 5 — new |
+| 15 | **`EditableField` blur-to-save is wrong for long-form editing** | Scenario 5 — new |
+| 16 | **Import chunker quality is locked at import time (no split/merge in review UI)** | Scenario 4 — new |
+| 17 | **`save-answer` works (auto-edges, embed-inline) — a quiet win** | Scenario 4 — positive |
+| 18 | **Synthesize-over-dense-cluster is a quiet win — the workflow Synthesize is actually great at** | Scenario 4 — positive |
+
+---
+
+## Recommendations, tiered — updated
+
+**Tier 1 — small, leveraged (each ~half-day to a day):**
+
+- **Tag/recency scope on Ask** (mirror Synthesize's scope-builder,
+  collapse by default).
+- **Cross-tag-domain filter on Discover/Bridges** ("hide pairs that
+  share a tag") — single highest-leverage Discover enhancement.
+- **"Recently captured / edited / linked" sections on Home** (last 7
+  days, by type).
+- **Quick-switcher** (Cmd+P over notes + structure notes + sources).
+- **Batch suggest-links endpoint** (`POST /rag/suggest-links/cluster`
+  taking a list of node IDs or a tag, returning deduped proposed
+  edges). New, from Sc 4.
+- **Triangle-completion tab on Discover** (A-C-B paths where A↔B
+  missing). The BFS engine already exists in `graph_service`. New,
+  from Sc 6.
+- **Union-mode tag selection in Synthesize scope-builder** (multi-tag
+  OR). New, from Sc 6.
+- **Literature-shaped edge types** (BUILDS_ON, APPLIES_TO, MEASURES,
+  EXTENDS, REFINES) added to the EdgeType enum + the type chips. New,
+  from Sc 4.
+- **Use `CITES` (not `COLLECTS`) for `save-answer` auto-edges.** Tiny
+  patch to `rag.py:268`; meaningful for graph semantics. New, from
+  Sc 4.
+- **"Critic mode" on `/ask` or `/nodes/[id]`** that takes the current
+  note as input and lists likely reader questions. Largely a custom
+  prompt + a button. New, from Sc 5.
+
+**Tier 2 — multi-day, high payoff:**
+
+- **Project Workspace at `/projects/[hub-id]`** (saved scope sidecar,
+  project-scoped Ask/Synthesize/Discover, project-recent timeline).
+- **Synthesis iteration / multi-turn mode** — "expand section N",
+  "regenerate paragraph N", "given this draft, write the next 200
+  words." Probably needs a small state machine + UI; the underlying
+  RAG service already supports custom prompts. New, from Sc 4, 5.
+- **Coverage-density overlay on Graph and Notes** — edges/node within
+  a tag, or median pairwise similarity. Visual: cluster heatmap or
+  density chip on tag chips. New, from Sc 4, 5.
+- **Re-chunkable candidates on `/ingest`** — "split here" and "merge
+  with next" buttons on candidate cards. New, from Sc 4.
+- **Community detection on the graph** (Louvain or Leiden, colored
+  overlay, toggle "show only cross-community edges"). New, from Sc 6.
+- **Long-form editor mode on `/nodes/[id]`** — drop the `EditableField`
+  for content fields ≥500 chars, render a real textarea + live
+  markdown preview, autosave on debounce. New, from Sc 5.
+- **Batch classify on Discover/Bridges** — "classify the top N
+  mid-similarity pairs, show me the ones rated cross-domain with high
+  confidence." Endpoint exists per-pair; needs a batch wrapper and a
+  confidence sort. New, from Sc 6.
+
+**Tier 3 — bigger; re-shapes the model:**
+
+- **Free-writing pad** with promotion paths (draft → permanent | source
+  | synthesis). Best home is inside the Project Workspace, not a
+  separate top-level surface.
+- **Inbox grouping** (suggested tag clusters; bulk discard/tag).
+- **Weekly serendipity digest** — Home banner or email: top
+  cross-domain bridges, triangle-completion suggestions, stale notes
+  worth revisiting. Push the discovery surface rather than waiting for
+  user pull.
+- **Source content into RAG** — when a literature note's source is a
+  markdown/text file, optionally include source excerpts in the RAG
+  context. Embeddings on chunks already exist via the import pipeline;
+  the gap is plumbing into context assembly.
+- **Hierarchical tags** (`philosophy/mind`, `philosophy/ethics`,
+  `eurorack/firmware`, `eurorack/dsp`). Confirms across Sc 1, 3, 6.
+- **Voice profile mechanism** — a structure note tagged `voice-sample`
+  always included as context when drafting. New, from Sc 5.
+- **Paragraph-level provenance** in synthesis output — annotate each
+  paragraph with confidence or with the specific cited notes that
+  produced it, so I can tell where my coverage stops and Claude's
+  training takes over. New, from Sc 5.
+- **A Discover-as-default model** — if Discover is the actual
+  serendipity engine, it deserves more prime real estate. Move it
+  earlier in the nav, surface its content on Home, treat the graph as
+  an audit/navigation surface rather than the discovery surface. New,
+  from Sc 6 — biggest re-shape of all.
+
+---
+
+*Addendum captured 2026-05-14, same session as the original walkthrough.
+Three scenarios deeper, the same biases probably apply: I'm closer to
+the code than a real long-term user would be, so some of these pains
+may be one-edit fixes I'm overestimating, and the positive observations
+(`save-answer` auto-edges, dense-cluster Synthesize, the AI classifier
+on Bridges) may be more important than I've credited.*
