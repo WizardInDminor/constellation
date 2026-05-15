@@ -80,7 +80,10 @@ Everything is stored in a single SQLite file. Cloud AI (Voyage for embeddings, A
 
 ## Project status
 
-Phases 0–6 complete. Core system is feature-complete and in active daily use. Phase 7 (local Ollama provider) is next.
+Core system feature-complete and in daily use. Two UX iterations (Bucket A + Bucket B) shipped after Phase 6, adding the bridge classifier, Ask mode selector + critic mode, Home recent-activity, schema filters on Notes, cluster suggest-links, triangle discovery, and a low-confidence hedge on Ask. The next major task is the Phase 8 prototype gate (edge-semantics-into-RAG).
+
+!!! note "User guide is mid-refresh"
+    Pages for `/discover` (orphans, stale, bridges, triangles), `/synthesize`, `/cluster-links`, plus the Ask mode selector and graph focus mode, are not yet documented here. See `docs/ux-build-plan.md` and the `docs/decisions.md` ADR log for the current shipped state. The pages below describe the surfaces that *are* covered.
 
 | Phase | Status | Delivered |
 |-------|--------|-----------|
@@ -89,7 +92,12 @@ Phases 0–6 complete. Core system is feature-complete and in active daily use. 
 | 2 — Embeddings | ✅ | Provider abstraction, auto-embed on write, job queue |
 | 3 — Capture & process | ✅ | Fleeting capture, inbox, AI-assisted decomposition |
 | 3.5 — CLI | ✅ | `con` terminal tool, systemd service, draft persistence |
+| 3.6 — Mobile capture | ✅ | Tailscale + iOS Shortcuts (manual, share-sheet, voice) |
 | 4 — Linking | ✅ | Edge creation UI, AI link suggestions, neighbor browsing |
 | 5 — Search & RAG | ✅ | Hybrid search, `/ask` UI, source management |
 | 6 — Visualization | ✅ | Force-directed graph, filters, side panels |
-| 7 — Local provider | ⏳ | Ollama embedding + generation; offline mode |
+| 6.5 — Admin dashboard | ✅ | Embedding job status, drain controls, rate-aware worker |
+| UX Bucket A | ✅ | Bridge classifier, expanded edge vocab, classifier rationale, Ask mode selector + critic |
+| UX Bucket B | ✅ | Home recent activity, Notes schema filters, cluster suggest-links, Triangles tab, Ask low-confidence hedge |
+| 8.0 — Phase 8 gate | ⏳ | Prototype: do typed edges materially change Ask output? |
+| 8 — Edge semantics in RAG | 📋 | Prompt-aware edge types; resolved-edge state; D1 evolution edges |

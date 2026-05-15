@@ -36,6 +36,32 @@ The provenance panel is always populated, even for notes the model didn't explic
 
 ---
 
+## Modes
+
+A segmented control above the question input lets you swap the system prompt for three response styles. Default is `Balanced`.
+
+| Mode | What it does |
+|------|--------------|
+| **Balanced** | Default behaviour. Preserves nuance, cites notes, hedges when the corpus is thin. |
+| **Brief** | Advocacy mode — argue the case for the question directly. No "on the other hand…" hedging unless asked. Use when you explicitly want a one-sided brief. |
+| **Critic** | Enumerate the questions a careful reader would ask. Output is a numbered list of 3–6 specific reader-questions, not prose. |
+
+The same `Critic` mode is also available as a button on any non-fleeting note's detail page (`/nodes/[id]`) — it fires against that note's title + content directly, no need to retype the query.
+
+See ADRs 053 (Ask mode contract) and the build plan §2 (A9/A10) for the design rationale.
+
+---
+
+## Low-confidence framing
+
+When retrieval is genuinely weak — the closest semantic match in your corpus falls below ~0.55 cosine similarity to your query — Balanced mode prepends a hedge telling Claude to lead with "your knowledge base doesn't directly cover this question," then draw on the closest related notes without inventing detail.
+
+This is a retrieval-side signal, not a model judgment. It triggers when seeds *exist* but are weak; the existing "(No relevant notes found.)" sentinel still handles the zero-seed case. Brief and Critic modes bypass the hedge — they have their own retrieval-resistant prompts.
+
+See ADR-057 for the threshold and metric.
+
+---
+
 ## When Ask works well
 
 - Your graph has good coverage of the topic (many relevant permanent notes)
@@ -50,7 +76,7 @@ The provenance panel is always populated, even for notes the model didn't explic
 - Notes are long and unfocused — harder to assemble clean context
 - The question requires information that isn't in your graph at all
 
-If Ask returns a thin or uncertain answer, the provenance panel will show which notes it found. Use that as a signal to go add more notes on the topic.
+If Ask returns a thin or uncertain answer, the provenance panel will show which notes it found. Use that as a signal to go add more notes on the topic. The low-confidence hedge above is the system's first-line response — but a sparse graph stays sparse until you fill it.
 
 ---
 
