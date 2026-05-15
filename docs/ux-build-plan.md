@@ -21,7 +21,7 @@
 
 - ✅ **Slice 1 — A1 + A6 shipped** in commit `b5cf251`. ADR-051 and ADR-052 landed; ADR-036 superseded. 304 backend tests + 26 frontend tests pass.
 - ✅ **Slice 2 — A8 shipped** 2026-05-15. Migration `0005_classifier_rationale.sql`; rationale plumbed through models / repo / graph endpoint; graph EdgePanel displays it as a distinct block; bridge Apply no longer overwrites `note`. 308 backend tests + 26 frontend tests pass. No ADR (mechanical schema add).
-- ⏳ **Slice 3 — A2 + A3 + A4 + A5 + A7** (frontend QoL items) — pending.
+- ✅ **Slice 3 — A2 + A3 + A4 + A5 + A7 shipped** 2026-05-15 across five commits (`395050a`, `2bd5c02`, `63ba87e`, `aec350f`, `7925ce8`). Inbox hover-time, NodePicker preview wiring + 300ms delay, graph `?ids=` focus + Open-in-graph from Notes, cross-tag bridge toggle, AND/OR tag mode in Synthesize. 311 backend tests + 39 frontend tests. No ADRs.
 - ⏳ **Slice 4 — A9 + A10** (Ask mode-selector pattern). ADR-053 already drafted in `docs/decisions.md` against A9; A10 lands the third mode value in the same PR.
 
 ---
@@ -34,7 +34,7 @@ Originally scoped as one PR; broken into four independent slices during executio
 
 - **Slice 1** — A1 + A6 (one migration). ✅ Shipped 2026-05-15.
 - **Slice 2** — A8 alone (independent column-add migration). ✅ Shipped 2026-05-15.
-- **Slice 3** — A2 + A3 + A4 + A5 + A7 (pure frontend, order-independent).
+- **Slice 3** — A2 + A3 + A4 + A5 + A7 (pure frontend, order-independent). ✅ Shipped 2026-05-15.
 - **Slice 4** — A9 + A10 (Ask mode-selector pattern, shares ADR-053).
 
 ### A1 — Save-answer auto-edges use `CITES`, not `COLLECTS` ✅ shipped (b5cf251)
@@ -52,35 +52,35 @@ Originally scoped as one PR; broken into four independent slices during executio
 - **Acceptance:** EdgeForm shows the new types in its picker; create one `BUILDS_ON` edge via UI; verify it persists and renders correctly on node detail.
 - **ADR required:** **ADR-052 — Expanded EdgeType vocabulary (literature stance).**
 
-### A2 — Capture timestamp in inbox display
+### A2 — Capture timestamp in inbox display ✅ shipped 2026-05-15
 
 - **Description:** `GET /nodes/inbox` already returns `created_at` (`node_repo.list_inbox`). Surface it in the inbox UI as relative time (`3h ago`) with a hover-title tooltip showing the absolute timestamp.
 - **Cost:** 1 hour. Pure frontend.
 - **Acceptance:** Inbox page shows a relative-time chip on each card; hover reveals absolute timestamp. Mobile captures (per Phase 3.6) show their actual capture time, not just date.
 - **ADR required:** None.
 
-### A3 — `?ids=a,b,c` URL param on `/graph`
+### A3 — `?ids=a,b,c` URL param on `/graph` ✅ shipped 2026-05-15
 
 - **Description:** Graph page accepts a comma-separated `ids` query param; on load, the graph filters to only those nodes (plus their incident edges and the neighbor nodes those edges touch). Enables "open in graph" composition from Notes/Search.
 - **Cost:** Half-day. Filter logic exists in `frontend/src/app/graph/filterGraph.ts`; need URL → state → filter wiring + an "Open in graph" action on Notes results.
 - **Acceptance:** Run a Notes filter producing ≥3 results; click "Open in graph" or navigate to `/graph?ids=a,b,c`; only those 3 nodes (+ neighbors) appear.
 - **ADR required:** None.
 
-### A4 — Cross-tag-domain filter on Discover/Bridges
+### A4 — Cross-tag-domain filter on Discover/Bridges ✅ shipped 2026-05-15
 
 - **Description:** Discover Bridges tab currently lists pairs by similarity descending with no scope filter. Add a "hide same-tag pairs" toggle — `cross_tag=true` query param on the bridges endpoint, frontend toggle that defaults to off.
 - **Cost:** Half-day. SQL clause + chip UI.
 - **Acceptance:** Toggle on → only pairs where the two nodes share no tags appear; toggle off → all pairs as before. Result count updates.
 - **ADR required:** None.
 
-### A5 — Union-mode tag selection in Synthesize scope
+### A5 — Union-mode tag selection in Synthesize scope ✅ shipped 2026-05-15
 
 - **Description:** Synthesize scope-builder filters notes by tag using AND semantics today. Add a mode toggle: OR (any tag matches) vs. AND (all tags must match). Default to OR since user feedback says intersection is hardly ever wanted.
 - **Cost:** Half-day. Pool-query SQL + chip UI.
 - **Acceptance:** Add two tags to the scope; switch between AND/OR; verify pool size changes consistently with the toggle.
 - **ADR required:** None.
 
-### A7 — `NotePreviewPopover` inside `NodePicker`
+### A7 — `NotePreviewPopover` inside `NodePicker` ✅ shipped 2026-05-15
 
 - **Description:** `NodePicker` is title-only. `NotePreviewPopover` already exists (`frontend/src/components/`, ADR-039) and lazily fetches `NodeDetail`. Wire it into NodePicker rows on hover.
 - **Cost:** Half-day. Component reuse; the lazy-fetch and portal logic are already correct.
