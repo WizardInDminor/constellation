@@ -4,16 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { deleteNode } from "@/lib/api";
 import type { NodeSummary } from "@/lib/api";
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+import { timeAgo, formatAbsolute } from "./timeFormat";
 
 function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -34,7 +25,13 @@ function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => vo
     <li className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3">
       <div className="flex flex-col">
         <span className="font-medium text-sm">{node.title}</span>
-        <span className="text-xs text-gray-400">{timeAgo(node.created_at)}</span>
+        <time
+          dateTime={node.created_at}
+          title={formatAbsolute(node.created_at)}
+          className="text-xs text-gray-400 cursor-help w-fit"
+        >
+          {timeAgo(node.created_at)}
+        </time>
       </div>
       <div className="flex items-center gap-4">
         {confirming ? (
