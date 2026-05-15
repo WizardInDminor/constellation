@@ -198,7 +198,7 @@ Update `rag_service._SYSTEM_PROMPT` to instruct the model on edge types. The exi
 Bias `graph_service.expand` to surface CONTRADICTS and SUPPORTS neighbors with higher priority when they connect to seed nodes. `expansion_depth` interaction: depth=1 still surfaces direct neighbors, but edge-type-aware ranking decides which to keep when the neighbor budget (`_MAX_NEIGHBOR_NODES=12`) is exceeded.
 
 **Phase 8.3 — Resolved-edge state + D1.**
-Migration `0005_resolved_edges.sql` adds `resolved_at`, `resolved_by_node_id` to `edges`. Add `SUPERSEDED_BY`, `SCOPED_TO`, `REGIME_OF`, `RESOLVES` to `EdgeType` (D1). EdgePanel UI exposes a "mark resolved" action. RAG context-assembly down-weights resolved CONTRADICTS edges.
+Migration `0006_resolved_edges.sql` adds `resolved_at`, `resolved_by_node_id` to `edges` (note: `0005` is taken by A8's `classifier_rationale` migration). Add `SUPERSEDED_BY`, `SCOPED_TO`, `REGIME_OF`, `RESOLVES`, `FOLLOWS_FROM` to `EdgeType` (D1) — `FOLLOWS_FROM` is required by Phase 9's narrative-timeline discourse-order chaining (see `docs/constellation-phase9-concept.md` §8) and is folded in here to avoid a second CHECK-constraint table-recreate later. EdgePanel UI exposes a "mark resolved" action. RAG context-assembly down-weights resolved CONTRADICTS edges.
 
 **Phase 8.4 — Tag/recency scope on Ask (C1).**
 Now nearly free since edge-aware retrieval already supports custom scope. Add a `ScopedAskRequest` with optional `tag_filter`, `recency_filter`, and have `query()` route through the same context-assembly pipeline.
@@ -269,7 +269,7 @@ ADR-060 is D1's formal commit.
 |---|---|---|---|
 | **ADR-051** | Saved syntheses use `CITES` (supersedes ADR-036) | Bucket A — A1 | ✅ landed in commit b5cf251 |
 | **ADR-052** | Expanded EdgeType vocabulary (literature stance) | Bucket A — A6 | ✅ landed in commit b5cf251 |
-| **ADR-053** | Ask supports `mode={default,brief}` | Bucket A — A9 | Drafted in `docs/decisions.md`; awaiting A9 implementation (Slice 4) |
+| **ADR-053** | Ask supports `mode={default,brief,critic}` | Bucket A — A9 + A10 | ✅ landed 2026-05-15 in commit `1022e57`; broadened from `{default,brief}` to `{default,brief,critic}` to absorb A10 |
 | **ADR-054** | "Recent activity" windowing semantics on Home | Bucket B — B1 | Inline with B1 PR |
 | **ADR-055** | Notes-filter API contract | Bucket B — B2 | Inline with B2 PR |
 | **ADR-056** | Triangle-completion ranking semantics | Bucket B — B4 | Inline with B4 PR |
@@ -295,7 +295,7 @@ From Tier 2 (walkthrough's updated tiered recommendations):
 - **`POST /synthesize/scaffold`.** Fresh-domain workflow; defer until new-corpus onboarding is a frequent need.
 - **`GET /maintenance/stale-edges` + Discover Hygiene tab.** Pairs with the corpus-health digest (Tier 3); defer.
 - **Inbox content-type taxonomy + branched Process flow.** Significant new shape on the most-used flow; defer to a dedicated phase post-Phase-8.
-- **Claim-node primitive + batch-tag-against-target UI.** High value (Sc 12: 11 min → 90 s). A natural follow-on to Phase 8 — pair it with the SUPPORTS-edge-weighting work. Schedule as Phase 8.6 if scope permits or Phase 10 if not.
+- **Claim-node primitive + batch-tag-against-target UI.** High value (Sc 12: 11 min → 90 s). A natural follow-on to Phase 8 — pair it with the SUPPORTS-edge-weighting work. Schedule as Phase 8.6 if scope permits or Phase 10 if not. Note: the Phase 9 concept (`docs/constellation-phase9-concept.md` §8) identifies the claim-node and the narrative theme/motif node as **structurally identical** — the same data shape covers both the argumentative use case (notes SUPPORT / CONTRADICT a claim) and the creative use case (events / notes ELABORATE / QUESTION / INSPIRED_BY a theme). Build one with sufficient generality and Phase 9's thematic layer comes nearly for free. The batch-tag-against-target UI is directly reusable as the theme-tagging UI.
 - **Synthesis "argument audit" pass.** Subsumed by Phase 8's edge-semantics work (the audit is exactly the "self-aware about CONTRADICTS-linked counterarguments" behavior Phase 8 enables). Defer until Phase 8 ships and re-evaluate.
 - **Gap-analysis affordance on a scope.** Same reasoning as audit; subsumed by Phase 8 + B5 (low-confidence framing).
 - **Mobile Shortcut redesign — descriptive elicitation.** Pairs with C4/C5 decision. Schedule alongside the iOS dev-story question.
