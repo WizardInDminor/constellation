@@ -42,6 +42,12 @@ Edge types (all are directional except ANALOGOUS_TO, which is symmetric):
   QUESTIONS    — A raises a problem with or about B
   INSPIRED_BY  — A is a looser creative or associative offshoot of B
   COLLECTS     — A (a structure note / MOC) includes B in its map
+  CITES        — A references B as a specific reference (footnote-shaped, not curatorial)
+  BUILDS_ON    — A advances or extends B's framework
+  APPLIES_TO   — A applies B's idea to a new domain or instance
+  MEASURES     — A is an empirical measurement of B's claim or quantity
+  EXTENDS      — A adds scope or generality to B (dimension-ward rather than depth-ward)
+  REFINES      — A sharpens or specializes B without contradicting it
 
 Surface similarity is not enough. If both notes happen to share vocabulary or \
 domain but have no real conceptual connection, return NO_CONNECTION. It is \

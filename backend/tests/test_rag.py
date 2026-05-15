@@ -216,6 +216,12 @@ EDGE_TYPES = {
     "QUESTIONS",
     "INSPIRED_BY",
     "COLLECTS",
+    "CITES",
+    "BUILDS_ON",
+    "APPLIES_TO",
+    "MEASURES",
+    "EXTENDS",
+    "REFINES",
 }
 
 
@@ -582,7 +588,9 @@ def test_rag_scoped_requires_at_least_one_node_id(rag_query_client):
 # ---------------------------------------------------------------------------
 
 
-def test_save_answer_creates_permanent_with_collects_edges(rag_query_client):
+def test_save_answer_creates_permanent_with_cites_edges(rag_query_client):
+    # ADR-051 supersedes ADR-036: synthesis → source edges are now CITES,
+    # not COLLECTS.
     c = rag_query_client
     a = _create_permanent(c, "Source A", "Body A.")
     b = _create_permanent(c, "Source B", "Body B.")
@@ -601,8 +609,8 @@ def test_save_answer_creates_permanent_with_collects_edges(rag_query_client):
     assert node["content"] == "**Synthesis** with markdown."
     assert node["title"].startswith("What did I think")
     out = {e["neighbor"]["id"]: e["type"] for e in node["outgoing_edges"]}
-    assert out.get(a["id"]) == "COLLECTS"
-    assert out.get(b["id"]) == "COLLECTS"
+    assert out.get(a["id"]) == "CITES"
+    assert out.get(b["id"]) == "CITES"
 
 
 def test_save_answer_skips_unresolvable_provenance(rag_query_client):

@@ -17,6 +17,11 @@ export const ALL_EDGE_TYPES = [
   "INSPIRED_BY",
   "COLLECTS",
   "CITES",
+  "BUILDS_ON",
+  "APPLIES_TO",
+  "MEASURES",
+  "EXTENDS",
+  "REFINES",
 ] as const;
 
 export interface FilterState {

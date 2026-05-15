@@ -97,6 +97,12 @@ Edge types:
   QUESTIONS    — the candidate raises a problem with or about the source
   INSPIRED_BY  — looser creative or associative link
   COLLECTS     — the source (a structure note) includes the candidate in its map
+  CITES        — the source references the candidate as a specific reference (closer to a footnote than a curation)
+  BUILDS_ON    — the source advances or extends the candidate's framework
+  APPLIES_TO   — the source applies the candidate's idea to a new domain or instance
+  MEASURES     — the source is an empirical measurement of the candidate's claim or quantity
+  EXTENDS      — the source adds scope or generality to the candidate (dimension-ward rather than depth-ward)
+  REFINES      — the source sharpens or specializes the candidate without contradicting it
 
 Return ONLY valid JSON — no markdown fences, no commentary:
 {"suggestions": [{"node_id": "...", "edge_type": "...", "rationale": "..."}, ...]}\
@@ -235,7 +241,7 @@ def _derive_title(query: str) -> str:
 
 @router.post("/save-answer")
 async def save_answer(body: SaveAnswerRequest, db: DB, embed_provider: EmbedProvider) -> NodeDetail:
-    """Persist a RAG answer as a permanent note with COLLECTS edges to cited sources."""
+    """Persist a RAG answer as a permanent note with CITES edges to cited sources."""
     if not body.answer.strip():
         raise HTTPException(400, "Answer cannot be empty")
 
@@ -256,8 +262,9 @@ async def save_answer(body: SaveAnswerRequest, db: DB, embed_provider: EmbedProv
         ),
     )
 
-    # Auto-link to each cited source via COLLECTS — silently skip ids that
-    # don't resolve (the citation pass on the frontend may include bad refs).
+    # Auto-link to each cited source via CITES (ADR-051, supersedes ADR-036).
+    # Silently skip ids that don't resolve — the citation pass on the
+    # frontend may include bad refs.
     for src_id in body.provenance_ids:
         if src_id == node.id:
             continue
@@ -270,7 +277,7 @@ async def save_answer(body: SaveAnswerRequest, db: DB, embed_provider: EmbedProv
                 EdgeCreate(
                     from_id=node.id,
                     to_id=src_id,
-                    type="COLLECTS",
+                    type="CITES",
                     note=None,
                 ),
             )

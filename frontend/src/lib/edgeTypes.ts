@@ -1,13 +1,22 @@
 import type { EdgeType } from "@/lib/api";
 
 export const EDGE_TYPES: EdgeType[] = [
+  // Author-stance verbs.
   "SUPPORTS",
   "CONTRADICTS",
   "ELABORATES",
   "ANALOGOUS_TO",
   "QUESTIONS",
   "INSPIRED_BY",
+  // Structural verbs.
   "COLLECTS",
+  "CITES",
+  // Literature-stance verbs (ADR-052).
+  "BUILDS_ON",
+  "APPLIES_TO",
+  "MEASURES",
+  "EXTENDS",
+  "REFINES",
 ];
 
 export const EDGE_COLORS: Record<EdgeType, string> = {
@@ -18,6 +27,12 @@ export const EDGE_COLORS: Record<EdgeType, string> = {
   QUESTIONS: "bg-amber-100 text-amber-700",
   INSPIRED_BY: "bg-pink-100 text-pink-700",
   COLLECTS: "bg-indigo-100 text-indigo-700",
+  CITES: "bg-teal-100 text-teal-700",
+  BUILDS_ON: "bg-orange-100 text-orange-700",
+  APPLIES_TO: "bg-yellow-100 text-yellow-700",
+  MEASURES: "bg-cyan-100 text-cyan-700",
+  EXTENDS: "bg-emerald-100 text-emerald-700",
+  REFINES: "bg-slate-100 text-slate-700",
 };
 
 export interface EdgeTypeMeta {
@@ -69,6 +84,42 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     directional: true,
     description: "A (a structure note) includes B in its map.",
     example: "Use from a structure / MOC note that organises the other note.",
+  },
+  CITES: {
+    label: "Cites",
+    directional: true,
+    description: "A references B as a specific reference, footnote-shaped.",
+    example: "Use when this note (often a synthesis) points at the other as one of its sources.",
+  },
+  BUILDS_ON: {
+    label: "Builds on",
+    directional: true,
+    description: "A advances or extends B's framework.",
+    example: "Use when this note picks up where the other left off and develops it further.",
+  },
+  APPLIES_TO: {
+    label: "Applies to",
+    directional: true,
+    description: "A applies B's idea to a new domain or instance.",
+    example: "Use when this note takes the other's concept and uses it in a different context.",
+  },
+  MEASURES: {
+    label: "Measures",
+    directional: true,
+    description: "A is an empirical measurement of B's claim or quantity.",
+    example: "Use when this note records a measurement that tests the other note's claim.",
+  },
+  EXTENDS: {
+    label: "Extends",
+    directional: true,
+    description: "A adds scope or generality to B (dimension-ward rather than depth-ward).",
+    example: "Use when this note broadens the conditions under which the other note's idea holds.",
+  },
+  REFINES: {
+    label: "Refines",
+    directional: true,
+    description: "A sharpens or specializes B without contradicting it.",
+    example: "Use when this note narrows or qualifies the other note without disagreeing.",
   },
 };
 

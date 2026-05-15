@@ -83,3 +83,17 @@ async def test_invalid_type_raises(db):
     bad = EdgeCreate.model_construct(from_id=a.id, to_id=b.id, type="INVALID")
     with pytest.raises(IntegrityError):
         await edge_repo.create(db, bad)
+
+
+@pytest.mark.parametrize(
+    "edge_type",
+    ["CITES", "BUILDS_ON", "APPLIES_TO", "MEASURES", "EXTENDS", "REFINES"],
+)
+async def test_expanded_edge_types_accepted(db, edge_type):
+    """ADR-051 + ADR-052: the new edge vocabulary is persistable end-to-end."""
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type=edge_type))
+    assert edge.type == edge_type
+    fetched = await edge_repo.get_by_id(db, edge.id)
+    assert fetched is not None
+    assert fetched.type == edge_type

@@ -15,6 +15,11 @@ export const EDGE_COLORS: Record<string, string> = {
   INSPIRED_BY: "#EC4899",
   COLLECTS: "#94A3B8",
   CITES: "#0F766E",
+  BUILDS_ON: "#EA580C",
+  APPLIES_TO: "#CA8A04",
+  MEASURES: "#0891B2",
+  EXTENDS: "#059669",
+  REFINES: "#475569",
 };
 
 export function nodeColor(type: string): string {

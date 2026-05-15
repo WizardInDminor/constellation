@@ -6,13 +6,22 @@ from pydantic import BaseModel
 from app.models.node import NodeRef
 
 EdgeType = Literal[
+    # Author-stance verbs — the original vocabulary.
     "SUPPORTS",
     "CONTRADICTS",
     "ELABORATES",
     "ANALOGOUS_TO",
     "QUESTIONS",
     "INSPIRED_BY",
+    # Structural verbs.
     "COLLECTS",
+    "CITES",
+    # Literature-stance verbs (ADR-052).
+    "BUILDS_ON",
+    "APPLIES_TO",
+    "MEASURES",
+    "EXTENDS",
+    "REFINES",
 ]
 
 
