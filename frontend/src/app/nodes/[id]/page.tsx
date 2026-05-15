@@ -17,6 +17,7 @@ import {
   listSources,
   createSource,
   openSource,
+  ragQuery,
 } from "@/lib/api";
 import type {
   NodeDetail,
@@ -658,6 +659,59 @@ function SourcePanel({
   );
 }
 
+// ── CriticPanel ───────────────────────────────────────────────────────────────
+
+function CriticPanel({ node }: { node: NodeDetail }) {
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setLoading(true);
+    setError(null);
+    setAnswer(null);
+    try {
+      const res = await ragQuery(`${node.title}\n\n${node.content}`, {
+        mode: "critic",
+      });
+      setAnswer(res.answer);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Critic mode failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">Critic mode</h3>
+        <button
+          onClick={run}
+          disabled={loading}
+          className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+        >
+          {loading ? "Asking…" : answer ? "Re-run" : "Generate reader questions"}
+        </button>
+      </div>
+
+      {!answer && !loading && !error && (
+        <p className="text-xs text-gray-400">
+          Ask Claude to enumerate the questions a careful reader would raise about this note.
+        </p>
+      )}
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {answer && (
+        <div className="prose prose-sm max-w-none text-sm text-gray-700">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SuggestLinksPanel ─────────────────────────────────────────────────────────
 
 function SuggestLinksPanel({
@@ -926,6 +980,11 @@ export default function NodePage() {
           {node.type !== "fleeting" && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <SuggestLinksPanel nodeId={nodeId} onEdgeCreated={reload} />
+            </div>
+          )}
+          {node.type !== "fleeting" && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <CriticPanel node={node} />
             </div>
           )}
         </div>

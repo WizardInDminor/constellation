@@ -35,9 +35,13 @@ class SuggestLinksResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+RagMode = Literal["default", "brief", "critic"]
+
+
 class RagRequest(BaseModel):
     query: str
     depth: int = Field(default=1, ge=0, le=2)
+    mode: RagMode | None = None
 
 
 class NodeUsed(BaseModel):

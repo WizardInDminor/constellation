@@ -2,7 +2,7 @@ import logging
 
 import aiosqlite
 
-from app.models.rag import EdgeTraversed, NodeUsed, RagResponse
+from app.models.rag import EdgeTraversed, NodeUsed, RagMode, RagResponse
 from app.providers.base import EmbeddingProvider, GenerationProvider
 from app.repositories import node_repo
 from app.services import embedding_service, graph_service, search_service
@@ -14,7 +14,7 @@ class EmbedUnavailableError(RuntimeError):
     """Raised when the embedding provider fails during a RAG query."""
 
 
-_SYSTEM_PROMPT = """\
+_DEFAULT_PROMPT = """\
 You are a zettelkasten assistant. Answer the user's question using only the notes provided below.
 
 Rules:
@@ -24,6 +24,48 @@ Rules:
 - Be concise — this is a personal knowledge base, not a general-purpose encyclopedia.
 - Do not invent facts not present in the provided notes.\
 """
+
+# ADR-053: advocacy-mode prompt. Swapped in when mode="brief". The user has
+# explicitly asked for a one-sided argument; the default prompt's "preserve
+# nuance" / "don't blend" rules would push the model back toward balanced
+# summary.
+_BRIEF_PROMPT = """\
+You are a zettelkasten assistant. The user has explicitly asked for a one-sided brief in support of their position. Do not introduce counterarguments unless the user asks for them.
+
+Rules:
+- Argue the case directly and commit to it. Use the provided notes as supporting evidence.
+- Cite notes inline as [Note N] where N is the note number shown in the context.
+- Do not hedge, balance, or list "on the other hand" considerations.
+- If the notes don't cover the position, say so honestly — then argue from the closest related notes rather than fabricating.
+- Be concise. A brief, not an encyclopedia entry.\
+"""
+
+# A10: critic mode. The user wants the questions a careful reader would ask
+# about the input. The "query" is typically a note's content; retrieval pulls
+# related notes for context. Goal is sharp, specific questions — not generic
+# "what about evidence?" prompts.
+_CRITIC_PROMPT = """\
+You are a careful, skeptical reader of the user's zettelkasten. The user has given you a piece of their own thinking and (possibly) related notes from their knowledge base. Your job is to enumerate the specific questions a careful reader would ask about the input.
+
+Rules:
+- Return a numbered list of 3 to 6 questions.
+- Each question must be specific to the input's content — name a claim, definition, assumption, scope, or unstated condition. Do not ask generic questions ("what is the evidence?" / "have you considered alternatives?").
+- Each question is one or two short sentences.
+- Surface what the input assumes, omits, or oversimplifies. Use related notes as context — if a related note contradicts or extends the input, raise that.
+- No preamble. No commentary after the list. Just the numbered questions.\
+"""
+
+
+def _system_prompt_for(mode: RagMode | None) -> str:
+    if mode == "brief":
+        return _BRIEF_PROMPT
+    if mode == "critic":
+        return _CRITIC_PROMPT
+    return _DEFAULT_PROMPT
+
+
+# Kept for backward-compat with callers that read the default prompt directly.
+_SYSTEM_PROMPT = _DEFAULT_PROMPT
 
 _MAX_SEED_NODES = 8
 _MAX_NEIGHBOR_NODES = 12
@@ -98,6 +140,7 @@ async def query(
     query_text: str,
     *,
     expansion_depth: int = 1,
+    mode: RagMode | None = None,
 ) -> RagResponse:
     # 1. Embed query
     try:
@@ -142,7 +185,8 @@ async def query(
 
     # 7. Generate answer
     messages = [{"role": "user", "content": user_content}]
-    answer = await gen_provider.complete(messages, _SYSTEM_PROMPT, max_tokens=2048)
+    system_prompt = _system_prompt_for(mode)
+    answer = await gen_provider.complete(messages, system_prompt, max_tokens=2048)
 
     # 8. Build provenance for edges
     seed_and_neighbor_ids = {n.id for n in seed_nodes + neighbor_nodes}

@@ -20,6 +20,7 @@ export type SourceUpdate = Partial<Omit<SourceCreate, "id">>;
 export type SearchResponse = components["schemas"]["SearchResponse"];
 export type SearchResult = components["schemas"]["SearchResult"];
 export type RagResponse = components["schemas"]["RagResponse"];
+export type RagMode = NonNullable<components["schemas"]["RagRequest"]["mode"]>;
 export type NodeUsed = components["schemas"]["NodeUsed"];
 export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
@@ -322,10 +323,17 @@ export function classifyBridge(
 }
 
 // RAG
-export function ragQuery(query: string, depth = 1): Promise<RagResponse> {
+export function ragQuery(
+  query: string,
+  opts: { depth?: number; mode?: RagMode } = {},
+): Promise<RagResponse> {
   return request("/api/v1/rag/query", {
     method: "POST",
-    body: JSON.stringify({ query, depth }),
+    body: JSON.stringify({
+      query,
+      depth: opts.depth ?? 1,
+      mode: opts.mode,
+    }),
   });
 }
 

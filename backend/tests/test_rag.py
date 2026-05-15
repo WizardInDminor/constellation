@@ -520,6 +520,95 @@ def test_rag_query_with_edges_in_provenance(rag_query_client):
 
 
 # ---------------------------------------------------------------------------
+# Mode-aware system prompt (ADR-053 + A10 — Ask supports default/brief/critic)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def captured_system_prompts(monkeypatch):
+    """A rag_query client that records every `system` arg passed to the gen provider."""
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+
+    captured: list[str] = []
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _CapturingGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            captured.append(system)
+            return _RAG_ANSWER
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _CapturingGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c, captured
+
+    cfg.get_settings.cache_clear()
+
+
+def test_rag_query_default_mode_uses_default_prompt(captured_system_prompts):
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "anything"})
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    # Default prompt mentions the balanced "preserve nuance" rule
+    assert "preserve the nuance" in captured[0].lower()
+
+
+def test_rag_query_brief_mode_uses_advocacy_prompt(captured_system_prompts):
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "argue for X", "mode": "brief"})
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    prompt = captured[0].lower()
+    assert "one-sided brief" in prompt
+    assert "do not introduce counterarguments" in prompt
+
+
+def test_rag_query_critic_mode_uses_critic_prompt(captured_system_prompts):
+    c, captured = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "review this note", "mode": "critic"})
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    prompt = captured[0].lower()
+    assert "careful, skeptical reader" in prompt
+    assert "numbered list" in prompt
+
+
+def test_rag_query_rejects_unknown_mode(captured_system_prompts):
+    c, _ = captured_system_prompts
+    resp = c.post("/api/v1/rag/query", json={"query": "x", "mode": "snarky"})
+    assert resp.status_code == 422
+
+
+def test_rag_query_explicit_default_mode_matches_implicit(captured_system_prompts):
+    """mode="default" and mode omitted must produce the same system prompt."""
+    c, captured = captured_system_prompts
+    c.post("/api/v1/rag/query", json={"query": "x", "mode": "default"})
+    c.post("/api/v1/rag/query", json={"query": "x"})
+    assert len(captured) == 2
+    assert captured[0] == captured[1]
+
+
+# ---------------------------------------------------------------------------
 # Scoped RAG — uses an explicit list of node IDs, no retrieval/expansion
 # ---------------------------------------------------------------------------
 

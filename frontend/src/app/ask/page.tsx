@@ -7,7 +7,29 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ragQuery, saveAnswer } from "@/lib/api";
 import { resolveCitations } from "@/lib/citations";
-import type { RagResponse, NodeUsed, EdgeTraversed } from "@/lib/api";
+import type { RagResponse, NodeUsed, EdgeTraversed, RagMode } from "@/lib/api";
+
+const MODE_OPTIONS: {
+  value: RagMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "default",
+    label: "Balanced",
+    description: "Default behaviour — preserves nuance and hedges when notes are thin.",
+  },
+  {
+    value: "brief",
+    label: "Brief",
+    description: "Argue the case directly. No counterarguments unless asked.",
+  },
+  {
+    value: "critic",
+    label: "Critic",
+    description: "Enumerate the questions a careful reader would ask.",
+  },
+];
 
 const NODE_TYPE_COLORS: Record<string, string> = {
   permanent: "bg-blue-100 text-blue-800",
@@ -130,6 +152,7 @@ function ProvenancePanel({
 
 export default function AskPage() {
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<RagMode>("default");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<RagResponse | null>(null);
@@ -145,7 +168,7 @@ export default function AskPage() {
     setError(null);
     setResponse(null);
     try {
-      const res = await ragQuery(query.trim());
+      const res = await ragQuery(query.trim(), { mode });
       setResponse(res);
       setProvenanceOpen(true);
     } catch (err) {
@@ -209,25 +232,49 @@ export default function AskPage() {
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
           autoFocus
         />
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-gray-400">⌘↵ or Ctrl↵ to submit</span>
-          <div className="flex gap-2">
-            {response && (
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <div className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-xs">
+              {MODE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMode(opt.value)}
+                  className={`px-3 py-1.5 border-l border-gray-200 first:border-l-0 transition-colors ${
+                    mode === opt.value
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                  title={opt.description}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-gray-400 max-w-xs">
+              {MODE_OPTIONS.find((m) => m.value === mode)?.description}
+            </span>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-2">
+              {response && (
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Ask another
+                </button>
+              )}
               <button
-                type="button"
-                onClick={reset}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                type="submit"
+                disabled={loading || !query.trim()}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                Ask another
+                {loading ? "Thinking…" : "Ask"}
               </button>
-            )}
-            <button
-              type="submit"
-              disabled={loading || !query.trim()}
-              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? "Thinking…" : "Ask"}
-            </button>
+            </div>
+            <span className="text-xs text-gray-400">⌘↵ or Ctrl↵ to submit</span>
           </div>
         </div>
       </form>

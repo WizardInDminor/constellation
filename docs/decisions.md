@@ -2329,9 +2329,9 @@ module gains color + label + description metadata for each.
 
 ---
 
-## ADR-053 — Ask supports `mode={default,brief}`
+## ADR-053 — Ask supports `mode={default,brief,critic}`
 
-**Status:** Accepted
+**Status:** Accepted; shipped 2026-05-15 (A9 + A10 in the same PR).
 
 **Context:** The walkthrough's Sc 12 (advocacy queries) and finding #30
 surfaced that `POST /rag/query` has a fixed system prompt instructing
@@ -2347,16 +2347,25 @@ A simple fix: branch the system prompt based on a request-level `mode`
 flag.
 
 **Decision:** Add an optional
-`mode: Literal["default", "brief"] | None = None` field to `RagRequest`.
-When `mode="brief"`, `rag_service.query()` swaps the standard system
-prompt for an advocacy-mode variant:
+`mode: Literal["default", "brief", "critic"] | None = None` field to
+`RagRequest`. `rag_service.query()` dispatches the system prompt via
+`_system_prompt_for(mode)`:
 
-> "The user has explicitly asked for a one-sided brief in support of
-> their position. Do not introduce counterarguments unless the user
-> asks. Cite notes inline as [Note N]. Be concise and committed."
+- `default` (or `None`) → existing balanced prompt.
+- `brief` → advocacy-mode prompt: "The user has explicitly asked for a
+  one-sided brief in support of their position. Do not introduce
+  counterarguments unless the user asks. Cite notes inline as [Note N].
+  Be concise and committed."
+- `critic` → "You are a careful, skeptical reader of the user's
+  zettelkasten. Enumerate the specific questions a careful reader would
+  ask about the input. Numbered list, 3 to 6 items, each specific to
+  the input (claim, definition, assumption, scope)."
 
-UI: `/ask` page gains a small mode selector (radio or segmented
-control) next to the question input, defaulting to "default."
+UI: `/ask` page gains a segmented control (`Balanced` / `Brief` /
+`Critic`) defaulting to "default." A10 ships a `CriticPanel` on
+`/nodes/[id]` that fires `mode=critic` with the note's title + content
+as the query, rendering the reader-questions list inline next to
+SuggestLinksPanel.
 
 **Rationale:**
 
@@ -2387,9 +2396,9 @@ control) next to the question input, defaulting to "default."
 - `mode` becomes part of the saved-answer metadata. Future feature: a
   brief-mode flag on the saved synthesis so a reader can tell "this
   was generated as an argument, not a summary."
-- Critic mode (A10) is a third `mode` value scheduled to ship in the
-  same PR. Sequencing: A9 ships the request-model + selector + default
-  + brief; A10 adds the critic mode value and prompt.
+- Critic mode (A10) shipped in the same PR as A9. The request-model,
+  selector, default+brief prompts, and the critic prompt + per-note
+  panel all landed together; no follow-up ADR is required.
 
 ---
 

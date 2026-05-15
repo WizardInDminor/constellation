@@ -22,7 +22,9 @@
 - ✅ **Slice 1 — A1 + A6 shipped** in commit `b5cf251`. ADR-051 and ADR-052 landed; ADR-036 superseded. 304 backend tests + 26 frontend tests pass.
 - ✅ **Slice 2 — A8 shipped** 2026-05-15. Migration `0005_classifier_rationale.sql`; rationale plumbed through models / repo / graph endpoint; graph EdgePanel displays it as a distinct block; bridge Apply no longer overwrites `note`. 308 backend tests + 26 frontend tests pass. No ADR (mechanical schema add).
 - ✅ **Slice 3 — A2 + A3 + A4 + A5 + A7 shipped** 2026-05-15 across five commits (`395050a`, `2bd5c02`, `63ba87e`, `aec350f`, `7925ce8`). Inbox hover-time, NodePicker preview wiring + 300ms delay, graph `?ids=` focus + Open-in-graph from Notes, cross-tag bridge toggle, AND/OR tag mode in Synthesize. 311 backend tests + 39 frontend tests. No ADRs.
-- ⏳ **Slice 4 — A9 + A10** (Ask mode-selector pattern). ADR-053 already drafted in `docs/decisions.md` against A9; A10 lands the third mode value in the same PR.
+- ✅ **Slice 4 — A9 + A10 shipped** 2026-05-15. `RagRequest.mode` accepts `default|brief|critic`; `rag_service` dispatches via `_system_prompt_for(mode)`; /ask gains a `Balanced/Brief/Critic` segmented control; /nodes/[id] gains a `CriticPanel` that renders reader-questions inline. ADR-053 marked accepted+shipped, broadened from `{default,brief}` to `{default,brief,critic}`. 316 backend tests + 39 frontend tests.
+
+**Bucket A complete.** Up next: Bucket B (sits between Bucket A and the Phase 8 prototype gate).
 
 ---
 
@@ -35,7 +37,7 @@ Originally scoped as one PR; broken into four independent slices during executio
 - **Slice 1** — A1 + A6 (one migration). ✅ Shipped 2026-05-15.
 - **Slice 2** — A8 alone (independent column-add migration). ✅ Shipped 2026-05-15.
 - **Slice 3** — A2 + A3 + A4 + A5 + A7 (pure frontend, order-independent). ✅ Shipped 2026-05-15.
-- **Slice 4** — A9 + A10 (Ask mode-selector pattern, shares ADR-053).
+- **Slice 4** — A9 + A10 (Ask mode-selector pattern, shares ADR-053). ✅ Shipped 2026-05-15.
 
 ### A1 — Save-answer auto-edges use `CITES`, not `COLLECTS` ✅ shipped (b5cf251)
 
@@ -94,14 +96,14 @@ Originally scoped as one PR; broken into four independent slices during executio
 - **Acceptance:** Open a bridge, classify, apply → reopen the same edge later → the classifier rationale is visible on the EdgePanel as "Classifier rationale: …" distinct from the user-authored `note` field.
 - **ADR required:** None (mechanical schema add; the design decision is "store it" which doesn't need a tradeoffs writeup).
 
-### A9 — `mode=brief` flag on `/ask`
+### A9 — `mode=brief` flag on `/ask` ✅ shipped 2026-05-15
 
 - **Description:** Add an optional `mode` field on `RagRequest`. When `mode="brief"`, swap in an advocacy-mode system prompt ("the user has explicitly asked for a one-sided brief; do not introduce counterarguments unless asked"). UI: small mode selector on `/ask`.
 - **Cost:** 1 day. Half is the flag and request-model addition; half is prompt iteration against real queries to make sure brief mode is genuinely committed but doesn't fabricate.
 - **Acceptance:** Run the same query in default and brief modes; the brief-mode answer should be visibly more committed (no "on the other hand…" hedging).
 - **ADR required:** **ADR-053 — Ask supports `mode={default,brief}`.** Notes the prompt semantics in case the Phase 8 work supersedes it. (Could be folded into Phase 8's ADR but writing it now keeps Phase 8 unblocked from Bucket A.)
 
-### A10 — Critic mode on `/ask` or `/nodes/[id]`
+### A10 — Critic mode on `/ask` or `/nodes/[id]` ✅ shipped 2026-05-15
 
 - **Description:** Button on the node detail view (or a third `/ask` mode) that takes the current note as input and asks Claude to enumerate the questions a careful reader would ask. Output is a list, not prose.
 - **Cost:** 1 day. Same shape as A9: branching prompt is trivial, prompt iteration to make the questions sharp is the real work.
