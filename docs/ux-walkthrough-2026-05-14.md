@@ -1272,35 +1272,648 @@ topology feature pretending to be a knowledge-modeling feature.
 
 ---
 
-## Cross-cutting findings — consolidated after scenarios 4–9
+## Scenario 10 — "Have I already thought about this?"
 
-Findings marked **★ 3×** are now confirmed across three or more scenarios.
+The pre-commit moment. I'm about to write a permanent: *"Jitter
+accumulation in synchronous digital systems is bounded by the clock
+tree depth, not the gate count. The accumulated RMS jitter scales
+with √N where N is the number of clocked stages on the path; gate
+count between clock edges doesn't enter."*
+
+Before I commit, the real question: do I already have a note on this,
+or something close enough that writing a new one would be redundant
+or contradictory? In nine months of capture this is a daily moment;
+the app has never been examined on it.
+
+### What I do
+
+**Path A — Full-text search.** `/search`, FTS5 toggle. Query: *"jitter
+clock tree depth."* Returns 7 hits. Top result: "Clock skew vs jitter
+— definitions" (a definitions note, not the claim). Result 4: "FPGA
+clock tree fanout limits" (structurally similar, about fanout not
+depth). Nothing matches the √N scaling claim.
+
+**Path B — Semantic search.** `/search`, vector toggle. Same query. 8
+hits. Result 3 catches: "PLL phase noise integration — variance
+scales linearly with N for white-frequency noise sources." Same
+*mathematical shape* of statement, different physical mechanism. I
+open it.
+
+The PLL note says: *"Free-running oscillator phase variance accumulates
+as N·σ² over N reference periods; the standard deviation is σ√N."*
+Written two months ago after the Sc 4 PLL sprint. **Is this a dup?**
+No — different mechanism (white-noise oscillator vs cumulative buffer
+jitter), different system (free-running vs locked). But the math
+shape is identical. The relationship is ANALOGOUS_TO or BUILDS_ON,
+not redundancy. The app doesn't tell me this; I had to read the note
+and decide.
+
+**Path C — Hybrid search.** Switch to hybrid (FTS5 + vector via
+reciprocal-rank fusion, default mode). 10 hits. The PLL note rises to
+rank 2; the definitions note stays at 1. RRF is doing its job.
+Nothing closer.
+
+**Path D — Ask.** `/ask`: *"What do my notes say about jitter
+accumulation in clocked digital systems?"* ~8s. ~250 words. Cites
+[Note 14] (definitions), [Note 47] (PLL phase noise), [Note 81]
+(FPGA fanout). The answer correctly summarizes what my notes cover
+— definitions, oscillator phase noise — but does NOT say *"your
+notes don't cover synchronous clock-tree jitter accumulation."* It
+fills the gap with general knowledge instead. **The negative
+finding — what's NOT covered — is the answer I actually wanted, and
+Ask doesn't frame its output that way.** Sharpens finding #14
+(silent confabulation): the failure mode also bites dedup queries
+specifically, where the user is asking "what do I have," not "what's
+true."
+
+**Path E — Graph visual scan.** `/graph`, tag=`dsp` (then a second
+pass for tag=`electronics`, since the union mode doesn't exist —
+finding #6 era recommendation, still missing). I look at the cluster
+around the PLL note. ~12 nodes nearby. I hover-preview each. None is
+the claim I'm about to make. The visual is *useful* — confirming a
+negative by inspection — but slow: 12 hovers × ~300ms `NotePreviewPopover`
+delay × ~150ms `getNode` lazy fetch = ~5s of pure waiting, plus
+reading time.
+
+**Path F — NodePicker.** The capture modal has a NodePicker for the
+"related" field. Type *"jitter accumulation."* 5 hits via the same
+FTS5+vector. Same results, but **the NodePicker is title-only — no
+content preview, no similarity score.** To evaluate each candidate
+I'd click through to read. The NodePicker's design is wrong for
+dedup: it's optimized for picking a known target, not for evaluating
+a fuzzy match.
+
+After all six paths, my conclusion: no exact dup, one structurally
+analogous note. I commit to writing the new note, planning to add
+an ANALOGOUS_TO edge to the PLL note after save.
+
+**Total time spent on the dedup check: ~6 minutes** — for a note I
+could have written in ~3.
+
+### Stress test — the partial-supersedure case
+
+I run the dedup ritual on a different planned note: *"Wave digital
+filters preserve passivity even at quantized state, unlike direct-
+form IIR."*
+
+Path B returns at result 2: an old note from before I knew about WDFs
+— *"Direct-form IIR is fine for fixed-point as long as you're careful
+with the state-variable scaling."* The planned note doesn't strictly
+contradict the old one; it adds a comparative claim that makes the
+old note suddenly *less complete*. I should either edit the old note
+or add a SUPERSEDED_BY edge once the new note exists.
+
+The app supports neither cleanly: SUPERSEDED_BY doesn't exist in the
+edge enum (Sc 9 finding), and "merge this draft into that note" is
+"manually copy-paste, then discard." **Confirms finding #22 (no
+knowledge-evolution model) from a new angle: the dedup workflow is
+exactly where partial-supersedure becomes visible, and the schema
+silently can't model the resolution.**
+
+### Inefficiencies and UX pains
+
+1. **No "dedup mode" anywhere.** Four search modes (FTS5, vector,
+   hybrid, Ask) all answer "find what's near my query." None answers
+   "find what's redundant with this *exact paragraph* I'm about to
+   commit." A "compare to corpus" affordance — given a draft note's
+   full text, return top-K nearest existing notes with similarity
+   scores and side-by-side diff highlighting — would replace the
+   six-path ritual with one panel. The capture modal is the natural
+   home. **New finding.**
+
+2. **Ask can't frame what's missing.** When my notes don't cover a
+   topic, the Ask answer fills with training-grade general knowledge
+   without flagging "this part is from training, not your corpus."
+   A first-pass fix: when retrieval scores below a confidence
+   threshold for a sub-claim, prepend the answer with *"Your notes
+   don't directly cover X; here's general background, then the
+   closest related notes."* **Sharpens finding #14 — the failure
+   mode bites dedup queries specifically.**
+
+3. **NodePicker is title-only.** No content preview, no similarity
+   score, no inline view. For dedup, the picker is the wrong tool.
+   A hover-preview affordance (the existing `NotePreviewPopover`)
+   in NodePicker would close the gap with one component reuse.
+
+4. **No "merge into existing" or "supersede existing" actions.**
+   Once I've found a 70%-overlap match, the rational options are:
+   (a) commit a new note and add an edge — supported, (b) merge my
+   draft into the existing note — unsupported, manual copy-paste,
+   (c) supersede the existing with my draft — unsupported (no
+   SUPERSEDED_BY edge, no UI). **Confirms finding #22 a second time;
+   knowledge-evolution operations are unsupported as primitives.**
+
+5. **No side-by-side "compare two notes" view.** Once I've found a
+   candidate match, I want my draft and the candidate side-by-side
+   with semantic-similarity highlighting on overlapping concepts.
+   The Discover slide-out gets close (two NodeDetails side-by-side)
+   but only opens for pairs that already exist as nodes — my draft
+   isn't a node yet.
+
+6. **The capture modal has no "check first" affordance.** Ctrl+K and
+   Ctrl+Shift+Space go straight to save. A "compare to corpus"
+   button in the modal, fired on content-field blur, would surface
+   candidate dupes inline before commit. Vector similarity over
+   ~600 permanents is well under a second.
+
+7. **Typed-edge proposal isn't offered at save time.** When the
+   dedup check turns up the PLL note (ANALOGOUS_TO candidate), the
+   natural extension is "save this new note AND create an
+   ANALOGOUS_TO edge to [Note 47] in one action." The capture modal
+   has a generic "related" field that creates an untyped RELATED_TO
+   edge, but no way to pick a specific typed edge at save. After
+   save I navigate to the new node, run Suggest links, scroll, find
+   the PLL note again, accept. ~4 extra steps that could be one.
+
+### Verdict
+
+The dedup workflow is implicit — present as the four search modes,
+the graph, the NodePicker, and Ask — but assembled by the user
+every time. **There's no "before you write" surface, even though
+"before you write" is the most common moment in any zettelkasten
+where corpus knowledge changes a writing decision.** The
+highest-leverage fix is a "compare to corpus" affordance on the
+capture modal, returning top-K nearest notes with similarity scores
+and a side-by-side diff. Everything else (typed-edge proposal at
+save, merge/supersede actions, NodePicker preview) is downstream of
+having that surface.
+
+---
+
+## Scenario 11 — A mobile-first day
+
+Eight hours away from the laptop. Capture-only mode. The iOS
+Shortcut into `con` is my only path to the inbox. I have a podcast
+playing through headphones (Andrew Huberman on circadian biology
+— half-listening), a paper copy of Harari's *Sapiens* (rereading), a
+90-minute sprint-planning meeting where three ideas surface, and a
+walk in the late afternoon.
+
+### What I do
+
+**7:42 AM — Podcast.** Huberman mentions morning light and dopamine.
+I hold the Shortcut button on the lock screen. iOS prompt:
+*"Capture Idea."* I dictate: *"morning sunlight in the first 30 minutes
+triggers dopamine release in the SCN — useful for setting wake-rhythm
+reliably."* Submit. ~2s. **No source field in the Shortcut.** No way
+to note "this is from a podcast, episode 234." No way to tag.
+Capture is just title+content; the rest of the metadata the desktop
+flow assumes is unreachable from mobile.
+
+**9:15 AM — Book quote.** Reading Harari on the agricultural
+revolution. A line worth keeping verbatim: *"Wheat domesticated Homo
+sapiens, rather than vice versa — we serve its needs."* I open
+Shortcut, dictate the quote. The dictation engine drops the en-dash
+and renders "vice versa" as "vise versa." I'd fix it on the laptop
+later. **No verbatim flag; reading this back tonight I won't be sure
+if it's exact or my paraphrase.**
+
+**10:30 AM — Sprint planning, three ideas in twelve minutes:**
+
+1. *"Module test plan — we're missing the failure-mode matrix for the
+   PSU subsystem."*
+2. *"Naming convention — let's switch from CamelCase to snake_case
+   for backend symbols (Python idiom)."*
+3. *"Bug from yesterday — the FTS5 tokenizer rejects strings with
+   apostrophes; need to sanitize at the boundary."*
+
+Each captured via the Shortcut, ~3s. **All three look identical in
+the inbox: same source (none), same tag (none), same context (none).**
+At capture they were in three different mental tracks; the inbox
+flattens them.
+
+**11:45 AM — Walk after meeting.** A cross-domain spark: the FTS5
+sanitization bug and a thing I read about transformer tokenizer
+normalization. I dictate: *"FTS5 apostrophe rejection = transformer
+tokenizer NFKD problem from a different direction. Both are 'when
+does the punctuation count as part of the token.'"* ~4s. This is
+the kind of cross-domain connection the app's premise rewards. The
+capture has the spark but not the two endpoint notes it ties
+together.
+
+**Later — three more shower-thought captures throughout the day.**
+Five seconds apiece. Total mobile captures: six.
+
+**7:30 PM — Sit down at the laptop.** Inbox tile: 6 amber. Open
+`/inbox`. Six cards, oldest at top:
+
+```
+[1] morning sunlight in the first 30 minutes triggers dopamine release...
+[2] Wheat domesticated Homo sapiens, rather than vice versa...
+[3] Module test plan — we're missing the failure-mode matrix...
+[4] Naming convention — let's switch from CamelCase to snake_case...
+[5] Bug from yesterday — the FTS5 tokenizer rejects strings...
+[6] FTS5 apostrophe rejection = transformer tokenizer NFKD problem...
+```
+
+Each is title+content, no source, no tag, no context. **The inbox
+display doesn't even show the capture timestamp** — they're sorted
+FIFO by `created_at` but I can't see which was 7:42 AM vs. which was
+3:20 PM. The single strongest signal for reconstructing the mental
+track of each capture is invisible.
+
+### Processing each card
+
+**[1] Huberman dopamine.** Process flow calls Claude with the
+fleeting; Claude proposes: *"Morning light exposure (first 30 min)
+triggers SCN dopamine release, useful for circadian alignment."*
+Suggested tags: `biology`, `circadian`. Suggested source: "create
+new." **I have to remember it was Huberman, episode 234, ~7:42 AM.
+I can recall "Huberman Lab, this morning" but not the episode
+number.** Source-title "Huberman Lab," source-type=podcast, episode
+field blank. The audit trail is lost at capture and only partially
+reconstructable.
+
+**[2] Harari quote.** Claude correctly identifies it as a literature
+note candidate, proposes source "Harari, *Sapiens*." Good
+auto-completion. But: I can't tell from the inbox whether the quote
+is verbatim or dictation-drift. The fleeting says "vise versa"; the
+book says "vice versa"; I won't notice the dash issue without
+walking back to the paper book. ~3 minutes I won't spend tonight.
+
+**[3] Module test plan.** This is a *task*, not a knowledge note.
+The Process flow treats every fleeting as a permanent-candidate;
+there's no "this is an action item, dispatch elsewhere" branch. I
+append it to a structure note "Eurorack module testing — open
+questions." **The inbox has no taxonomy for action / idea / quote /
+reference / not-for-this-system.** All six fleetings get the same
+Process treatment, which is wrong for at least two.
+
+**[4] Naming convention.** Team norm, not zettelkasten material.
+Delete. The Inbox supports delete (good). What I'd really want is a
+"send to team-doc" action, out of scope.
+
+**[5] FTS5 apostrophe bug.** Engineering log, does belong in the
+corpus. Accept as permanent, tag `constellation`, `bug-postmortem`.
+~80 seconds, mostly tag selection.
+
+**[6] FTS5 ↔ transformer tokenizer.** **The gold one.** The
+processing flow proposes: *"Boundary tokenization parallels: FTS5
+punctuation rejection and transformer NFKD normalization share the
+question 'when is punctuation part of the token.'"* Suggested tags:
+`tokenization`, `cross-domain`. Suggested edges: ANALOGOUS_TO →
+[FTS5 sanitization gotcha] and → [Transformer tokenizer architectures].
+**The processing flow correctly inferred the two endpoints from the
+content text alone.** I accept all three (permanent + two edges) in
+one click. **This is the app at its best — processing-time inference
+compensating for what the capture-time interface couldn't carry.**
+
+### What was lost, what was recovered
+
+| # | Lost at capture | Recovered? | Cost |
+|---|---|---|---|
+| 1 | Podcast episode # | Partially (Huberman Lab; no episode) | ~30s, still partial |
+| 2 | Verbatim accuracy | Not without walking back to book | Won't do tonight |
+| 3 | "This is a task" framing | By human re-reading | ~20s |
+| 4 | "Not for the zettelkasten" framing | By delete | ~10s |
+| 5 | Project context (Constellation backend) | By human re-reading | ~20s |
+| 6 | Two specific edges to existing notes | Recovered by Claude inference at process time | ~0s (worked) |
+
+**Pattern: information lost at capture is roughly half-recoverable at
+processing time, but only when the content text is descriptive enough
+for Claude to infer it.** Thin fleetings ("look into PSU matrix")
+are much harder to reconstruct than rich fleetings.
+
+### Inefficiencies and UX pains
+
+1. **iOS Shortcut is title+content only.** No source, no tag, no
+   project, no "this is a task" flag. The capture interface is a
+   five-fields-too-narrow funnel. For ~5 extra seconds of UI
+   affordance, the Shortcut could pass `--tag` and `--project-context`
+   via Shortcuts' built-in "Ask Each Time" prompt — fast for a user
+   who has it set up. **New finding.**
+
+2. **Source attribution is missing on a significant fraction of the
+   corpus by the time it lands in the inbox.** The literature-note
+   model assumes you know the source when you capture; mobile
+   dictation violates that assumption multiple times per day.
+   **Confirms finding #5 from a new angle: source content invisible
+   to RAG is preceded by source attribution missing at capture. Sc 5
+   was 3 scenarios; this is the third.**
+
+3. **Inbox treats every fleeting as a permanent-candidate.** Wrong
+   for ~30% of mobile captures (tasks, team decisions, transient
+   observations). The Inbox needs a content-type taxonomy with the
+   Process flow branching by type. **Confirms finding #4 (Inbox is
+   FIFO and lonely) — the lack of taxonomy is the deeper version of
+   "FIFO."**
+
+4. **Dictation accuracy is unmarked.** A captured quote that should
+   be verbatim and a captured paraphrase look identical. A
+   `[verbatim]` toggle in the Shortcut (one tap) + a visual marker
+   in the inbox would let me know which captures need source-text
+   verification. **New finding.**
+
+5. **No timestamp display in inbox.** The fleetings are sorted FIFO
+   by `created_at`, but the display doesn't show *when*. For
+   reconstructing context ("which meeting was I in?") the timestamp
+   is the strongest signal. Trivial display fix, surprisingly
+   absent. **New finding.**
+
+6. **No "current project" context at capture time.** **Reconfirms
+   finding #1** (project context implicit) from the mobile angle —
+   Sc 1 named this for desktop captures with Ctrl+Shift+Space as the
+   workaround; mobile has no equivalent. **Adds a fifth scenario
+   to finding #1.**
+
+7. **Claude's processing-time inference is a quiet positive.** The
+   cross-domain card [6] worked because the content text was rich
+   enough for Claude to infer both endpoint notes correctly. When
+   fleetings are descriptive, the processing step can reconstruct
+   missing edge endpoints and tag guesses accurately. **Positive
+   finding — the inverse is where the loss is largest (thin
+   fleetings are harder to reconstruct than rich ones).** Implies
+   the right intervention isn't "add five fields to the Shortcut"
+   — it's "design the Shortcut to elicit richer descriptive text,
+   plus a minimal source-type/project tag pair."
+
+### Verdict
+
+Mobile capture works mechanically (the Shortcut is fast and reliable)
+but loses metadata the desktop flow assumes is present. Evening
+processing recovers some of it through Claude inference — and the
+better the fleeting text, the more recovers. The pattern suggests
+the right interventions are: (a) richer dictation prompts on the
+Shortcut (encourage descriptive content), (b) a minimal source-type
++ project tag pair on the Shortcut for ~5s extra UI, (c) a
+content-type taxonomy on the inbox so Process can branch instead of
+forcing a permanent shape on every capture. The biggest lift is on
+the inbox structure, not on the capture interface.
+
+---
+
+## Scenario 12 — Asking the graph to argue
+
+Not "what do I know about X?" but "make the best case for claim Y,
+using only notes from my graph." Today's claim, picked because I
+genuinely believe it and want to see if my corpus actually supports
+it: *"Phase-locked loops are pedagogically simpler to understand
+bottom-up (component → loop) than top-down (transfer function →
+implementation)."*
+
+My corpus on PLLs is the 22 notes from Scenario 4 plus the synthesis
+I saved at the end (~25 nodes, dense, well-linked). Some lean
+toward bottom-up (component descriptions, charge-pump topology); some
+lean top-down (transfer-function analyses, stability theorems); the
+survey paper note actively counters the claim (argues that linearized
+models are pedagogically necessary).
+
+### What I do
+
+**Path 1 — Ask with the claim as the query.**
+
+`/ask`: *"Build the strongest argument that PLLs are easier to learn
+bottom-up (component → loop) than top-down (transfer function →
+implementation), using only my notes."* ~10s. ~400 words. Cites 11
+nodes.
+
+The output reads like a balanced summary, not an argument. It opens
+*"Both bottom-up and top-down approaches have merit…"* and proceeds
+to a 50/50 framing. **Ask is reflexively neutral.** The retrieval
+grounding pulls back any rhetorical lean I asked for. Looking at
+the system prompt for `/ask` (I happen to know from the code), it
+emphasizes "ground in retrieved notes; acknowledge uncertainty;
+avoid speculation." That prompt is correct for factual Q&A and wrong
+for advocacy. **Confirms finding #2 (Ask is narrow) a fourth time
+— now ★ 4×.**
+
+**Path 2 — Synthesize with explicit advocacy framing.**
+
+`/synthesize`. Tag=`pll`, recency=Any. Pool=22. Add all to scope.
+Custom prompt: *"Build the strongest one-sided argument from these
+notes for the claim: PLLs are pedagogically simpler bottom-up than
+top-down. Treat this as a brief, not a survey. Quote notes that
+support the claim. Do not present counterarguments. ~700 words."*
+
+~13s. Output: a 740-word brief, citing 14 of 22 notes. Substantively
+better than Ask — it commits to the framing. Opens with: *"The
+bottom-up path begins with a component a designer can hold in mind
+— the phase detector, the loop filter, the VCO — and assembles them
+into a feedback system. The top-down path begins with a transfer
+function H(s) that abstracts these components into a single
+ratio…"*
+
+The argument is real, the citations are real (I spot-check three;
+they all map). **Synthesize will write a brief when you ask it to;
+Ask will not, even when you literally instruct it.** Finding worth
+naming.
+
+But: 14 cited notes include some I *know* lean against the claim.
+Citation 9 references the survey-2018 note that argues linearized
+models are pedagogically necessary. The synthesis quotes a single
+sentence from that note that, in isolation, can be read as
+supportive. **The synthesis is doing exactly what I asked:
+cherry-picking. It doesn't tell me which citations distort the
+source note's overall stance.** For real publication, I'd want a
+flag: "Note [Survey-2018] was cited supportingly but its overall
+stance is counter — review before publishing."
+
+**Path 3 — Hand-curated SUPPORTS-only scope.**
+
+The most "graph-native" approach: build a scope of only notes that
+have a SUPPORTS edge toward the claim, then synthesize.
+
+Problem: my notes don't have SUPPORTS edges *toward a claim*. They
+have edges to *other notes*. The graph schema models "this note
+SUPPORTS that note," not "this note SUPPORTS this argumentative
+position." **There's no claim-node primitive.**
+
+I improvise. Write a new permanent: *"**CLAIM-PLL-pedagogy:** PLLs
+are easier to learn bottom-up than top-down."* Save it. Now I want
+to walk through the 22 PLL notes and tag each: SUPPORTS this claim
+/ CONTRADICTS this claim / NEUTRAL. The graph would then express my
+position-taking explicitly.
+
+**This is not a workflow the app suggests or supports.** No "tag
+every node in a tag-filtered set against this target node"
+affordance. I'd open each of 22 notes individually, click Add Edge,
+pick the claim node, pick SUPPORTS or CONTRADICTS, submit. ~30s per
+node. ~11 minutes of click-work for an analytical pass I'd happily
+do if it took 90 seconds via a batch UI.
+
+I bail after tagging 5 of 22. Of those: 3 SUPPORTS, 1 CONTRADICTS,
+1 NEUTRAL.
+
+Run Synthesize with the new manual scope: the 3 SUPPORTS-linked
+notes plus the claim node. Custom prompt: *"Build the brief from
+this curated scope. ~500 words."* ~9s.
+
+**Output is sharper than Path 2.** Tighter, more committed, less
+hedging. Three notes' worth of evidence is thinner than 22, but
+the signal-to-noise is higher — every cited note pulls in the same
+direction. **This is the quiet win: Synthesize over a
+purpose-curated scope works.** The blocker is the curation
+friction, not the synthesis.
+
+**Path 4 — Edge-semantics test.**
+
+The synthesis at Path 3 used a scope explicitly curated by edge
+type. Does the synthesis output behave differently when the edges
+are in the graph vs. just used to filter scope manually?
+
+I re-run with *all 22 PLL notes* in scope, relying on the SUPPORTS
+edges I added (5 of them) and the 1 CONTRADICTS edge to influence
+retrieval. Same custom prompt. ~12s.
+
+**Output is identical in character to Path 2's all-22 brief**, with
+the same cherry-picking. The 3 SUPPORTS edges had no observable
+effect on which notes the synthesis emphasized. The 1 CONTRADICTS
+edge had no observable effect on the synthesis avoiding that note.
+The graph rhetorical structure is invisible to the generation
+pipeline.
+
+**Confirms finding #21 with new evidence and from a new direction.**
+Sc 9 showed CONTRADICTS edges don't influence Ask retrieval/generation.
+Sc 12 shows SUPPORTS edges don't influence Synthesize either. The
+typed-edge model is invisible to both generation surfaces and to
+both edge types. **Finding #21 is now settled across two scenarios
+with both major edge-relationship verbs (CONTRADICTS, SUPPORTS) and
+both major generation surfaces (Ask, Synthesize).** The graph
+stores rhetorical relationships that the generation pipeline
+silently flattens.
+
+**Path 5 — What a real research assistant would do.**
+
+A good research assistant building a brief would:
+
+1. Read the corpus, identify notes that bear on the claim.
+2. Build the strongest one-sided argument from supporting notes.
+3. Surface the strongest counterargument from contradicting notes.
+4. Flag citations that are weakest or quoted out of overall-stance
+   context.
+5. Identify gap notes — claims that *would* support the argument
+   but for which I have no evidence.
+
+The app gives me (2) via Synthesize with cherry-picking prompt. It
+gives me (1) implicitly via retrieval but not as a structured
+output. It doesn't give me (3) without a second Synthesize pass
+with inverted prompt. It doesn't give me (4) at all. It doesn't
+give me (5) at all. **The brief is the easy half of argument
+assembly; the audit is the hard half and it's missing.**
+
+### Inefficiencies and UX pains
+
+1. **Ask refuses to argue.** Even with explicit "make the case for
+   X" framing, Ask reverts to balanced summary. The system prompt
+   is wrong for advocacy queries. A `mode=brief` flag on `/ask` (or
+   a separate "Argue" surface) with a different system prompt —
+   *"the user has explicitly asked for a one-sided brief; do not
+   introduce counterarguments unless asked"* — would unlock advocacy
+   queries that today require a Synthesize detour. **New finding.**
+
+2. **Synthesize will argue, but won't audit.** Synthesize cherry-picks
+   when asked to (correct under the prompt), but doesn't flag which
+   citations are weakest, which are quoted against overall stance,
+   or which CONTRADICTS-linked notes were omitted. A post-generation
+   "argument audit" pass — given the brief, list strongest
+   counterarguments from the same scope, flag any citation whose
+   overall stance contradicts how it was used — would close the
+   loop. **New finding.**
+
+3. **No claim-node primitive.** A "claim" is a first-class object in
+   argumentation (the thing supported or contested by evidence), but
+   in the graph it's just another permanent. Position-taking via
+   SUPPORTS/CONTRADICTS edges to a claim node works mechanically
+   (I made it work) but requires inventing the convention and
+   curating manually. A "create as claim" affordance — a structure-
+   note-like type for claims, with a built-in UI for tagging
+   surrounding notes as SUPPORTS/CONTRADICTS/NEUTRAL toward it —
+   would make this workflow native. **New finding.**
+
+4. **Batch-tag-relative-to-target isn't a thing.** Once I had the
+   claim node, I wanted to walk 22 candidates and assign each a
+   stance toward it. The app forces 22 individual open-edit-submit
+   cycles. A "batch-classify against this target node" surface —
+   show all 22 candidates as cards, three buttons each (SUPPORTS /
+   CONTRADICTS / NEUTRAL) — would compress 11 minutes to 90 seconds.
+   **New finding (related to but distinct from finding #9's cluster
+   suggest-links).**
+
+5. **Typed edges are invisible to Synthesize too.** Same failure
+   mode as Sc 9's CONTRADICTS-invisible-to-Ask, in the new
+   direction: SUPPORTS edges don't influence Synthesize generation
+   either. The graph's rhetorical structure is dead weight at
+   generation time on both surfaces. **Confirms finding #21 a
+   second time, from a new generation surface and a new edge type.
+   Strongly settled.**
+
+6. **No gap-analysis affordance.** Building a brief, the most
+   valuable thing a research assistant can tell you is "you would
+   benefit from a note that says X — you don't have one." Synthesize
+   doesn't do this. Ask doesn't do this. A "what's missing from my
+   evidence base for this claim?" mode — likely a custom prompt
+   over the scope plus a small retrieval pass — is straightforward
+   to build and currently absent. **New finding.**
+
+7. **Quiet win: Synthesize over a purpose-curated scope is real.**
+   When I pre-curated to 3 SUPPORTS-only notes, the output was
+   tighter than the 22-note version. Scoping for *rhetorical
+   purpose*, not just topical relevance, is a workflow Synthesize
+   handles well — when I do the curation. **Mirrors finding #18
+   (dense-cluster Synthesize) in a new direction: purpose-curated
+   Synthesize is also a quiet win, blocked only by the curation
+   friction.**
+
+### Verdict
+
+The app can write a brief from your own notes — but only if you do
+the rhetorical curation yourself. The directed, typed-edge model
+promises something more: a graph where SUPPORTS and CONTRADICTS
+edges *behave like positions*, where retrieval is steerable by
+stance, where the generation step audits its own cherry-picking.
+The promise is half-built — the storage is there; the generation
+pipeline doesn't read it. Sc 9 named this for CONTRADICTS-and-Ask;
+Sc 12 confirms it for SUPPORTS-and-Synthesize. **Finding #21 is
+now settled.** The fix is one of the highest-leverage moves left in
+the system: when RAG assembles context, it should look at edge
+types, weight nodes by edge type, surface CONTRADICTS-linked
+counterarguments alongside SUPPORTS-cited evidence, and audit its
+own one-sidedness. Until that happens, the graph is a beautiful
+storage layer for a generation pipeline that ignores it.
+
+---
+
+## Cross-cutting findings — consolidated after scenarios 4–12
+
+Marker convention: **★ 3×** = confirmed across three or more scenarios;
+**★ 4×** = confirmed four or more times. Findings settled in the
+previous round (#6, #8, #10) were not re-examined here.
 
 | # | Theme | Where it shows up |
 |---|---|---|
-| 1 | **Project context is implicit, not first-class** | Scenarios 1, 2, 3 — and 4 (hub notes are empty containers, no narrative scaffolding) |
-| 2 | **Ask is narrow** — no scope, no iteration, no reader-mode, no speculative-mode | Scenarios 2, 5, 6 |
+| 1 | **★ 4× Project context is implicit, not first-class** | Scenarios 1, 2, 3, 4, 11 — Sc 11 adds the mobile angle (no current-project context on the Shortcut) |
+| 2 | **★ 4× Ask is narrow** — no scope, no iteration, no reader-mode, no speculative-mode, *no advocacy mode* | Scenarios 2, 5, 6, 12 — Sc 12 sharpens: Ask refuses to argue even when explicitly instructed |
 | 3 | **No free-writing surface; no iteration on synthesis** | Scenarios 3, 5 — confirmed and sharpened |
-| 4 | **Inbox is FIFO and lonely** | Scenario 1 |
-| 5 | **Source content is invisible to RAG; literature notes are the only entry point** | Scenarios 2, 4 — confirmed |
-| 6 | **★ 3× Discover is the actual serendipity *and* contradiction-noticing engine** | Scenarios 1, 6, 9 — Sc 9 sharpens further: AI classifier reasons well about scope mismatch on contradictions |
+| 4 | **Inbox is FIFO and lonely; no content-type taxonomy** | Scenarios 1, 11 — Sc 11 sharpens: ~30% of mobile captures are tasks/team-norms/transient observations forced into permanent-candidate shape |
+| 5 | **★ 3× Source content is invisible to RAG; *and* source attribution is missing at capture on mobile** | Scenarios 2, 4, 11 — Sc 11 adds the upstream half: mobile captures drop source by default |
+| 6 | **★ 3× confirmed — not re-examined this round.** Discover is the actual serendipity *and* contradiction-noticing engine | Scenarios 1, 6, 9 |
 | 7 | **Keyboard nav stops at two shortcuts** | Scenarios 1, 4 (link curation), 7 (maintenance click work) |
-| 8 | **★ 3× Tags are flat; sub-topics, themes, projects, sub-domains all want hierarchy** | Scenarios 1, 3, 6, 8 — confirmed four times |
-| 9 | **Linking is per-node; no cluster operations (batch suggest-links, dedup)** | Scenarios 4, 8 — second data point, redundancy bites worse at higher cluster size |
-| 10 | **★ 3× Coverage density / data quality / maintenance signals aren't visualized or filterable anywhere** | Scenarios 4, 5, 7 — Sc 7 sharpens: I dropped into raw SQL three times in one pass |
-| 11 | **Edge-type vocabulary is one-dimensional — author-stance only; missing literature-stance (BUILDS_ON, APPLIES_TO, MEASURES) *and* evolution-stance (SUPERSEDED_BY, SCOPED_TO, RESOLVES) verbs** | Scenarios 4, 9 — complicated in a third direction by Sc 9 |
+| 8 | **★ 3× confirmed — not re-examined this round.** Tags are flat; sub-topics, themes, projects, sub-domains all want hierarchy | Scenarios 1, 3, 6, 8 |
+| 9 | **Linking is per-node; no cluster or batch operations (suggest-links/cluster, batch-tag-against-target)** | Scenarios 4, 8 — and Sc 12 adds a third data point: 11 minutes of click-work to tag 22 notes against a claim node |
+| 10 | **★ 3× confirmed — not re-examined this round.** Coverage density / data quality / maintenance signals aren't visualized or filterable | Scenarios 4, 5, 7 |
+| 11 | **Edge-type vocabulary is one-dimensional — author-stance only; missing literature-stance (BUILDS_ON, APPLIES_TO, MEASURES) *and* evolution-stance (SUPERSEDED_BY, SCOPED_TO, RESOLVES) verbs** | Scenarios 4, 9 |
 | 12 | **Saved syntheses use the *wrong* edge verb (COLLECTS instead of CITES/DERIVES_FROM)** | Scenario 4 |
-| 13 | **Graph at corpus scale is a hairball; visual vocabulary commits to topology, ill-fitted to maintenance** | Scenarios 6 (discovery), 7 (maintenance) — same shortfall from two angles |
-| 14 | **Silent confabulation in synthesis; failure mode is monotonic in corpus thinness** | Scenarios 5, 8 — Sc 8 sharpens: new-domain users have no priors and are the worst-positioned reviewers |
+| 13 | **Graph at corpus scale is a hairball; visual vocabulary commits to topology, ill-fitted to maintenance** | Scenarios 6 (discovery), 7 (maintenance) |
+| 14 | **★ 3× Silent confabulation; failure mode is monotonic in corpus thinness *and* bites dedup-style queries** | Scenarios 5, 8, 10 — Sc 10 adds: Ask fills the gap with training-grade general knowledge rather than reporting "your notes don't cover this" |
 | 15 | **`EditableField` blur-to-save is wrong for long-form editing** | Scenario 5 |
-| 16 | **Import chunker locked at import time; fails predictably on transcripts/prose-without-headings** | Scenarios 4, 8 — Sc 8 confirms with a new failure mode (podcast transcripts) |
+| 16 | **Import chunker locked at import time; fails predictably on transcripts/prose-without-headings** | Scenarios 4, 8 |
 | 17 | **`save-answer` works (auto-edges, embed-inline) — a quiet win** | Scenario 4 — positive |
-| 18 | **Synthesize-over-dense-cluster is a quiet win — *but unavailable until density is reached*** | Scenario 4 (positive); Sc 8 (inverse: cost of getting to density from zero) |
-| 19 | **No maintenance filters/predicates in Notes; graph isn't addressable for an arbitrary result set** | Scenario 7 — new |
-| 20 | **No "domain scaffolding" affordance for fresh corpora — Synthesize forces prose where a structural map is wanted** | Scenario 8 — new |
-| 21 | **Typed edges are structurally present but semantically invisible to the RAG pipeline (CONTRADICTS has zero effect on Ask)** | Scenario 9 — new; the single biggest miss in the typed-edge model |
-| 22 | **Schema has no knowledge-evolution model: no SUPERSEDED_BY edges, no `resolved_at`/`resolved_by_node_id` on edges, classifier rationale discarded after apply** | Scenario 9 — new |
-| 23 | **AI bridge classifier reasons well about scope mismatch and gives honest negatives — positive** | Scenarios 6 (NO_CONNECTION on shallow analogies), 9 (correct scope-mismatch read on the VCF contradiction) — positive, twice |
+| 18 | **Synthesize-over-dense-cluster is a quiet win — *and so is synthesize-over-purpose-curated-scope*** | Scenario 4 (dense-cluster, positive); Sc 8 (inverse: cost to reach density); Sc 12 (purpose-curated scope, positive — a new dimension) |
+| 19 | **No maintenance filters/predicates in Notes; graph isn't addressable for an arbitrary result set** | Scenario 7 |
+| 20 | **No "domain scaffolding" affordance for fresh corpora — Synthesize forces prose where a structural map is wanted** | Scenario 8 |
+| 21 | **Typed edges are structurally present but semantically invisible to the RAG pipeline — *both* CONTRADICTS (Ask) *and* SUPPORTS (Synthesize)** | Scenarios 9, 12 — Sc 12 settles this across both generation surfaces and both major edge-relationship verbs |
+| 22 | **Schema has no knowledge-evolution model: no SUPERSEDED_BY edges, no `resolved_at`/`resolved_by_node_id`, classifier rationale discarded after apply, *and no merge/supersede actions in the UI*** | Scenarios 9, 10 — Sc 10 surfaces the dedup-time half: partial-supersedure has no primitive |
+| 23 | **AI bridge classifier reasons well about scope mismatch and gives honest negatives — positive** | Scenarios 6, 9 — positive |
+| 24 | **No "compare to corpus" / dedup affordance before capture; the four search modes + graph + Ask + NodePicker all answer adjacent questions, none answers "what's redundant with this paragraph"** | Scenario 10 — new |
+| 25 | **Ask doesn't frame negative findings; can't say "your notes don't cover this," fills with training instead** | Scenario 10 — new (closely related to #14 but distinct) |
+| 26 | **NodePicker is title-only; wrong tool for evaluating fuzzy matches at capture time** | Scenario 10 — new |
+| 27 | **iOS Shortcut capture is title+content only; no source, no tag, no project, no content-type** | Scenario 11 — new |
+| 28 | **No verbatim/paraphrase flag; no timestamp display in inbox** | Scenario 11 — new |
+| 29 | **Claude's processing-time inference is a quiet positive — partially compensates for thin captures when the content text is descriptive enough** | Scenario 11 — positive |
+| 30 | **Ask has no advocacy mode; the system prompt is fixed to balanced summary and resists explicit instructions to argue** | Scenario 12 — new |
+| 31 | **Synthesize cherry-picks without self-audit; doesn't flag citations quoted against their overall stance, doesn't surface omitted CONTRADICTS-linked counterarguments** | Scenario 12 — new |
+| 32 | **No claim-node primitive; no batch-tag-relative-to-target workflow** | Scenario 12 — new |
+| 33 | **No gap-analysis affordance — "what evidence is missing from my graph to support this claim?" is a workflow neither Ask nor Synthesize gives** | Scenario 12 — new |
 
 ---
 
@@ -1340,7 +1953,38 @@ Findings marked **★ 3×** are now confirmed across three or more scenarios.
 - **Persist classifier rationale on the edge.** Add a
   `classifier_rationale` TEXT column to edges; show it in the side
   panel next time the pair is revisited. Tiny schema migration,
-  compounding value. New, from Sc 9.
+  compounding value. From Sc 9.
+- **"Compare to corpus" button on the capture modal.** Given a draft
+  note's full text, return top-K nearest existing notes with similarity
+  scores; render side-by-side for a quick redundancy/overlap read.
+  Vector search over ~600 permanents is well under a second. New,
+  from Sc 10 — highest-leverage pre-commit affordance the app is
+  currently missing.
+- **`NotePreviewPopover` inside `NodePicker`** so the picker becomes
+  usable for evaluating fuzzy matches, not just selecting known
+  targets. One-component reuse. New, from Sc 10.
+- **Capture timestamp column in inbox display.** Trivial, surprisingly
+  absent. The strongest signal for reconstructing context on
+  thin-content fleetings. New, from Sc 11.
+- **Verbatim/paraphrase flag on the iOS Shortcut + inbox marker.**
+  One tap at capture; a visual chip in the inbox. New, from Sc 11.
+- **Optional `--tag` and `--project-context` prompts on the iOS
+  Shortcut.** Shortcuts supports "Ask Each Time" inputs — ~5s of
+  added UI for the user who configures it. New, from Sc 11.
+- **`mode=brief` flag on `/ask`** with an advocacy-mode system prompt
+  ("the user has explicitly asked for a one-sided brief; do not
+  introduce counterarguments unless asked"). Unlocks advocacy queries
+  without a Synthesize detour. New, from Sc 12.
+- **Negative-finding framing in `/ask`.** When retrieval confidence
+  for a sub-claim falls below a threshold, prepend the answer with
+  *"Your notes don't directly cover X; here's general background,
+  then the closest related notes."* Replaces silent confabulation
+  with a labeled hedge. New, from Sc 10 — sharpens finding #14.
+- **Save-time typed-edge suggestion in the capture modal.** When the
+  dedup check turns up a candidate match, offer "save AND create
+  edge: [type chip selector]" in one action. Today the user has to
+  navigate to the new node post-save and run Suggest links separately.
+  New, from Sc 10.
 
 **Tier 2 — multi-day, high payoff:**
 
@@ -1382,7 +2026,42 @@ Findings marked **★ 3×** are now confirmed across three or more scenarios.
   miss in the typed-edge model.
 - **`resolved_at` + `resolved_by_node_id` on edges** + UI for the
   resolved-edge state. Lets CONTRADICTS edges age into "historical"
-  without being deleted. New, from Sc 9.
+  without being deleted. From Sc 9.
+- **Inbox content-type taxonomy + branched Process flow.** Tag each
+  fleeting as `idea` / `task` / `quote` / `observation` / `not-for-
+  this-system` at capture-or-process time; the Process flow then
+  branches: ideas go to permanent-candidate, tasks dispatch to a
+  todo destination (or a structure note), quotes route through
+  literature-note creation with verbatim flag, etc. The current
+  one-size-fits-all permanent-candidate flow is wrong for ~30% of
+  mobile captures. New, from Sc 11.
+- **Claim-node primitive + batch-tag-against-target UI.** Add a
+  `claim` node type (or a flag on permanents). When a node is a
+  claim, the detail view offers a "tag candidates" mode: pick a tag
+  filter, get all matching notes shown as cards with three buttons
+  each — SUPPORTS / CONTRADICTS / NEUTRAL. One click per note; 22
+  notes in ~90 seconds. Today's open-edit-submit cycle takes ~11
+  minutes for the same work. New, from Sc 12.
+- **Synthesis "argument audit" pass.** Given a Synthesize-generated
+  brief plus the scope it ran on, produce: (a) the strongest
+  counterargument findable in the same scope, (b) a per-citation
+  stance check ("Note [X] was cited supportingly but its overall
+  stance is counter — flagged"), (c) gap notes ("evidence missing
+  for sub-claim Y"). Custom-prompt over the existing scope + a
+  small re-retrieval; the underlying primitives all exist. New,
+  from Sc 12 — the audit is the missing half of argument
+  assembly.
+- **Gap-analysis affordance on a scope.** Given a tag or claim node
+  plus a question, return: "your evidence base is missing notes
+  about X, Y, Z." Custom-prompt + retrieval over the scope's tag
+  neighborhood. New, from Sc 12.
+- **Mobile Shortcut redesign — descriptive elicitation, not field
+  expansion.** Rather than adding source/tag/project fields (which
+  burn time at capture), redesign the dictation prompt to elicit
+  richer descriptive content ("what is it, what's it from, why does
+  it matter?"). Combine with a minimal source-type chip + a single
+  optional project tag. The processing-time inference (finding #29)
+  works better on rich text than on more metadata. New, from Sc 11.
 
 **Tier 3 — bigger; re-shapes the model:**
 
@@ -1429,7 +2108,15 @@ Findings marked **★ 3×** are now confirmed across three or more scenarios.
 - **Post-import cross-domain bridges pass** — after importing a new
   cluster, Discover runs (new × existing) only, sorted by
   mid-similarity. Inverts the within-domain dominance bias that buries
-  cross-corpus pairs at the bottom of the Bridges list. New, from Sc 8.
+  cross-corpus pairs at the bottom of the Bridges list. From Sc 8.
+- **Merge and supersede as first-class operations.** "Merge draft into
+  existing node" and "supersede existing with this draft" should be
+  buttons on the dedup-check panel and on the node detail view, not
+  manual copy-paste + soft-delete + write-a-structure-note routines.
+  Pair this with the SUPERSEDED_BY edge type (Tier 1 from Sc 9) and
+  the resolved-edge state on existing edges (Tier 2). Together these
+  turn knowledge-evolution from a workaround into a primitive
+  workflow. New, from Sc 10 — and the deeper version of finding #22.
 
 ---
 
@@ -1457,3 +2144,30 @@ Sc 7–9 is the evidence broad enough to treat as settled. The original
 caveat carries forward: as the author of these scenarios I see the
 code beneath the surface, so some pains may be one-edit fixes
 overestimated and some positives may be under-credited.*
+
+*Third addendum captured 2026-05-15, same session as the second. Three
+more scenarios deeper — twelve total — and the biggest finding from
+the previous round (#21, typed edges invisible to RAG) is now settled
+across both major generation surfaces and both major
+edge-relationship verbs. Sc 12's Path 4 was the definitive negative:
+adding SUPPORTS edges to my PLL notes had zero observable effect on
+Synthesize output. If serendipity is what Discover delivers and the
+graph stores, then the inverse miss — generation ignoring stored
+semantics — is the most expensive half-built feature in the system.
+Two findings (#1 project context implicit, #2 Ask is narrow) crossed
+into ★ 4× this round. Two new quiet positives appeared: (a)
+Claude's processing-time inference compensates for thin mobile
+captures when the content text is rich enough (Sc 11 card [6] — the
+cross-domain spark recovered cleanly), and (b) Synthesize over a
+purpose-curated scope produces tighter, more committed output than
+Synthesize over a topic-filtered scope (Sc 12 Path 3) — a new
+dimension of finding #18. Scenario 10 surfaced an entire category
+the walkthroughs had been silent on: the "before you write" moment,
+where the absence of a dedup affordance forces a six-path ritual
+every commit. That's now the highest-leverage Tier 1 add. The
+caveats also carry: I see the code beneath the surface, so some
+proposed fixes may be one-edit moves I'm overestimating, and the
+quiet wins (`save-answer` auto-edges, AI classifier on Bridges,
+dense-cluster Synthesize, purpose-curated Synthesize, processing-
+time inference on rich captures) may still be more important than
+their cumulative billing here suggests.*
