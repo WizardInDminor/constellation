@@ -19,6 +19,7 @@ import type {
   RagResponse,
   TagRef,
 } from "@/lib/api";
+import { applyPoolFilters, type TagMode } from "./filterPool";
 
 const TYPE_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
@@ -26,11 +27,6 @@ const TYPE_COLORS: Record<string, string> = {
   structure: "bg-purple-100 text-purple-700",
   fleeting: "bg-amber-100 text-amber-700",
 };
-
-function isWithinDays(iso: string, days: number): boolean {
-  const ms = Date.now() - new Date(iso).getTime();
-  return ms <= days * 24 * 60 * 60 * 1000;
-}
 
 export default function SynthesizePage() {
   const router = useRouter();
@@ -70,23 +66,16 @@ export default function SynthesizePage() {
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [tagMode, setTagMode] = useState<TagMode>("or");
   const [recentDays, setRecentDays] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<NodeRef[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const filteredPool = useMemo(() => {
-    return pool.filter((n) => {
-      if (recentDays !== null && !isWithinDays(n.created_at, recentDays))
-        return false;
-      if (selectedTagIds.size > 0) {
-        const noteTagIds = new Set(n.tags.map((t) => t.id));
-        const overlap = [...selectedTagIds].some((id) => noteTagIds.has(id));
-        if (!overlap) return false;
-      }
-      return true;
-    });
-  }, [pool, selectedTagIds, recentDays]);
+  const filteredPool = useMemo(
+    () => applyPoolFilters(pool, { selectedTagIds, recentDays, tagMode }),
+    [pool, selectedTagIds, recentDays, tagMode],
+  );
 
   function toggleTag(id: string) {
     setSelectedTagIds((prev) => {
@@ -244,6 +233,33 @@ export default function SynthesizePage() {
                 {t.name}
               </button>
             ))}
+            {selectedTagIds.size > 1 && (
+              <div
+                className="ml-auto inline-flex items-center rounded-full border border-gray-200 overflow-hidden text-xs"
+                title="OR: a note needs any selected tag. AND: a note needs all of them."
+              >
+                <button
+                  onClick={() => setTagMode("or")}
+                  className={`px-2.5 py-1 ${
+                    tagMode === "or"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  any
+                </button>
+                <button
+                  onClick={() => setTagMode("and")}
+                  className={`px-2.5 py-1 border-l border-gray-200 ${
+                    tagMode === "and"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white text-gray-500 hover:text-gray-800"
+                  }`}
+                >
+                  all
+                </button>
+              </div>
+            )}
           </div>
         )}
 
