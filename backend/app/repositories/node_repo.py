@@ -148,22 +148,53 @@ async def list_nodes(
     type_: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    no_summary: bool = False,
+    no_outgoing: bool = False,
+    no_edges: bool = False,
+    summary_max_length: int | None = None,
 ) -> tuple[list[NodeSummary], int]:
+    """Paginated node list. ADR-055 — schema-level filters AND-compose.
+
+    Filters:
+    - no_summary: summary IS NULL or empty string.
+    - no_outgoing: id absent from `edges.from_id`.
+    - no_edges: id absent from both edges.from_id and edges.to_id (stricter).
+    - summary_max_length: non-null summaries shorter than the given length.
+    """
     offset = (page - 1) * page_size
 
+    where_clauses = ["deleted_at IS NULL"]
+    params: list = []
+    if type_ is not None:
+        where_clauses.append("type = ?")
+        params.append(type_)
+    if no_summary:
+        where_clauses.append("(summary IS NULL OR summary = '')")
+    if no_outgoing:
+        where_clauses.append("id NOT IN (SELECT from_id FROM edges)")
+    if no_edges:
+        where_clauses.append(
+            "id NOT IN (SELECT from_id FROM edges UNION SELECT to_id FROM edges)"
+        )
+    if summary_max_length is not None:
+        where_clauses.append("summary IS NOT NULL AND LENGTH(summary) < ?")
+        params.append(summary_max_length)
+
+    where_sql = " AND ".join(where_clauses)
+
     cursor = await db.execute(
-        "SELECT COUNT(*) FROM nodes WHERE deleted_at IS NULL AND type = COALESCE(?, type)",
-        (type_,),
+        f"SELECT COUNT(*) FROM nodes WHERE {where_sql}",  # noqa: S608
+        params,
     )
     total: int = (await cursor.fetchone())[0]
 
     cursor = await db.execute(
-        """SELECT id, type, title, summary, created_at, updated_at, processed_at
-           FROM nodes
-           WHERE deleted_at IS NULL AND type = COALESCE(?, type)
-           ORDER BY created_at DESC
-           LIMIT ? OFFSET ?""",
-        (type_, page_size, offset),
+        f"""SELECT id, type, title, summary, created_at, updated_at, processed_at
+            FROM nodes
+            WHERE {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?""",  # noqa: S608
+        [*params, page_size, offset],
     )
     rows = await cursor.fetchall()
     node_ids = [r["id"] for r in rows]

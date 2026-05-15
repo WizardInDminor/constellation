@@ -80,8 +80,24 @@ async def list_nodes(
     type: Annotated[str | None, Query(description="Filter by node type")] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    no_summary: Annotated[bool, Query(description="Only notes with empty/null summary")] = False,
+    no_outgoing: Annotated[bool, Query(description="Only notes with no outgoing edges")] = False,
+    no_edges: Annotated[bool, Query(description="Only notes with no edges in either direction")] = False,
+    summary_max_length: Annotated[
+        int | None,
+        Query(ge=1, description="Only notes whose non-null summary is shorter than N chars"),
+    ] = None,
 ) -> Paginated[NodeSummary]:
-    items, total = await node_repo.list_nodes(db, type_=type, page=page, page_size=page_size)
+    items, total = await node_repo.list_nodes(
+        db,
+        type_=type,
+        page=page,
+        page_size=page_size,
+        no_summary=no_summary,
+        no_outgoing=no_outgoing,
+        no_edges=no_edges,
+        summary_max_length=summary_max_length,
+    )
     return Paginated(
         items=items,
         total=total,

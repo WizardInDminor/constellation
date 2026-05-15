@@ -132,7 +132,7 @@ One at a time, ~3 days each. ADRs ship inside the relevant PR.
 - **Acceptance:** Open Home → see three sections, each with ≤10 items, dated within the chosen window. Empty states render correctly when a section has zero items.
 - **ADR required:** **ADR-054 — "Recent activity" windowing semantics.** Probably "last 7 days, no last-visit tracking" but worth recording.
 
-### B2 — Schema-level Notes filters
+### B2 — Schema-level Notes filters ✅ shipped 2026-05-15
 
 - **Description:** Add chip filters on `/notes`: "no summary," "no outgoing edges," "no edges either," "edge-count = 0," "summary length < N." Backend: composable filter API on `node_repo.list_nodes`. Frontend: chip row that combines with the existing tag/type/recency filters.
 - **Cost:** 2.5 days. ~15h backend (filter composition framework + 5 predicates + tests) + chip UI + composable-filter ADR.

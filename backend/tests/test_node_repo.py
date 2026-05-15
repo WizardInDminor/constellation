@@ -92,6 +92,136 @@ async def test_list_nodes_type_filter(db):
     assert items[0].type == "fleeting"
 
 
+# ── ADR-055 schema-level filters (Bucket B — B2) ───────────────────────────────
+
+
+async def test_list_nodes_no_summary_filter_matches_null_and_empty(db):
+    from app.models import NodeUpdate
+
+    with_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="With", content="x", summary="present")
+    )
+    without_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="Without", content="x")
+    )
+    empty_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="Empty", content="x", summary="present")
+    )
+    # Force an empty-string summary via update (NodeUpdate uses model_fields_set)
+    await node_repo.update(db, empty_summary.id, NodeUpdate(summary=""))
+
+    items, total = await node_repo.list_nodes(db, no_summary=True)
+    ids = {n.id for n in items}
+    assert total == 2
+    assert without_summary.id in ids
+    assert empty_summary.id in ids
+    assert with_summary.id not in ids
+
+
+async def test_list_nodes_no_outgoing_filter(db):
+    from app.models import EdgeCreate
+
+    linked = await node_repo.create_permanent(db, PermanentCreate(title="Linked", content="x"))
+    target = await node_repo.create_permanent(db, PermanentCreate(title="Target", content="y"))
+    isolated = await node_repo.create_permanent(
+        db, PermanentCreate(title="Isolated", content="z")
+    )
+    from app.repositories import edge_repo as er
+
+    await er.create(db, EdgeCreate(from_id=linked.id, to_id=target.id, type="SUPPORTS"))
+
+    items, total = await node_repo.list_nodes(db, no_outgoing=True)
+    ids = {n.id for n in items}
+    # `linked` has an outgoing edge — excluded. `target` (only incoming) and
+    # `isolated` (no edges) survive.
+    assert linked.id not in ids
+    assert target.id in ids
+    assert isolated.id in ids
+
+
+async def test_list_nodes_no_edges_filter_excludes_either_direction(db):
+    from app.models import EdgeCreate
+
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    isolated = await node_repo.create_permanent(
+        db, PermanentCreate(title="Isolated", content="z")
+    )
+    from app.repositories import edge_repo as er
+
+    await er.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+
+    items, total = await node_repo.list_nodes(db, no_edges=True)
+    ids = {n.id for n in items}
+    assert a.id not in ids  # has outgoing
+    assert b.id not in ids  # has incoming
+    assert isolated.id in ids
+    assert total == 1
+
+
+async def test_list_nodes_summary_max_length_excludes_long_and_null(db):
+    short = await node_repo.create_permanent(
+        db, PermanentCreate(title="Short", content="x", summary="ok")
+    )
+    long_ = await node_repo.create_permanent(
+        db, PermanentCreate(
+            title="Long",
+            content="x",
+            summary="this is a longer summary line than the limit",
+        )
+    )
+    no_sum = await node_repo.create_permanent(db, PermanentCreate(title="None", content="x"))
+
+    items, _ = await node_repo.list_nodes(db, summary_max_length=20)
+    ids = {n.id for n in items}
+    assert short.id in ids
+    assert long_.id not in ids
+    # Null summary does NOT match summary_max_length (ADR-055)
+    assert no_sum.id not in ids
+
+
+async def test_list_nodes_filters_and_compose(db):
+    """no_summary AND no_edges narrows the result — pure-AND semantic."""
+    from app.models import EdgeCreate
+
+    target = await node_repo.create_permanent(db, PermanentCreate(title="T", content="x"))
+    linked_no_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="Linked", content="y")
+    )  # no summary, but has edge
+    isolated_with_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="Iso", content="z", summary="present")
+    )  # isolated, but has summary
+    isolated_no_summary = await node_repo.create_permanent(
+        db, PermanentCreate(title="Doubly", content="q")
+    )  # isolated AND no summary
+    from app.repositories import edge_repo as er
+
+    await er.create(
+        db, EdgeCreate(from_id=linked_no_summary.id, to_id=target.id, type="SUPPORTS")
+    )
+
+    items, total = await node_repo.list_nodes(db, no_summary=True, no_edges=True)
+    ids = {n.id for n in items}
+    assert isolated_no_summary.id in ids
+    assert linked_no_summary.id not in ids  # fails no_edges
+    assert isolated_with_summary.id not in ids  # fails no_summary
+    assert total == 1
+
+
+async def test_list_nodes_total_count_respects_filters(db):
+    """has_next pagination math depends on `total` matching the filter set."""
+    for i in range(5):
+        await node_repo.create_permanent(
+            db, PermanentCreate(title=f"P{i}", content="x", summary=f"s{i}")
+        )
+    await node_repo.create_permanent(db, PermanentCreate(title="No-sum", content="x"))
+
+    _, unfiltered_total = await node_repo.list_nodes(db)
+    _, filtered_total = await node_repo.list_nodes(db, no_summary=True)
+    assert unfiltered_total == 6
+    assert filtered_total == 1
+
+
 async def test_list_inbox(db):
     await node_repo.create_fleeting(db, FleetingCreate(title="Inbox1", content="x"))
     await node_repo.create_permanent(db, PermanentCreate(title="NotInInbox", content="x"))

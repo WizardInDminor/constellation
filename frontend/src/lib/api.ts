@@ -122,9 +122,27 @@ export function createPermanentNode(data: {
   });
 }
 
-export function listNodes(type?: string, page = 1, pageSize = 50): Promise<PaginatedNodes> {
+export interface ListNodesFilters {
+  noSummary?: boolean;
+  noOutgoing?: boolean;
+  noEdges?: boolean;
+  summaryMaxLength?: number;
+}
+
+export function listNodes(
+  type?: string,
+  page = 1,
+  pageSize = 50,
+  filters: ListNodesFilters = {},
+): Promise<PaginatedNodes> {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (type) params.set("type", type);
+  if (filters.noSummary) params.set("no_summary", "true");
+  if (filters.noOutgoing) params.set("no_outgoing", "true");
+  if (filters.noEdges) params.set("no_edges", "true");
+  if (filters.summaryMaxLength !== undefined) {
+    params.set("summary_max_length", String(filters.summaryMaxLength));
+  }
   return request(`/api/v1/nodes?${params}`);
 }
 

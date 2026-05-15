@@ -83,6 +83,8 @@ function SkeletonRow() {
   );
 }
 
+const THIN_SUMMARY_CHARS = 30;
+
 export default function NotesPage() {
   const [notes, setNotes] = useState<NodeSummary[]>([]);
   const [allTags, setAllTags] = useState<TagRef[]>([]);
@@ -94,13 +96,26 @@ export default function NotesPage() {
   );
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
 
+  // Schema-level filters (ADR-055) — refetched when any of these toggle.
+  const [noSummary, setNoSummary] = useState(false);
+  const [noOutgoing, setNoOutgoing] = useState(false);
+  const [noEdges, setNoEdges] = useState(false);
+  const [thinSummary, setThinSummary] = useState(false);
+
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
+        const filters = {
+          noSummary,
+          noOutgoing,
+          noEdges,
+          summaryMaxLength: thinSummary ? THIN_SUMMARY_CHARS : undefined,
+        };
         const [permanent, structure, literature, tags] = await Promise.all([
-          listNodes("permanent", 1, 100),
-          listNodes("structure", 1, 100),
-          listNodes("literature", 1, 100),
+          listNodes("permanent", 1, 100, filters),
+          listNodes("structure", 1, 100, filters),
+          listNodes("literature", 1, 100, filters),
           listTags(),
         ]);
         const merged = [...permanent.items, ...structure.items, ...literature.items].sort(
@@ -115,7 +130,7 @@ export default function NotesPage() {
       }
     }
     load();
-  }, []);
+  }, [noSummary, noOutgoing, noEdges, thinSummary]);
 
   function toggleType(type: string) {
     setActiveTypes((prev) => {
@@ -141,7 +156,9 @@ export default function NotesPage() {
       (activeTags.size === 0 || n.tags.some((t) => activeTags.has(t.id))),
   );
 
-  const isFiltered = activeTypes.size < ALL_TYPES.length || activeTags.size > 0;
+  const schemaFiltersActive = noSummary || noOutgoing || noEdges || thinSummary;
+  const isFiltered =
+    activeTypes.size < ALL_TYPES.length || activeTags.size > 0 || schemaFiltersActive;
 
   if (error) {
     return <div className="text-red-600 text-sm">{error}</div>;
@@ -218,6 +235,46 @@ export default function NotesPage() {
             )}
           </div>
         )}
+
+        {/* Schema filters (ADR-055) — AND-compose with type/tag chips */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-400">Find:</span>
+          {[
+            { active: noSummary, set: setNoSummary, label: "no summary" },
+            {
+              active: thinSummary,
+              set: setThinSummary,
+              label: `thin summary (<${THIN_SUMMARY_CHARS} chars)`,
+            },
+            { active: noOutgoing, set: setNoOutgoing, label: "no outgoing edges" },
+            { active: noEdges, set: setNoEdges, label: "no edges at all" },
+          ].map(({ active, set, label }) => (
+            <button
+              key={label}
+              onClick={() => set(!active)}
+              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                active
+                  ? "bg-indigo-600 text-white border-indigo-600"
+                  : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {schemaFiltersActive && (
+            <button
+              onClick={() => {
+                setNoSummary(false);
+                setThinSummary(false);
+                setNoOutgoing(false);
+                setNoEdges(false);
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (

@@ -2486,6 +2486,93 @@ All three exclude soft-deleted nodes (`deleted_at IS NOT NULL`).
 
 ---
 
+## ADR-055 — Notes-filter API contract
+
+**Status:** Accepted; shipped 2026-05-15 (Bucket B — B2).
+
+**Context:** B2 puts schema-level filter chips on `/notes` — "no
+summary," "no outgoing edges," "no edges either," "summary length < N."
+The filters need to compose with the existing `type` param (and, in
+the future, `tag` / age windows). Two questions to settle:
+
+1. **Where do the new predicates live?** Add to the existing
+   `GET /api/v1/nodes` route, or introduce a richer `/nodes/search`
+   endpoint?
+2. **How do filters compose?** AND vs OR within a category; AND vs OR
+   across categories.
+
+**Decision:**
+
+- **Filters are optional query params on `GET /api/v1/nodes`.** This
+  round adds `no_summary`, `no_outgoing`, `no_edges`, and
+  `summary_max_length`. Each is independently nullable; absent params
+  preserve the current behaviour. No new endpoint.
+- **Composition is AND across all predicates** (including the existing
+  `type` filter). Adding a chip narrows the result set; never widens
+  it. There is no "OR" mode in this contract — if users want union
+  semantics in the future, that becomes a separate ADR.
+- **The list is parameterised SQL with conditional `WHERE` clauses.**
+  Each filter appends one clause and zero-or-one bound parameter. The
+  query stays one `SELECT` against `nodes` with subqueries for the
+  edge predicates; no joins.
+- **`summary_max_length` matches non-null short summaries only.**
+  Notes with `summary IS NULL` are not pulled in by this predicate;
+  the user requests those explicitly via `no_summary=true`. Combining
+  both flags is supported (and produces "null OR shorter than N").
+- **`no_edges` is strictly stronger than `no_outgoing`.** Specifying
+  both is redundant but legal — the AND-composition collapses to
+  `no_edges` semantically.
+
+The Pydantic model `NodeListFilters` lives in the route module (not
+exposed via a request body — these are query params); the repo
+function takes the same fields as keyword args.
+
+**Rationale:**
+
+- **AND across categories matches user intuition.** Chips are funnel
+  controls. The user picking "no summary" + "no edges" expects "notes
+  that are both — i.e. abandoned." A union would surface "notes that
+  are one or the other," which is a different, less common ask.
+- **No new endpoint.** `/api/v1/nodes` already returns paginated
+  `NodeSummary`; the predicates are additive. A separate
+  `/nodes/search` would force the frontend to choose at call time and
+  duplicate the pagination contract.
+- **Predicates are explicit boolean flags rather than a single string
+  query.** A query DSL (e.g., `?filter=no_summary,no_edges`) saves a
+  few URL bytes but loses type safety and introspectability via
+  OpenAPI. Each flag generates a clean parameter in the spec.
+- **Subqueries, not joins.** SQLite handles the
+  `id NOT IN (SELECT from_id FROM edges …)` shape fine at our scale.
+  A LEFT JOIN approach would require GROUP BY or DISTINCT and
+  complicates the COUNT(*) for pagination total. Subqueries keep the
+  shape simple.
+- **No server-side tag filter in this round.** The `/notes` page
+  already filters tags client-side after fetching by type; performance
+  is fine at single-user corpus size. Adding server-side tag filtering
+  would require touching the request shape on a surface that doesn't
+  need it yet. **Not** a refusal — it's a future increment when a
+  page like Synthesize wants server-side composition.
+
+**Consequences:**
+
+- The filter contract is now part of the public API surface. Adding a
+  new predicate is one query param + one WHERE clause + one chip.
+  Removing or renaming a predicate is a breaking change (the
+  TypeScript types regen would flag it, but external scripts using
+  the URL contract would break silently).
+- B3's batch-suggest-links endpoint can reuse the same predicates
+  for its `node_filter` argument shape — that's the explicit
+  next-step composition the sequencing plan called out.
+- The `summary_max_length` predicate exposes a concrete bias: notes
+  with weak summaries are a finding worth surfacing. If/when a
+  better summary-quality signal lands (LLM-rated coherence, etc.),
+  the predicate can be deprecated in favour of that signal without
+  contract changes — the chip just stops appearing.
+- Pagination math (`has_next`) still works because the `total` count
+  uses the same WHERE clauses as the page query.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
