@@ -191,11 +191,13 @@ A working prototype demonstrating that edge type and edge `note` materially chan
 
 If the prototype gate passes, write ADR-058 (full Phase 8 design) and commit. If it doesn't, escalate and reconsider — possibly the strategic bet is wrong, possibly the bet is right but the implementation shape needs work.
 
-**Phase 8.1 — Prompt-side edge semantics.**
-Update `rag_service._SYSTEM_PROMPT` to instruct the model on edge types. The existing `_build_context` already includes edge labels; the prompt just needs to tell the model what to do with them. Targeted to Ask and Synthesize.
+**Phase 8.1 — Prompt-side edge semantics. _Primary Phase 8 deliverable._**
+Update `rag_service._SYSTEM_PROMPT` to instruct the model on edge types. The existing `_build_context` already includes edge labels; the prompt just needs to tell the model what to do with them. Targeted to Ask and Synthesize. The prototype-gate question reframed to "does explicit edge-interpretation instruction change output when the model is already being shown the labels" (see `evals/phase8_prototype/README.md`).
 
-**Phase 8.2 — Retrieval-side edge expansion.**
-Bias `graph_service.expand` to surface CONTRADICTS and SUPPORTS neighbors with higher priority when they connect to seed nodes. `expansion_depth` interaction: depth=1 still surfaces direct neighbors, but edge-type-aware ranking decides which to keep when the neighbor budget (`_MAX_NEIGHBOR_NODES=12`) is exceeded.
+**Phase 8.2 — Retrieval-side edge expansion. _Conditionally deferred._**
+Originally scoped as biasing `graph_service.expand` to prefer CONTRADICTS / SUPPORTS neighbours when the neighbour budget (`_MAX_NEIGHBOR_NODES=12`) is exceeded. The 2026-05-15 probe (`evals/phase8_prototype/probe_retrieval.py`) showed the cap rarely binds on this corpus, and when it does bind (F1), the high-signal edge types are already kept by discovery order — the dropped neighbours are dominated by COLLECTS. Edge-type-aware truncation would not move the needle today.
+
+**Deferred, not cancelled.** The probe is the standing diagnostic. **Reactivation criterion** (to be captured in ADR-058): when `probe_retrieval.py` shows the neighbour cap binding on CONTRADICTS or SUPPORTS edges on **at least two fixtures** where the connected notes have cosine similarity below **0.6** — that's the signal that cross-domain typed-edge relationships exist whose endpoints are not similarity-discoverable, which is the case retrieval-side ranking would help. Re-run the probe after material corpus growth (~10× current edge count, or after Phase 9's narrative timeline introduces cross-domain edges between thematic/character/event nodes).
 
 **Phase 8.3 — Resolved-edge state + D1.**
 Migration `0006_resolved_edges.sql` adds `resolved_at`, `resolved_by_node_id` to `edges` (note: `0005` is taken by A8's `classifier_rationale` migration). Add `SUPERSEDED_BY`, `SCOPED_TO`, `REGIME_OF`, `RESOLVES`, `FOLLOWS_FROM` to `EdgeType` (D1) — `FOLLOWS_FROM` is required by Phase 9's narrative-timeline discourse-order chaining (see `docs/constellation-phase9-concept.md` §8) and is folded in here to avoid a second CHECK-constraint table-recreate later. EdgePanel UI exposes a "mark resolved" action. RAG context-assembly down-weights resolved CONTRADICTS edges.
@@ -216,7 +218,7 @@ Highest-leverage capture-time affordance. New endpoint `POST /search/dedup` retu
 
 ### ADRs required
 
-- **ADR-058 — Edge semantics in RAG context assembly.** Phase-design ADR; documents the prompt-vs-retrieval-vs-priority breakdown and the prototype-gate outcome.
+- **ADR-058 — Edge semantics in RAG context assembly.** Phase-design ADR; documents the prompt-vs-retrieval-vs-priority breakdown and the prototype-gate outcome. Must capture the **Phase 8.2 reactivation criterion** in concrete terms (probe-script-detectable: cap binding on CONTRADICTS/SUPPORTS edges with endpoint cosine similarity below 0.6 on ≥2 fixtures).
 - **ADR-059 — Resolved-edge state.** Schema design for `resolved_at` / `resolved_by_node_id`; what "resolution" means semantically.
 - **ADR-060 — Evolution edge types (D1).** Adds SUPERSEDED_BY, SCOPED_TO, REGIME_OF, RESOLVES; supersedes the "hold" decision.
 - **ADR-061 — Scoped Ask.** API contract for `ScopedAskRequest`; relationship to existing `query_scoped`.

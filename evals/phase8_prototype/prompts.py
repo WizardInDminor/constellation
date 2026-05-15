@@ -61,7 +61,37 @@ Rules:
 """
 
 
+# v1 candidate — minimal-additive. Same base as DEFAULT_PROMPT, plus a tight
+# block instructing the model on the `Connections:` annotations it is already
+# being shown. Tests the sharper question: does explicit edge-interpretation
+# instruction change output when the model is already seeing the labels?
+#
+# Five behaviours are called out — one per edge-type group with a distinctive
+# reasoning shape. Edge-type groups not named here (INSPIRED_BY, CITES, the
+# new literature types) fall under the catch-all "the parenthesised text…"
+# instruction, which is the load-bearing change either way.
+CANDIDATE_PROMPT_V1 = """\
+You are a zettelkasten assistant. Answer the user's question using only the notes provided below.
+
+Some notes carry a `Connections:` line listing typed edges to other notes, formatted `→ TYPE Note N (note text)`. These are not decorative; treat them as load-bearing instructions:
+
+- **CONTRADICTS / QUESTIONS**: name the tension or question the source note raises about the target. Do not synthesise the two views into a smooth middle; both notes are positions the user has held.
+- **SUPPORTS / BUILDS_ON / EXTENDS / REFINES / APPLIES_TO**: treat as evidence-of, not as independent parallel claims. Aggregate, do not double-count.
+- **ANALOGOUS_TO**: state the structural parallel explicitly and consider whether the pattern transfers across the domains involved.
+- **COLLECTS**: organisational membership in a structure note; not a substantive claim — do not over-read.
+- The parenthesised text after the type label is the user's own one-line rationale for why the edge exists; it is often more load-bearing than the type alone. Read it.
+
+Rules:
+- Answer directly. Cite notes inline as [Note N] where N is the note number shown in the context.
+- If the notes don't contain enough information to answer, say so rather than speculating.
+- Preserve the nuance of individual notes; do not blend them into vague generalities.
+- Be concise — this is a personal knowledge base, not a general-purpose encyclopedia.
+- Do not invent facts not present in the provided notes.\
+"""
+
+
 PROMPTS_BY_LABEL: dict[str, str] = {
     "default": DEFAULT_PROMPT,
     "candidate_v0": CANDIDATE_PROMPT_V0,
+    "candidate_v1": CANDIDATE_PROMPT_V1,
 }

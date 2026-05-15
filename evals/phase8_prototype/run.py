@@ -44,7 +44,7 @@ from app.services.rag_service import (  # noqa: E402
 )
 
 from fixtures import F1_CONTRADICTS_EDGE_ID, FIXTURES, Fixture  # noqa: E402
-from prompts import CANDIDATE_PROMPT_V0, DEFAULT_PROMPT  # noqa: E402
+from prompts import DEFAULT_PROMPT, PROMPTS_BY_LABEL  # noqa: E402
 
 
 async def _retrieve(db, embed_provider, query_text: str):
@@ -153,6 +153,15 @@ def _render_fixture_markdown(
 
 
 async def main(label: str) -> None:
+    candidate_key = f"candidate_{label}"
+    if candidate_key not in PROMPTS_BY_LABEL:
+        raise SystemExit(
+            f"No prompt registered for label {label!r}. "
+            f"Add `{candidate_key}` to PROMPTS_BY_LABEL in prompts.py first. "
+            f"Known: {sorted(PROMPTS_BY_LABEL)}"
+        )
+    candidate_prompt = PROMPTS_BY_LABEL[candidate_key]
+
     settings = get_settings()
     if not settings.anthropic_api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is required.")
@@ -187,6 +196,7 @@ async def main(label: str) -> None:
             f"- Generated: {datetime.now(UTC).isoformat(timespec='seconds')}",
             f"- Embed model: {embed_provider.model_id}",
             f"- Gen model: {gen_provider.model_id}",
+            f"- Candidate prompt: {candidate_key}",
             f"- Fixtures: {len(FIXTURES)}",
             "",
         ]
@@ -207,7 +217,7 @@ async def main(label: str) -> None:
                 gen_provider, DEFAULT_PROMPT, fixture.query, context_text
             )
             candidate_answer = await _generate(
-                gen_provider, CANDIDATE_PROMPT_V0, fixture.query, context_text
+                gen_provider, candidate_prompt, fixture.query, context_text
             )
 
             soft_delete_answer: str | None = None
@@ -220,7 +230,7 @@ async def main(label: str) -> None:
                     filtered = [e for e in edges if e.id != F1_CONTRADICTS_EDGE_ID]
                     sd_context, _ = _build_context(seed_nodes, neighbor_nodes, filtered)
                     soft_delete_answer = await _generate(
-                        gen_provider, CANDIDATE_PROMPT_V0, fixture.query, sd_context
+                        gen_provider, candidate_prompt, fixture.query, sd_context
                     )
                 else:
                     soft_delete_note = (
@@ -268,8 +278,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--label",
-        default="v0",
-        help="run label (e.g. 'v0', 'v1'); output goes to runs/YYYY-MM-DD-<label>/",
+        default="v1",
+        help=(
+            "run label (e.g. 'v0', 'v1'). Selects "
+            "`PROMPTS_BY_LABEL[f'candidate_{label}']` and writes output to "
+            "runs/YYYY-MM-DD-<label>/."
+        ),
     )
     args = parser.parse_args()
     asyncio.run(main(args.label))
