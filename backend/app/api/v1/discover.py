@@ -45,8 +45,11 @@ async def list_bridges(
     db: DB,
     limit: int = Query(default=30, ge=1, le=100),
     min_similarity: float = Query(default=0.7, ge=0.0, le=1.0),
+    cross_tag: bool = Query(default=False),
 ) -> list[BridgeCandidate]:
-    return await discover_service.find_bridges(db, limit=limit, min_similarity=min_similarity)
+    return await discover_service.find_bridges(
+        db, limit=limit, min_similarity=min_similarity, cross_tag=cross_tag
+    )
 
 
 @router.post("/bridges/classify")

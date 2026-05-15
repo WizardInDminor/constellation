@@ -165,6 +165,7 @@ async def find_bridges(
     *,
     limit: int = 30,
     min_similarity: float = 0.7,
+    cross_tag: bool = False,
 ) -> list[BridgeCandidate]:
     """Find note pairs that look semantically related but have no edge.
 
@@ -172,6 +173,10 @@ async def find_bridges(
     pull its top 8 nearest neighbours from vec_nodes; drop any pair that already
     has an edge; dedupe (canonical pair order); keep the highest similarity per
     pair; return the top `limit` ordered by similarity descending.
+
+    When `cross_tag=True`, drop pairs whose endpoints share any tag — i.e.
+    surface only "across the tag boundary" candidates. Filter is applied
+    before the limit so the result count reflects actual cross-tag pairs.
     """
     scan_ids = await node_repo.list_recent_for_bridge_scan(db, limit=_BRIDGE_SCAN_LIMIT)
     scan_set = set(scan_ids)
@@ -195,10 +200,33 @@ async def find_bridges(
             if key not in best or similarity > best[key]:
                 best[key] = similarity
 
+    if not best:
+        return []
+
+    # cross_tag filter: drop pairs whose endpoints share any tag. Fetch tag-id
+    # sets for involved nodes in a single query, then apply before the limit so
+    # the user sees an accurate cross-tag result count.
+    if cross_tag:
+        involved_ids = {nid for pair in best for nid in pair}
+        placeholders = ",".join("?" * len(involved_ids))
+        cursor = await db.execute(
+            f"SELECT node_id, tag_id FROM node_tags WHERE node_id IN ({placeholders})",  # noqa: S608
+            list(involved_ids),
+        )
+        tag_rows = await cursor.fetchall()
+        tags_by_node: dict[str, set[str]] = {}
+        for r in tag_rows:
+            tags_by_node.setdefault(r["node_id"], set()).add(r["tag_id"])
+        best = {
+            (a, b): sim
+            for (a, b), sim in best.items()
+            if not (tags_by_node.get(a, set()) & tags_by_node.get(b, set()))
+        }
+        if not best:
+            return []
+
     # Resolve to NodeRef pairs, ordered by similarity desc
     sorted_pairs = sorted(best.items(), key=lambda kv: -kv[1])[:limit]
-    if not sorted_pairs:
-        return []
 
     needed_ids: set[str] = set()
     for (a, b), _ in sorted_pairs:

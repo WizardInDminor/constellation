@@ -185,6 +185,63 @@ async def test_bridges_returns_similarity_in_unit_range(db):
         assert 0.0 <= br.similarity <= 1.0
 
 
+async def _attach_tag(db, node_id: str, tag_id: str) -> None:
+    await db.execute(
+        "INSERT INTO node_tags(node_id, tag_id) VALUES (?, ?)", (node_id, tag_id)
+    )
+    await db.commit()
+
+
+async def test_bridges_cross_tag_drops_pairs_with_shared_tag(db):
+    a = await _insert_node_with_vec(db, "A", seed=0)
+    b = await _insert_node_with_vec(db, "B", seed=1)
+    # Both tagged "shared" — the cross-tag filter should drop the pair
+    await db.execute("INSERT INTO tags(id, name, color) VALUES ('t1', 'shared', NULL)")
+    await db.commit()
+    await _attach_tag(db, a.id, "t1")
+    await _attach_tag(db, b.id, "t1")
+
+    # Sanity: default behaviour surfaces the pair
+    default = await discover_service.find_bridges(db, limit=10, min_similarity=0.0)
+    pair_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in default}
+    assert tuple(sorted([a.id, b.id])) in pair_ids
+
+    # With cross_tag=True the pair is filtered out
+    filtered = await discover_service.find_bridges(
+        db, limit=10, min_similarity=0.0, cross_tag=True
+    )
+    filtered_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
+    assert tuple(sorted([a.id, b.id])) not in filtered_ids
+
+
+async def test_bridges_cross_tag_keeps_disjoint_tag_pairs(db):
+    a = await _insert_node_with_vec(db, "A", seed=0)
+    b = await _insert_node_with_vec(db, "B", seed=1)
+    await db.execute("INSERT INTO tags(id, name, color) VALUES ('t1', 'one', NULL)")
+    await db.execute("INSERT INTO tags(id, name, color) VALUES ('t2', 'two', NULL)")
+    await db.commit()
+    await _attach_tag(db, a.id, "t1")
+    await _attach_tag(db, b.id, "t2")
+
+    filtered = await discover_service.find_bridges(
+        db, limit=10, min_similarity=0.0, cross_tag=True
+    )
+    pair_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
+    assert tuple(sorted([a.id, b.id])) in pair_ids
+
+
+async def test_bridges_cross_tag_keeps_untagged_pairs(db):
+    """An untagged pair trivially shares no tags — cross_tag must keep it."""
+    a = await _insert_node_with_vec(db, "A", seed=0)
+    b = await _insert_node_with_vec(db, "B", seed=1)
+
+    filtered = await discover_service.find_bridges(
+        db, limit=10, min_similarity=0.0, cross_tag=True
+    )
+    pair_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
+    assert tuple(sorted([a.id, b.id])) in pair_ids
+
+
 # ---------------------------------------------------------------------------
 # HTTP route smoke tests
 # ---------------------------------------------------------------------------

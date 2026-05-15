@@ -515,6 +515,7 @@ export default function DiscoverPage() {
   const [orphans, setOrphans] = useState<NodeSummary[] | null>(null);
   const [stale, setStale] = useState<NodeSummary[] | null>(null);
   const [bridges, setBridges] = useState<BridgeCandidate[] | null>(null);
+  const [crossTag, setCrossTag] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -578,7 +579,7 @@ export default function DiscoverPage() {
           const data = await listStale({ limit: 50 });
           if (!cancelled) setStale(data);
         } else if (tab === "bridges" && bridges === null) {
-          const data = await listBridges({ limit: 30, minSimilarity: 0.7 });
+          const data = await listBridges({ limit: 30, minSimilarity: 0.7, crossTag });
           if (!cancelled) setBridges(data);
         }
       } catch (err) {
@@ -592,7 +593,7 @@ export default function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [tab, orphans, stale, bridges]);
+  }, [tab, orphans, stale, bridges, crossTag]);
 
   function closePanel() {
     setSelectedBridge(null);
@@ -676,13 +677,31 @@ export default function DiscoverPage() {
 
       {tab === "bridges" && (
         <>
+          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={crossTag}
+              onChange={(e) => {
+                setCrossTag(e.target.checked);
+                setBridges(null);
+              }}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-300"
+            />
+            Hide same-tag pairs
+            <span className="text-gray-400">
+              — only show pairs whose two notes share no tags
+            </span>
+          </label>
+
           {loading && bridges === null ? (
             <p className="text-sm text-gray-400">
               Scanning embeddings — this can take a moment on large corpora.
             </p>
           ) : bridges && bridges.length === 0 ? (
             <p className="text-sm text-gray-400">
-              No bridge candidates found. Try lowering the similarity threshold or adding more notes.
+              {crossTag
+                ? "No cross-tag bridges found. Toggle off to see all candidates."
+                : "No bridge candidates found. Try lowering the similarity threshold or adding more notes."}
             </p>
           ) : (
             <ul className="flex flex-col gap-3">

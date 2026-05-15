@@ -300,11 +300,13 @@ export function listStale(opts: {
 export function listBridges(opts: {
   limit?: number;
   minSimilarity?: number;
+  crossTag?: boolean;
 } = {}): Promise<BridgeCandidate[]> {
   const params = new URLSearchParams();
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.minSimilarity !== undefined)
     params.set("min_similarity", String(opts.minSimilarity));
+  if (opts.crossTag) params.set("cross_tag", "true");
   const qs = params.toString();
   return request(`/api/v1/discover/bridges${qs ? `?${qs}` : ""}`);
 }
