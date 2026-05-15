@@ -78,11 +78,13 @@ async def embed_node(
         (node_id, packed),
     )
 
-    # Record which model produced the current vector
-    now = datetime.now(UTC).isoformat()
+    # Record which model produced the current vector. Do NOT bump updated_at
+    # here — embedding is system-managed metadata, not user-edited content.
+    # Bumping updated_at would make freshly-processed notes look "edited" in
+    # the Home activity feed (ADR-054) and on the Synthesize pool ordering.
     await db.execute(
-        "UPDATE nodes SET embedding_model = ?, updated_at = ? WHERE id = ?",
-        (provider.model_id, now, node_id),
+        "UPDATE nodes SET embedding_model = ? WHERE id = ?",
+        (provider.model_id, node_id),
     )
     await db.commit()
 

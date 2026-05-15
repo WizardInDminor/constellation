@@ -2402,6 +2402,90 @@ SuggestLinksPanel.
 
 ---
 
+## ADR-054 — "Recent activity" windowing semantics
+
+**Status:** Accepted; shipped 2026-05-15 (Bucket B — B1).
+
+**Context:** B1 puts three "recently …" sections on Home — captured,
+edited, edges created. The question is which time window to use. Three
+options surfaced during planning:
+
+1. Rolling N-day window (e.g., "last 7 days").
+2. Since-last-visit tracking (per-session state).
+3. Calendar week / day (e.g., "this week, starting Monday").
+
+Option 2 requires either client-side storage (localStorage), a
+server-side last_visit_at column, or both. Option 3 has unintuitive
+behavior near boundaries — Monday morning shows an empty list because
+the new week just started.
+
+**Decision:** Rolling N-day window. Default 7 days, configurable via a
+`?days=N` query param on the activity endpoint (clamped to 1–90).
+**No last-visit tracking.**
+
+API shape: a single `GET /activity?days=N` endpoint returns
+`{captured, edited, edges}` — Home wants all three at once, so a single
+roundtrip is cheaper than three. Each list is capped at 10 items
+(hardcoded; this is a "what have I been up to?" hint, not a paginated
+feed).
+
+Section semantics:
+
+- **captured** — fleeting notes with `created_at` in window, ordered
+  by `created_at DESC`. Regardless of `processed_at` (a processed
+  fleeting still represents recent capture activity).
+- **edited** — non-fleeting notes with `updated_at` in window **and**
+  `updated_at > created_at` (i.e., touched after birth — excludes
+  newly-processed permanent notes whose `updated_at == created_at`).
+- **edges** — edges with `created_at` in window. Returned as
+  `RecentEdge { id, type, created_at, from_node: NodeRef, to_node:
+  NodeRef }` so the frontend can render "A → ELABORATES → B" without
+  N extra lookups.
+
+All three exclude soft-deleted nodes (`deleted_at IS NOT NULL`).
+
+**Rationale:**
+
+- **Stateless beats stateful.** Single-user app, daily-revisit pattern.
+  "Last 7 days" maps to user intuition without any session/cookie/DB
+  machinery. Adding state would require migrations, a settings UI, or
+  cookie management — all cost, no commensurate UX win.
+- **One endpoint, not three.** The frontend wants the whole picture at
+  once; the three queries share the window parameter and are cheap
+  individually. Splitting would buy nothing.
+- **Excluding born-not-edited from "edited".** A user processes their
+  inbox and 6 new permanent notes appear. Without the
+  `updated_at > created_at` filter, all 6 land in "Edited", which is
+  misleading — they weren't edited, they were born. The
+  `updated_at > created_at` strict-inequality test is robust because
+  `_create_node` writes the same timestamp to both fields, and `update`
+  only writes `updated_at`. Lex-sort on ISO 8601 strings agrees with
+  chronological order.
+- **`days` cap of 90.** Past that the activity feed stops being
+  "recent" and becomes "everything"; the Notes/Graph pages handle
+  full browsing. Cap prevents accidental full-corpus scans.
+
+**Consequences:**
+
+- The user can't see "what changed since I last looked" — only "what
+  changed in the last 7 days." If a session-aware diff turns out to be
+  important, a follow-up ADR adds last_visit tracking; until then,
+  YAGNI.
+- The 10-item cap means very active days truncate. Acceptable for a
+  Home hint; a future "see all" link could route to a filtered Notes
+  page (B2's schema filters will support this naturally).
+- The `updated_at > created_at` filter on "edited" means a newly-born
+  permanent note doesn't show up there until the user actually edits
+  it. That's correct semantically but may surprise users wondering
+  where their just-processed notes went. They appear in `captured`
+  (via the fleeting parent) until it's discarded, and in `/notes`
+  immediately — the Home "edited" section is for actual edits.
+- The `days` query param is opt-in; the default value lives only on
+  the server and the frontend. If a future client wants a different
+  default, they pass `?days=N` — no breaking change.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

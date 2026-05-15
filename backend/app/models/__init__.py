@@ -1,3 +1,4 @@
+from app.models.activity import ActivityFeed, RecentEdge
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.discover import BridgeCandidate, BridgeClassification, ClassifyBridgeRequest
@@ -65,6 +66,8 @@ from app.models.tag import TagCreate, TagRef, TagUpdate
 NodeDetail.model_rebuild()
 
 __all__ = [
+    "ActivityFeed",
+    "RecentEdge",
     "Paginated",
     "ConfigEntry",
     "ConfigUpdate",

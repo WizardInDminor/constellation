@@ -328,6 +328,75 @@ async def find_stale(
     ]
 
 
+async def list_recently_captured(
+    db: aiosqlite.Connection, *, since_iso: str, limit: int = 10
+) -> list[NodeSummary]:
+    """Fleeting notes created on or after `since_iso`. ADR-054 — Home activity feed."""
+    cursor = await db.execute(
+        """SELECT id, type, title, summary, created_at, updated_at, processed_at
+           FROM nodes
+           WHERE type = 'fleeting'
+             AND deleted_at IS NULL
+             AND created_at >= ?
+           ORDER BY created_at DESC
+           LIMIT ?""",
+        (since_iso, limit),
+    )
+    rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
+    return [
+        NodeSummary(
+            id=r["id"],
+            type=r["type"],
+            title=r["title"],
+            summary=r["summary"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
+        )
+        for r in rows
+    ]
+
+
+async def list_recently_edited(
+    db: aiosqlite.Connection, *, since_iso: str, limit: int = 10
+) -> list[NodeSummary]:
+    """Non-fleeting notes edited on or after `since_iso`. ADR-054.
+
+    Excludes notes where `updated_at == created_at` — those were born, not
+    edited.
+    """
+    cursor = await db.execute(
+        """SELECT id, type, title, summary, created_at, updated_at, processed_at
+           FROM nodes
+           WHERE type != 'fleeting'
+             AND deleted_at IS NULL
+             AND updated_at >= ?
+             AND updated_at > created_at
+           ORDER BY updated_at DESC
+           LIMIT ?""",
+        (since_iso, limit),
+    )
+    rows = await cursor.fetchall()
+    node_ids = [r["id"] for r in rows]
+    tags_map = await _fetch_tags_bulk(db, node_ids)
+    return [
+        NodeSummary(
+            id=r["id"],
+            type=r["type"],
+            title=r["title"],
+            summary=r["summary"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            processed_at=r["processed_at"],
+            tags=tags_map.get(r["id"], []),
+        )
+        for r in rows
+    ]
+
+
 async def list_recent_for_bridge_scan(db: aiosqlite.Connection, *, limit: int = 200) -> list[str]:
     """IDs of the most-recently-updated non-fleeting nodes — bridge scan input set."""
     cursor = await db.execute(

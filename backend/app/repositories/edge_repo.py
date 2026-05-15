@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
-from app.models import EdgeCreate, EdgeDetail, EdgeSummary, NeighborResult, NodeRef
+from app.models import EdgeCreate, EdgeDetail, EdgeSummary, NeighborResult, NodeRef, RecentEdge
 
 
 async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None:
@@ -141,6 +141,38 @@ async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSumma
             classifier_rationale=r["classifier_rationale"],
             created_at=r["created_at"],
             neighbor=NodeRef(id=r["nid"], title=r["title"], type=r["ntype"]),
+        )
+        for r in rows
+    ]
+
+
+async def list_recent(
+    db: aiosqlite.Connection, *, since_iso: str, limit: int = 10
+) -> list[RecentEdge]:
+    """Edges created on or after `since_iso`, with both endpoint titles.
+
+    Excludes edges whose endpoints are soft-deleted. ADR-054 — Home activity feed.
+    """
+    cursor = await db.execute(
+        """SELECT e.id, e.type, e.created_at,
+                  fn.id AS from_id, fn.title AS from_title, fn.type AS from_type,
+                  tn.id AS to_id,   tn.title AS to_title,   tn.type AS to_type
+           FROM edges e
+           JOIN nodes fn ON fn.id = e.from_id AND fn.deleted_at IS NULL
+           JOIN nodes tn ON tn.id = e.to_id   AND tn.deleted_at IS NULL
+           WHERE e.created_at >= ?
+           ORDER BY e.created_at DESC
+           LIMIT ?""",
+        (since_iso, limit),
+    )
+    rows = await cursor.fetchall()
+    return [
+        RecentEdge(
+            id=r["id"],
+            type=r["type"],
+            created_at=r["created_at"],
+            from_node=NodeRef(id=r["from_id"], title=r["from_title"], type=r["from_type"]),
+            to_node=NodeRef(id=r["to_id"], title=r["to_title"], type=r["to_type"]),
         )
         for r in rows
     ]

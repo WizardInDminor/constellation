@@ -125,7 +125,7 @@ Originally scoped as one PR; broken into four independent slices during executio
 
 One at a time, ~3 days each. ADRs ship inside the relevant PR.
 
-### B1 — "Recently captured / edited / linked" sections on Home
+### B1 — "Recently captured / edited / linked" sections on Home ✅ shipped 2026-05-15
 
 - **Description:** Home gets three sections: notes captured this week, notes edited this week, edges created this week. Each section is a small card list with a "see all" link.
 - **Cost:** 2 days. Three queries (capture, edit, edge-creation), one Home component, sorting, the "this week" semantics (last 7 days or since-last-visit — settle in implementation).

@@ -21,6 +21,8 @@ export type SearchResponse = components["schemas"]["SearchResponse"];
 export type SearchResult = components["schemas"]["SearchResult"];
 export type RagResponse = components["schemas"]["RagResponse"];
 export type RagMode = NonNullable<components["schemas"]["RagRequest"]["mode"]>;
+export type ActivityFeed = components["schemas"]["ActivityFeed"];
+export type RecentEdge = components["schemas"]["RecentEdge"];
 export type NodeUsed = components["schemas"]["NodeUsed"];
 export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
@@ -385,4 +387,8 @@ export function getAdminStatus(): Promise<AdminStatus> {
 
 export function getStats(): Promise<CorpusStats> {
   return request("/api/v1/admin/stats");
+}
+
+export function getActivity(days = 7): Promise<ActivityFeed> {
+  return request(`/api/v1/activity?days=${days}`);
 }
