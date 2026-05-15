@@ -56,7 +56,8 @@ async def get_graph_data(
     )
     cursor = await db.execute(
         f"""
-        SELECT e.id, e.from_id, e.to_id, e.type, e.note, e.classifier_rationale
+        SELECT e.id, e.from_id, e.to_id, e.type, e.note, e.classifier_rationale,
+               e.resolved_at, e.resolved_by_node_id
         FROM edges e
         JOIN nodes fn ON fn.id = e.from_id AND fn.deleted_at IS NULL
         JOIN nodes tn ON tn.id = e.to_id   AND tn.deleted_at IS NULL
@@ -72,6 +73,8 @@ async def get_graph_data(
             type=row["type"],
             note=row["note"],
             classifier_rationale=row["classifier_rationale"],
+            resolved_at=row["resolved_at"],
+            resolved_by_node_id=row["resolved_by_node_id"],
         )
         for row in rows
     ]

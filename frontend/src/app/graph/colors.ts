@@ -20,6 +20,10 @@ export const EDGE_COLORS: Record<string, string> = {
   MEASURES: "#0891B2",
   EXTENDS: "#059669",
   REFINES: "#475569",
+  SUPERSEDED_BY: "#F43F5E",
+  SCOPED_TO: "#0284C7",
+  REGIME_OF: "#C026D3",
+  FOLLOWS_FROM: "#65A30D",
 };
 
 export function nodeColor(type: string): string {

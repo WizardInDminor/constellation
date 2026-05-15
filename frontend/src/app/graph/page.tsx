@@ -195,6 +195,20 @@ function GraphPageInner() {
   const toTitle = selectedEdge
     ? (graphData.nodes.find((n) => n.id === selectedEdge.to_id)?.title ?? selectedEdge.to_id)
     : "";
+  const resolverTitle =
+    selectedEdge?.resolved_by_node_id
+      ? (graphData.nodes.find((n) => n.id === selectedEdge.resolved_by_node_id)?.title ?? null)
+      : null;
+
+  async function refreshGraphAfterEdgeUpdate() {
+    const data = await getGraphData(true);
+    setGraphData(data);
+    // Re-pin the selected edge to its updated record so resolved-state UI updates.
+    if (selectedEdge) {
+      const updated = data.edges.find((e) => e.id === selectedEdge.id);
+      setSelectedEdge(updated ?? null);
+    }
+  }
 
   const showPanel =
     selectedNodes.size > 0 ||
@@ -289,7 +303,9 @@ function GraphPageInner() {
               edge={selectedEdge}
               fromTitle={fromTitle}
               toTitle={toTitle}
+              resolverTitle={resolverTitle}
               onClose={handleBackgroundClick}
+              onEdgeUpdated={refreshGraphAfterEdgeUpdate}
             />
           )}
         </div>

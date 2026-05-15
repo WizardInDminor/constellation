@@ -11,6 +11,7 @@ export type PaginatedNodes = components["schemas"]["Paginated_NodeSummary_"];
 export type TagRef = components["schemas"]["TagRef"];
 export type EdgeDetail = components["schemas"]["EdgeDetail"];
 export type EdgeType = components["schemas"]["EdgeCreate"]["type"];
+export type EdgeResolveRequest = components["schemas"]["EdgeResolveRequest"];
 export type SourceSummary = components["schemas"]["SourceSummary"];
 export type SourceDetail = components["schemas"]["SourceDetail"];
 export type SourceCreate = components["schemas"]["SourceCreate"];
@@ -206,6 +207,23 @@ export function createEdge(data: {
 
 export function deleteEdge(edgeId: string): Promise<void> {
   return request(`/api/v1/edges/${edgeId}`, { method: "DELETE" });
+}
+
+// ADR-059: resolve a tension edge (CONTRADICTS / QUESTIONS only). The optional
+// `resolved_by_node_id` points to a synthesis note that supersedes the
+// tension. POST is idempotent; DELETE clears the resolved state.
+export function resolveEdge(
+  edgeId: string,
+  data: EdgeResolveRequest = {},
+): Promise<EdgeDetail> {
+  return request(`/api/v1/edges/${edgeId}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function unresolveEdge(edgeId: string): Promise<EdgeDetail> {
+  return request(`/api/v1/edges/${edgeId}/resolve`, { method: "DELETE" });
 }
 
 // RAG
