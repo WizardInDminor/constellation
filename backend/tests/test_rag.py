@@ -564,6 +564,50 @@ def captured_system_prompts(monkeypatch):
     cfg.get_settings.cache_clear()
 
 
+@pytest.fixture
+def captured_user_messages(tmp_path, monkeypatch):
+    """A rag_query client that captures both the system prompt and the user
+    message content sent to the gen provider, so tests can assert on the
+    hedge prepended by the low-confidence path (ADR-057)."""
+    import app.core.config as cfg
+    import app.core.lifespan as lsp
+
+    cfg.get_settings.cache_clear()
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+    cfg.get_settings.cache_clear()
+
+    captured: list[dict] = []
+
+    class _FakeEmbed:
+        model_id = "fake-embed"
+        dimensions = 1024
+
+        async def embed(self, text):
+            return [0.0] * 1024
+
+        async def embed_batch(self, texts):
+            return [[0.0] * 1024 for _ in texts]
+
+    class _CapturingGen:
+        model_id = "fake-gen"
+
+        async def complete(self, messages, system, max_tokens=1024):
+            captured.append({"system": system, "user": messages[0]["content"]})
+            return _RAG_ANSWER
+
+    async def _fake_load(db, settings):
+        return _FakeEmbed(), _CapturingGen()
+
+    monkeypatch.setattr(lsp, "_load_providers", _fake_load)
+
+    from app.main import app as fastapi_app
+
+    with TestClient(fastapi_app) as c:
+        yield c, captured
+
+    cfg.get_settings.cache_clear()
+
+
 def test_rag_query_default_mode_uses_default_prompt(captured_system_prompts):
     c, captured = captured_system_prompts
     resp = c.post("/api/v1/rag/query", json={"query": "anything"})
@@ -913,3 +957,87 @@ def test_cluster_suggest_empty_scope_returns_no_proposals(cluster_suggest_client
     resp = c.post("/api/v1/rag/suggest-links/cluster", json={"node_ids": []})
     # Empty node_ids is the same as not providing it → 422 per the contract
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Low-confidence retrieval hedge (Bucket B — B5, ADR-057)
+# ---------------------------------------------------------------------------
+
+
+_LOW_CONFIDENCE_HEDGE_MARKER = "the knowledge base doesn't directly cover this question"
+
+
+def _force_distance(monkeypatch, distance: float) -> None:
+    """Patch search_similar_with_distances to return a single seed at the given
+    L2 distance, so the test controls whether top_similarity is above or below
+    the ADR-057 threshold.
+    """
+    from app.services import embedding_service
+
+    async def _fake(db, vector, *, limit=10):
+        # Return one seed id; the route then re-fetches the node to confirm
+        # it exists, so the test must seed the DB with a single real node first.
+        cursor = await db.execute("SELECT id FROM nodes LIMIT 1")
+        row = await cursor.fetchone()
+        if row is None:
+            return []
+        return [(row["id"], distance)]
+
+    monkeypatch.setattr(embedding_service, "search_similar_with_distances", _fake)
+
+
+def test_rag_query_high_confidence_omits_hedge(captured_user_messages, monkeypatch):
+    c, captured = captured_user_messages
+    _create_permanent(c, "Note", "x")
+    # distance = 0 → similarity = 1.0, well above threshold
+    _force_distance(monkeypatch, 0.0)
+    resp = c.post("/api/v1/rag/query", json={"query": "anything"})
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    assert _LOW_CONFIDENCE_HEDGE_MARKER not in captured[0]["user"]
+
+
+def test_rag_query_low_confidence_prepends_hedge(captured_user_messages, monkeypatch):
+    c, captured = captured_user_messages
+    _create_permanent(c, "Note", "x")
+    # distance ≈ 1.2 → similarity ≈ 1 - 1.44/2 = 0.28, well below 0.55
+    _force_distance(monkeypatch, 1.2)
+    resp = c.post("/api/v1/rag/query", json={"query": "esoteric topic"})
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    assert _LOW_CONFIDENCE_HEDGE_MARKER in captured[0]["user"]
+    # Hedge appears BEFORE the question
+    hedge_idx = captured[0]["user"].index(_LOW_CONFIDENCE_HEDGE_MARKER)
+    question_idx = captured[0]["user"].index("Question:")
+    assert hedge_idx < question_idx
+
+
+def test_rag_query_low_confidence_brief_mode_no_hedge(captured_user_messages, monkeypatch):
+    """Brief mode handles weak retrieval in its own prompt — no separate hedge."""
+    c, captured = captured_user_messages
+    _create_permanent(c, "Note", "x")
+    _force_distance(monkeypatch, 1.2)
+    resp = c.post("/api/v1/rag/query", json={"query": "argue for X", "mode": "brief"})
+    assert resp.status_code == 200
+    assert _LOW_CONFIDENCE_HEDGE_MARKER not in captured[0]["user"]
+
+
+def test_rag_query_low_confidence_critic_mode_no_hedge(captured_user_messages, monkeypatch):
+    """Critic mode operates on the input, not the corpus — hedge irrelevant."""
+    c, captured = captured_user_messages
+    _create_permanent(c, "Note", "x")
+    _force_distance(monkeypatch, 1.2)
+    resp = c.post("/api/v1/rag/query", json={"query": "review", "mode": "critic"})
+    assert resp.status_code == 200
+    assert _LOW_CONFIDENCE_HEDGE_MARKER not in captured[0]["user"]
+
+
+def test_rag_query_no_seeds_uses_existing_sentinel_not_hedge(captured_user_messages):
+    """With zero seeds the existing '(No relevant notes found …)' kicks in."""
+    c, captured = captured_user_messages
+    # Empty corpus → no seeds, no neighbors → no hedge path
+    resp = c.post("/api/v1/rag/query", json={"query": "anything"})
+    assert resp.status_code == 200
+    user = captured[0]["user"]
+    assert "No relevant notes found" in user
+    assert _LOW_CONFIDENCE_HEDGE_MARKER not in user

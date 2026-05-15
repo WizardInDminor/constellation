@@ -71,6 +71,30 @@ _MAX_SEED_NODES = 8
 _MAX_NEIGHBOR_NODES = 12
 _EXCERPT_CHARS = 200
 
+# ADR-057: below this clamped-cosine similarity, the retrieved seeds are too
+# weak to honestly anchor an answer. The default-mode `/ask` prompt
+# pre-pends a hedge so the model leads with "your notes don't cover this"
+# instead of falling back on training-grade prose. brief/critic modes
+# bypass — they have their own retrieval-resistant prompts.
+_LOW_CONFIDENCE_THRESHOLD = 0.55
+
+_LOW_CONFIDENCE_HEDGE = (
+    "Note: the knowledge base doesn't directly cover this question. "
+    "The notes below are the closest related context; the answer should "
+    "lead by saying so plainly, then draw on what is there without "
+    "inventing detail."
+)
+
+
+def _distance_to_similarity(distance: float) -> float:
+    """L2 distance → clamped cosine similarity. Mirrors discover_service."""
+    sim = 1.0 - (distance * distance) / 2.0
+    if sim < 0.0:
+        return 0.0
+    if sim > 1.0:
+        return 1.0
+    return sim
+
 
 def _excerpt(text: str) -> str:
     if len(text) <= _EXCERPT_CHARS:
@@ -148,10 +172,17 @@ async def query(
     except Exception as exc:
         raise EmbedUnavailableError("Embedding service unavailable") from exc
 
-    # 2. Hybrid search → top seed candidates
-    semantic_ids = await embedding_service.search_similar(db, vector, limit=10)
+    # 2. Hybrid search → top seed candidates. Retain distances so we can detect
+    # low-confidence retrieval (ADR-057) and prepend a hedge in default mode.
+    semantic_pairs = await embedding_service.search_similar_with_distances(
+        db, vector, limit=10
+    )
+    semantic_ids = [nid for nid, _ in semantic_pairs]
     fts_ids = await node_repo.fts_search(db, q=query_text, limit=10)
     merged_ids = search_service.rrf_merge([semantic_ids, fts_ids])[:_MAX_SEED_NODES]
+    top_similarity = (
+        _distance_to_similarity(semantic_pairs[0][1]) if semantic_pairs else 0.0
+    )
 
     # 3. Fetch seed node details
     seed_nodes = []
@@ -178,7 +209,20 @@ async def query(
     # 6. Context assembly
     if seed_nodes or neighbor_nodes:
         context_text, provenance = _build_context(seed_nodes, neighbor_nodes, edges)
-        user_content = f"Question: {query_text}\n\nNotes:\n\n{context_text}"
+        # ADR-057: if we have notes but they're weak, lead with a hedge.
+        # brief / critic modes have their own retrieval-aware prompts.
+        is_default_mode = mode is None or mode == "default"
+        low_confidence = (
+            is_default_mode
+            and seed_nodes
+            and top_similarity < _LOW_CONFIDENCE_THRESHOLD
+        )
+        if low_confidence:
+            user_content = (
+                f"{_LOW_CONFIDENCE_HEDGE}\n\nQuestion: {query_text}\n\nNotes:\n\n{context_text}"
+            )
+        else:
+            user_content = f"Question: {query_text}\n\nNotes:\n\n{context_text}"
     else:
         provenance = []
         user_content = f"Question: {query_text}\n\n(No relevant notes found in the knowledge base.)"

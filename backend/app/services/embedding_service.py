@@ -201,6 +201,28 @@ async def search_similar(
     return [r["node_id"] for r in rows]
 
 
+async def search_similar_with_distances(
+    db: aiosqlite.Connection,
+    vector: list[float],
+    *,
+    limit: int = 10,
+) -> list[tuple[str, float]]:
+    """Same as search_similar(), but also returns the raw vec0 distance.
+
+    Used by `rag_service.query` to detect low-confidence retrieval per
+    ADR-057 (Bucket B — B5). Distance is L2 against normalized vectors;
+    lower means more similar. Tuples come back sorted ascending by distance.
+    """
+    packed = _pack_vector(vector)
+    cursor = await db.execute(
+        "SELECT node_id, distance FROM vec_nodes"
+        " WHERE embedding MATCH ? AND k = ? ORDER BY distance",
+        (packed, limit),
+    )
+    rows = await cursor.fetchall()
+    return [(r["node_id"], r["distance"]) for r in rows]
+
+
 async def drain_jobs(db: aiosqlite.Connection, provider: EmbeddingProvider) -> DrainResult:
     """Drain up to `embedding_drain_batch_size` pending embedding jobs.
 

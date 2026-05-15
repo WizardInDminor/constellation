@@ -2660,6 +2660,103 @@ similarity-only with structural emptiness). Triangles should be the
 
 ---
 
+## ADR-057 — Low-confidence retrieval threshold for Ask
+
+**Status:** Accepted; shipped 2026-05-15 (Bucket B — B5).
+
+**Context:** Today the default `/ask` system prompt instructs the model
+to say "the notes don't contain enough information" when retrieval is
+weak — but it relies on the model to recognise weakness from the
+provided context. In practice, the model often draws on its own
+training rather than admitting the corpus doesn't cover the question,
+producing training-grade prose that looks like a personal-knowledge-base
+answer but isn't.
+
+The retrieval pipeline knows when seeds are weak: vec0 returns L2
+distances which we already convert to cosine similarity in
+`discover_service._distance_to_similarity`. We just discard the
+numbers in `embedding_service.search_similar`. Plumbing them through
+to `rag_service.query` lets the route prepend an explicit hedge when
+the top seed's similarity is low, taking the recognition off the
+model.
+
+**Decision:**
+
+- **Metric:** max cosine similarity over the top-K (= 10) raw semantic
+  seeds returned from the vec0 lookup, derived from
+  `1 - distance^2 / 2` and clamped to [0, 1] (the same projection
+  bridges already uses).
+- **Threshold:** `_LOW_CONFIDENCE_THRESHOLD = 0.55`. Below this the
+  retrieval is too weak to honestly anchor an answer; above is "at
+  least plausibly relevant."
+- **Hedge text:** prepended to the user content as a leading note,
+  before the retrieved context. The hedge is data, not system prompt:
+  "Note: the knowledge base doesn't directly cover this question;
+  here are the closest related notes, but the answer should lead by
+  saying so plainly."
+- **Mode gating:** the hedge only fires when `mode` is unset or
+  `"default"`. `brief` mode already handles "notes don't cover this"
+  in its own prompt (ADR-053). `critic` mode operates on the input,
+  not the corpus, so the metric is irrelevant.
+- **No-seed special case:** when the search returns zero seeds at
+  all, the existing "(No relevant notes found in the knowledge
+  base.)" sentinel still applies. The hedge is only useful when
+  seeds exist but are weak.
+- **Threshold is hardcoded, not env-driven.** A future "tune by
+  data" pass can revisit; right now we have one user and one
+  embedding model.
+
+The plumbing surface is a new
+`embedding_service.search_similar_with_distances` helper returning
+`list[tuple[str, float]]`. Existing callers of `search_similar` keep
+their ID-only contract.
+
+**Rationale:**
+
+- **Move the recognition out of the model.** The system prompt told
+  the model "don't speculate if notes are thin," but the model
+  underweights that against the natural "be helpful" prior. A
+  retrieval-side hedge is a contract, not a hint — like the mode
+  flag in ADR-053.
+- **0.55, not 0.7.** Bridges uses 0.7 as the "plausibly the same
+  concept" threshold for *pairs of notes*. Query-vs-note matches at
+  0.5–0.7 are commonly genuine soft-relevance — they shouldn't
+  trigger the strong hedge. 0.55 is the lower edge where retrieval
+  becomes mostly noise.
+- **Prepend to user content, not modify system prompt.** This keeps
+  the system prompt a constant and lets the per-request data carry
+  the per-request signal. Mode dispatch lives in
+  `_system_prompt_for(mode)`; confidence dispatch lives in
+  the user content builder. Two orthogonal axes, two orthogonal
+  surfaces.
+- **Mode gating reflects the existing semantic split.** Brief mode
+  already commits to an answer; critic mode doesn't care about
+  retrieval strength. Adding a third "low-confidence" mode would
+  conflate the response style with the retrieval signal — wrong
+  abstraction.
+
+**Consequences:**
+
+- The hedge phrasing is data-tuned: too aggressive and users see
+  it on queries they consider well-covered; too soft and the model
+  ignores it. The 0.55 threshold and the prepended sentence are
+  both reasonable starting points but expected to be revisited
+  after live use.
+- The metric depends on `embedding_service.search_similar_with_distances`
+  returning seeds in distance-ascending order (smallest distance =
+  highest similarity), which matches the vec0 contract.
+- Phase 8.1 (prompt-side edge semantics) may want to factor the
+  same confidence signal into its edge-aware prompt
+  ("CONTRADICTS-linked context but low confidence in the seed"
+  reads differently). ADR-058 should explicitly reference this
+  threshold and consider whether to share it across prompts.
+- Voyage and Ollama mxbai-embed-large are both L2-normalized, so
+  the projection is correct for both providers. If a future
+  provider returns non-normalized vectors, the projection breaks
+  silently — fix would be a per-provider similarity mode.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

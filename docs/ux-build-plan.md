@@ -154,14 +154,14 @@ One at a time, ~3 days each. ADRs ship inside the relevant PR.
 - **Acceptance:** Open Discover → Triangles → ≥5 candidate triangles surfaced; clicking one opens the slide-out showing A, C, B and offering an edge-creation action.
 - **ADR required:** **ADR-056 — Triangle-completion ranking semantics.**
 
-### B5 — Negative-finding framing on `/ask`
+### B5 — Negative-finding framing on `/ask` ✅ shipped 2026-05-15
 
 - **Description:** When retrieval confidence (max raw cosine similarity from `vec_nodes`) for the top seed falls below a threshold, prepend the Ask answer with *"Your notes don't directly cover this; here's general background, then the closest related notes."* Plumb distances through `embedding_service.search_similar` (currently discarded).
 - **Cost:** 2 days. ~0.5d plumbing + ~1d prompt iteration + ~0.5d ADR for the threshold.
 - **Acceptance:** Run a query the corpus genuinely doesn't cover ("what do my notes say about quantum gravity?"); the answer leads with the hedge, not training-grade prose.
 - **ADR required:** **ADR-057 — Low-confidence retrieval threshold for Ask.** Names the metric (likely max-similarity over top-K) and the threshold value; flags that this is data-tuned and revisitable.
 
-**Bucket B totals:** ~12 working days = ~3 weeks of clock at one PR a week.
+**Bucket B totals:** ~12 working days = ~3 weeks of clock at one PR a week. **All five PRs shipped 2026-05-15 in a single session.** 358 backend / 39 frontend tests.
 
 **Bucket B sequencing:**
 
