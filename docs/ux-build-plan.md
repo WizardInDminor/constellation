@@ -147,7 +147,7 @@ One at a time, ~3 days each. ADRs ship inside the relevant PR.
 - **ADR required:** None (compositional, no novel tradeoffs).
 - **Sequencing:** After B2, since the cluster endpoint can take a `node_filter` arg that uses the same filter contract as B2.
 
-### B4 — Triangle-completion Discover tab
+### B4 — Triangle-completion Discover tab ✅ shipped 2026-05-15
 
 - **Description:** A new Discover tab "Triangles" listing A-C-B paths where A↔B is missing. SQL is straightforward (self-join on edges); ranking is the hard part — pure structural count? similarity-weighted? recency-weighted? Decided by ADR.
 - **Cost:** 2.5 days. ~1 day SQL + endpoint, ~1 day tab UI mirroring the Bridges tab pattern, ~0.5 day ranking ADR.

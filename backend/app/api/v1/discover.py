@@ -7,6 +7,7 @@ from app.models import (
     ClassifyBridgeRequest,
     NodeSummary,
     NodeType,
+    TriangleCandidate,
 )
 from app.services import discover_service
 
@@ -49,6 +50,17 @@ async def list_bridges(
 ) -> list[BridgeCandidate]:
     return await discover_service.find_bridges(
         db, limit=limit, min_similarity=min_similarity, cross_tag=cross_tag
+    )
+
+
+@router.get("/triangles")
+async def list_triangles(
+    db: DB,
+    limit: int = Query(default=30, ge=1, le=100),
+    min_intermediates: int = Query(default=2, ge=1, le=10),
+) -> list[TriangleCandidate]:
+    return await discover_service.find_triangles(
+        db, limit=limit, min_intermediates=min_intermediates
     )
 
 

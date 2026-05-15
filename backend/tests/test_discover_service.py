@@ -243,6 +243,136 @@ async def test_bridges_cross_tag_keeps_untagged_pairs(db):
 
 
 # ---------------------------------------------------------------------------
+# Triangle completion (Bucket B — B4, ADR-056)
+# ---------------------------------------------------------------------------
+
+
+async def test_triangles_surfaces_pair_with_shared_neighbours(db):
+    """A-C-B and A-D-B → (A,B) candidate with intermediates {C,D}.
+
+    Note: the graph A↔C, A↔D, B↔C, B↔D is symmetric — (C,D) is also a valid
+    candidate (shares {A,B}). The query correctly surfaces both pairs.
+    """
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="z"))
+    d = await node_repo.create_permanent(db, PermanentCreate(title="D", content="w"))
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=c.id, type="SUPPORTS"))
+    await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=c.id, type="SUPPORTS"))
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=d.id, type="SUPPORTS"))
+    await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=d.id, type="SUPPORTS"))
+
+    triangles = await discover_service.find_triangles(db, limit=10, min_intermediates=2)
+    pair_keys = {tuple(sorted([t.node_a.id, t.node_b.id])) for t in triangles}
+    assert tuple(sorted([a.id, b.id])) in pair_keys
+    # And the symmetric (C,D) pair shares {A,B} too
+    assert tuple(sorted([c.id, d.id])) in pair_keys
+
+    # The (A,B) candidate carries C and D as intermediates
+    ab = next(
+        t for t in triangles if {t.node_a.id, t.node_b.id} == {a.id, b.id}
+    )
+    assert {n.id for n in ab.intermediates} == {c.id, d.id}
+    assert ab.intermediate_count == 2
+
+
+async def test_triangles_respects_min_intermediates(db):
+    """Pair with only 1 shared neighbour is dropped at default threshold."""
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="z"))
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=c.id, type="SUPPORTS"))
+    await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=c.id, type="SUPPORTS"))
+
+    default = await discover_service.find_triangles(db, limit=10)
+    assert default == []
+
+    # Lowering the threshold surfaces it
+    lowered = await discover_service.find_triangles(db, limit=10, min_intermediates=1)
+    assert any({t.node_a.id, t.node_b.id} == {a.id, b.id} for t in lowered)
+
+
+async def test_triangles_excludes_pairs_with_direct_edge(db):
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="z"))
+    d = await node_repo.create_permanent(db, PermanentCreate(title="D", content="w"))
+    for cn in (c, d):
+        await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=cn.id, type="SUPPORTS"))
+        await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=cn.id, type="SUPPORTS"))
+    # Now add the direct edge A→B — pair must drop out
+    await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="ANALOGOUS_TO"))
+
+    triangles = await discover_service.find_triangles(db, limit=10, min_intermediates=2)
+    pair_ids = {tuple(sorted([t.node_a.id, t.node_b.id])) for t in triangles}
+    assert tuple(sorted([a.id, b.id])) not in pair_ids
+
+
+async def test_triangles_direct_edge_either_direction_excludes(db):
+    """Reverse-direction direct edge B→A also excludes."""
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="z"))
+    d = await node_repo.create_permanent(db, PermanentCreate(title="D", content="w"))
+    for cn in (c, d):
+        await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=cn.id, type="SUPPORTS"))
+        await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=cn.id, type="SUPPORTS"))
+    # Direct edge in the OPPOSITE direction
+    await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=a.id, type="ELABORATES"))
+
+    triangles = await discover_service.find_triangles(db, limit=10, min_intermediates=2)
+    pair_ids = {tuple(sorted([t.node_a.id, t.node_b.id])) for t in triangles}
+    assert tuple(sorted([a.id, b.id])) not in pair_ids
+
+
+async def test_triangles_excludes_fleeting_from_all_roles(db):
+    """Fleeting cannot be an endpoint or an intermediate."""
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    fleeting = await node_repo.create_fleeting(db, FleetingCreate(title="F", content="z"))
+    perm_c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="w"))
+    # Both A and B link to fleeting and to perm_c
+    for cn in (fleeting, perm_c):
+        await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=cn.id, type="SUPPORTS"))
+        await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=cn.id, type="SUPPORTS"))
+
+    triangles = await discover_service.find_triangles(db, limit=10, min_intermediates=2)
+    # The fleeting node is excluded from intermediates — count drops to 1, which
+    # is below the threshold, so the pair drops entirely.
+    pair_ids = {tuple(sorted([t.node_a.id, t.node_b.id])) for t in triangles}
+    assert tuple(sorted([a.id, b.id])) not in pair_ids
+
+
+async def test_triangles_endpoint_returns_canonical_pair_ordering(db):
+    """Each surfaced pair has node_a.id < node_b.id (canonical sort)."""
+    a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
+    b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
+    c = await node_repo.create_permanent(db, PermanentCreate(title="C", content="z"))
+    d = await node_repo.create_permanent(db, PermanentCreate(title="D", content="w"))
+    for cn in (c, d):
+        await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=cn.id, type="SUPPORTS"))
+        await edge_repo.create(db, EdgeCreate(from_id=b.id, to_id=cn.id, type="SUPPORTS"))
+
+    triangles = await discover_service.find_triangles(db, limit=10, min_intermediates=2)
+    for t in triangles:
+        assert t.node_a.id < t.node_b.id
+    # No pair appears twice
+    pair_keys = [tuple(sorted([t.node_a.id, t.node_b.id])) for t in triangles]
+    assert len(pair_keys) == len(set(pair_keys))
+
+
+def test_triangles_route_smoke(client):
+    r = client.get("/api/v1/discover/triangles")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_triangles_route_validates_limit(client):
+    assert client.get("/api/v1/discover/triangles?limit=0").status_code == 422
+    assert client.get("/api/v1/discover/triangles?limit=101").status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # HTTP route smoke tests
 # ---------------------------------------------------------------------------
 

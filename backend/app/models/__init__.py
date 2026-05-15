@@ -1,7 +1,12 @@
 from app.models.activity import ActivityFeed, RecentEdge
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
-from app.models.discover import BridgeCandidate, BridgeClassification, ClassifyBridgeRequest
+from app.models.discover import (
+    BridgeCandidate,
+    BridgeClassification,
+    ClassifyBridgeRequest,
+    TriangleCandidate,
+)
 from app.models.edge import (
     EdgeCreate,
     EdgeDetail,
@@ -125,6 +130,7 @@ __all__ = [
     "BridgeCandidate",
     "BridgeClassification",
     "ClassifyBridgeRequest",
+    "TriangleCandidate",
     "CorpusStats",
     "AdminStatus",
     "EmbeddingJob",

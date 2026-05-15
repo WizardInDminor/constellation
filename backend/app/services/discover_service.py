@@ -17,7 +17,14 @@ import re
 
 import aiosqlite
 
-from app.models import BridgeCandidate, BridgeClassification, NodeDetail, NodeRef, NodeSummary
+from app.models import (
+    BridgeCandidate,
+    BridgeClassification,
+    NodeDetail,
+    NodeRef,
+    NodeSummary,
+    TriangleCandidate,
+)
 from app.models.edge import EdgeType
 from app.providers.base import GenerationProvider
 from app.repositories import edge_repo, node_repo
@@ -247,6 +254,104 @@ async def find_bridges(
     for (a, b), sim in sorted_pairs:
         if a in refs and b in refs:
             results.append(BridgeCandidate(node_a=refs[a], node_b=refs[b], similarity=sim))
+    return results
+
+
+async def find_triangles(
+    db: aiosqlite.Connection,
+    *,
+    limit: int = 30,
+    min_intermediates: int = 2,
+) -> list[TriangleCandidate]:
+    """Find note pairs that share ≥`min_intermediates` graph neighbours but
+    have no direct edge between them. ADR-056 — structural counterpart to
+    bridges.
+
+    Ranking: structural count desc, tiebreak by max recency over both
+    endpoints. Fleeting and soft-deleted notes are excluded from all three
+    roles (a, b, intermediates).
+    """
+    cursor = await db.execute(
+        """
+        WITH undirected_edges AS (
+            SELECT e.from_id AS u, e.to_id AS v
+            FROM edges e
+            JOIN nodes nu ON nu.id = e.from_id
+                AND nu.deleted_at IS NULL AND nu.type != 'fleeting'
+            JOIN nodes nv ON nv.id = e.to_id
+                AND nv.deleted_at IS NULL AND nv.type != 'fleeting'
+            UNION
+            SELECT e.to_id AS u, e.from_id AS v
+            FROM edges e
+            JOIN nodes nu ON nu.id = e.from_id
+                AND nu.deleted_at IS NULL AND nu.type != 'fleeting'
+            JOIN nodes nv ON nv.id = e.to_id
+                AND nv.deleted_at IS NULL AND nv.type != 'fleeting'
+        )
+        SELECT
+            ue1.u AS a,
+            ue2.u AS b,
+            COUNT(DISTINCT ue1.v) AS ic,
+            GROUP_CONCAT(DISTINCT ue1.v) AS intermediates_csv
+        FROM undirected_edges ue1
+        JOIN undirected_edges ue2
+            ON ue1.v = ue2.v
+           AND ue1.u < ue2.u
+        WHERE NOT EXISTS (
+            SELECT 1 FROM edges e
+            WHERE (e.from_id = ue1.u AND e.to_id = ue2.u)
+               OR (e.from_id = ue2.u AND e.to_id = ue1.u)
+        )
+        GROUP BY ue1.u, ue2.u
+        HAVING ic >= ?
+        ORDER BY
+            ic DESC,
+            (SELECT MAX(updated_at) FROM nodes WHERE id IN (ue1.u, ue2.u)) DESC
+        LIMIT ?
+        """,
+        (min_intermediates, limit),
+    )
+    rows = await cursor.fetchall()
+    if not rows:
+        return []
+
+    # Collect every node id we need to resolve to NodeRef
+    needed_ids: set[str] = set()
+    for r in rows:
+        needed_ids.add(r["a"])
+        needed_ids.add(r["b"])
+        for cid in r["intermediates_csv"].split(","):
+            needed_ids.add(cid)
+
+    placeholders = ",".join("?" * len(needed_ids))
+    cursor = await db.execute(
+        f"SELECT id, title, type FROM nodes WHERE id IN ({placeholders}) AND deleted_at IS NULL",  # noqa: S608
+        list(needed_ids),
+    )
+    refs: dict[str, NodeRef] = {
+        r["id"]: NodeRef(id=r["id"], title=r["title"], type=r["type"])
+        for r in await cursor.fetchall()
+    }
+
+    results: list[TriangleCandidate] = []
+    for r in rows:
+        a_ref = refs.get(r["a"])
+        b_ref = refs.get(r["b"])
+        if a_ref is None or b_ref is None:
+            continue
+        intermediates = [
+            refs[cid] for cid in r["intermediates_csv"].split(",") if cid in refs
+        ]
+        if not intermediates:
+            continue
+        results.append(
+            TriangleCandidate(
+                node_a=a_ref,
+                node_b=b_ref,
+                intermediates=intermediates,
+                intermediate_count=r["ic"],
+            )
+        )
     return results
 
 

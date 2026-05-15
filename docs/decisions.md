@@ -2573,6 +2573,93 @@ function takes the same fields as keyword args.
 
 ---
 
+## ADR-056 — Triangle-completion ranking semantics
+
+**Status:** Accepted; shipped 2026-05-15 (Bucket B — B4).
+
+**Context:** B4 adds a "Triangles" tab to Discover, surfacing pairs
+(A, B) that share two or more graph neighbours but have no direct
+edge between them. The ranking question: how do we order candidates?
+Three options surfaced during planning:
+
+1. **Pure structural count** — number of shared intermediates.
+2. **Similarity-weighted** — combine structural count with vector
+   similarity from `vec_nodes`.
+3. **Recency-weighted** — bias toward pairs where at least one
+   endpoint was recently touched.
+
+Option 2 effectively re-implements the Bridges tab (which is
+similarity-only with structural emptiness). Triangles should be the
+**structural counterpart** to bridges, not a hybrid.
+
+**Decision:**
+
+- **Primary rank: structural count (descending)** — pairs with more
+  shared neighbours rank higher.
+- **Tiebreak: max recency across either endpoint (descending)** —
+  among pairs with the same intermediate count, prefer the one where
+  either A or B was touched more recently. Implemented in SQL via a
+  correlated subquery in `ORDER BY`.
+- **Default minimum: 2 shared intermediates** — single-neighbour
+  triangles produce too much noise; two-plus is the actually
+  interesting signal. Configurable per request via
+  `min_intermediates`.
+- **Fleeting and soft-deleted notes are excluded** from both
+  endpoint and intermediate roles. Triangles are a permanent-graph
+  feature; inbox notes don't participate.
+- **Pairs are canonical (sorted IDs)** so symmetric (A,B)/(B,A) does
+  not surface twice.
+- **Existing-edge pairs are excluded.** If A↔B already has an edge in
+  either direction, we don't surface them as a triangle candidate.
+- **Default result cap: 30, with `limit` query param up to 100.**
+  Matches the bridges tab cap.
+
+**Rationale:**
+
+- **Structural count is interpretable.** "You've connected this pair
+  indirectly through 4 notes" reads as a clear signal of latent
+  conceptual proximity. Mixing in similarity or recency makes the
+  ranking opaque and harder to debug.
+- **Structural counterpart to Bridges.** Bridges surfaces semantic
+  proximity without structure. Triangles surfaces structural
+  proximity without semantics. Both signals are independent inputs to
+  the user's link-creation decision; conflating them via a hybrid
+  score collapses the affordance.
+- **Recency tiebreak is cheap and matches user intuition.** Among
+  equally-strong structural candidates, the user is more likely to
+  act on pairs they've been thinking about recently. The signal costs
+  nothing — `updated_at` is already indexed via the
+  `idx_nodes_updated_at` or computed on the fly at our scale.
+- **Min intermediates = 2 not 1.** With single-intermediate triangles
+  every loosely-connected note pair appears. Two-plus prunes
+  aggressively while preserving the signal users actually want.
+- **Why not similarity-weighted?** Reserved for Phase 8 if needed.
+  ADR-058 might revisit (e.g., "show me semantically-different pairs
+  with high structural connection — i.e., bridges that don't share
+  vocabulary"), but that's a different feature, not a tweak to this
+  ranking.
+
+**Consequences:**
+
+- The default `min_intermediates=2` may yield empty results on small
+  corpora. Frontend renders an empty-state explanation noting the
+  threshold and that lowering it (or growing the corpus) widens the
+  search.
+- The recency tiebreak uses `updated_at` which now reflects only
+  user-content edits (post-B1 fix to `embedding_service`). A pair
+  containing a newly-processed permanent note ranks no higher than
+  one containing an old, unmodified note — that's the intended
+  semantic ("recently thought about," not "recently created").
+- Adding similarity-weighting later is non-breaking: the request
+  model can grow a `weight: Literal["structural", "hybrid"]` field
+  with `structural` as default.
+- The "intermediates" payload (up to N per pair) is comma-joined via
+  `GROUP_CONCAT` in SQL, then resolved to `NodeRef` server-side; the
+  full set of intermediates is returned so the UI can render
+  "A → [C1, C2, C3] → B" without follow-up queries.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

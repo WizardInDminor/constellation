@@ -25,6 +25,7 @@ export type ActivityFeed = components["schemas"]["ActivityFeed"];
 export type RecentEdge = components["schemas"]["RecentEdge"];
 export type ClusterSuggestResponse = components["schemas"]["ClusterSuggestResponse"];
 export type ClusterLinkProposal = components["schemas"]["ClusterLinkProposal"];
+export type TriangleCandidate = components["schemas"]["TriangleCandidate"];
 export type NodeUsed = components["schemas"]["NodeUsed"];
 export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
@@ -332,6 +333,18 @@ export function listBridges(opts: {
   if (opts.crossTag) params.set("cross_tag", "true");
   const qs = params.toString();
   return request(`/api/v1/discover/bridges${qs ? `?${qs}` : ""}`);
+}
+
+export function listTriangles(opts: {
+  limit?: number;
+  minIntermediates?: number;
+} = {}): Promise<TriangleCandidate[]> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.minIntermediates !== undefined)
+    params.set("min_intermediates", String(opts.minIntermediates));
+  const qs = params.toString();
+  return request(`/api/v1/discover/triangles${qs ? `?${qs}` : ""}`);
 }
 
 export function classifyBridge(

@@ -7,6 +7,7 @@ import {
   listBridges,
   listOrphans,
   listStale,
+  listTriangles,
   createEdge,
   getNode,
   classifyBridge,
@@ -17,6 +18,7 @@ import type {
   NodeDetail,
   NodeSummary,
   TagRef,
+  TriangleCandidate,
   EdgeType,
   NodeRef,
 } from "@/lib/api";
@@ -24,12 +26,13 @@ import { NodePicker } from "@/components/NodePicker";
 import { NotePreviewPopover } from "@/components/NotePreviewPopover";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
-type Tab = "orphans" | "stale" | "bridges";
+type Tab = "orphans" | "stale" | "bridges" | "triangles";
 
 const TAB_LABELS: Record<Tab, string> = {
   orphans: "Orphans",
   stale: "Stale",
   bridges: "Bridges",
+  triangles: "Triangles",
 };
 
 const TAB_DESCRIPTIONS: Record<Tab, string> = {
@@ -37,6 +40,8 @@ const TAB_DESCRIPTIONS: Record<Tab, string> = {
   stale: "Notes you haven't touched in a while. Worth a re-read or a fresh link.",
   bridges:
     "Pairs of notes that look semantically related but aren't linked. Decide whether each pair belongs together.",
+  triangles:
+    "Pairs of notes that share two or more graph neighbours but no direct edge. Structural counterpart to Bridges.",
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -468,6 +473,54 @@ function BridgeCard({
   );
 }
 
+// ── TriangleCard ──────────────────────────────────────────────────────────────
+
+function TriangleCard({
+  pair,
+  onClick,
+}: {
+  pair: TriangleCandidate;
+  onClick: () => void;
+}) {
+  const previewIntermediates = pair.intermediates.slice(0, 3);
+  const extra = pair.intermediates.length - previewIntermediates.length;
+  return (
+    <li
+      className="bg-white border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all"
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-gray-500">Shared neighbours</span>
+        <span className="text-xs font-mono text-indigo-600">{pair.intermediate_count}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-2">
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
+          <span className="font-medium text-sm truncate">{pair.node_a.title}</span>
+          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {pair.node_a.type}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
+          <span className="font-medium text-sm truncate">{pair.node_b.title}</span>
+          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}>
+            {pair.node_b.type}
+          </span>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">
+        via{" "}
+        {previewIntermediates.map((n, i) => (
+          <span key={n.id}>
+            <span className="text-gray-700">{n.title}</span>
+            {i < previewIntermediates.length - 1 && ", "}
+          </span>
+        ))}
+        {extra > 0 && <span className="text-gray-400"> + {extra} more</span>}
+      </p>
+    </li>
+  );
+}
+
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 
 function NoteCard({ node, hint, onClick }: { node: NodeSummary; hint?: string; onClick: () => void }) {
@@ -515,6 +568,8 @@ export default function DiscoverPage() {
   const [orphans, setOrphans] = useState<NodeSummary[] | null>(null);
   const [stale, setStale] = useState<NodeSummary[] | null>(null);
   const [bridges, setBridges] = useState<BridgeCandidate[] | null>(null);
+  const [triangles, setTriangles] = useState<TriangleCandidate[] | null>(null);
+  const [selectedTriangle, setSelectedTriangle] = useState<TriangleCandidate | null>(null);
   const [crossTag, setCrossTag] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -581,6 +636,9 @@ export default function DiscoverPage() {
         } else if (tab === "bridges" && bridges === null) {
           const data = await listBridges({ limit: 30, minSimilarity: 0.7, crossTag });
           if (!cancelled) setBridges(data);
+        } else if (tab === "triangles" && triangles === null) {
+          const data = await listTriangles({ limit: 30, minIntermediates: 2 });
+          if (!cancelled) setTriangles(data);
         }
       } catch (err) {
         if (!cancelled)
@@ -593,10 +651,11 @@ export default function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [tab, orphans, stale, bridges, crossTag]);
+  }, [tab, orphans, stale, bridges, triangles, crossTag]);
 
   function closePanel() {
     setSelectedBridge(null);
+    setSelectedTriangle(null);
     setSelectedNode(null);
     setSelectedNodeDetail(null);
     setNodePickTarget(null);
@@ -715,6 +774,95 @@ export default function DiscoverPage() {
             </ul>
           )}
         </>
+      )}
+
+      {tab === "triangles" && (
+        <>
+          {loading && triangles === null ? (
+            <p className="text-sm text-gray-400">Scanning the graph for shared neighbours…</p>
+          ) : triangles && triangles.length === 0 ? (
+            <p className="text-sm text-gray-400">
+              No triangle candidates with ≥2 shared neighbours yet. Add more connections or
+              try Bridges for semantic candidates.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {triangles?.map((t) => (
+                <TriangleCard
+                  key={`${t.node_a.id}-${t.node_b.id}`}
+                  pair={t}
+                  onClick={() => setSelectedTriangle(t)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      {/* Triangle slide-out */}
+      {selectedTriangle && (
+        <SlideOutPanel
+          title={`Triangle — ${selectedTriangle.intermediate_count} shared`}
+          onClose={closePanel}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">A</span>
+              <Link
+                href={`/nodes/${selectedTriangle.node_a.id}`}
+                className="text-sm font-medium text-indigo-700 hover:underline"
+              >
+                {selectedTriangle.node_a.title}
+              </Link>
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">
+                Shared via
+              </span>
+              <ul className="flex flex-col gap-1">
+                {selectedTriangle.intermediates.map((n) => (
+                  <li key={n.id} className="text-xs">
+                    <Link
+                      href={`/nodes/${n.id}`}
+                      className="text-gray-700 hover:text-indigo-700 hover:underline"
+                    >
+                      {n.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">B</span>
+              <Link
+                href={`/nodes/${selectedTriangle.node_b.id}`}
+                className="text-sm font-medium text-indigo-700 hover:underline"
+              >
+                {selectedTriangle.node_b.title}
+              </Link>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 font-medium mb-3">Create A → B connection</p>
+            <EdgeForm
+              fromId={selectedTriangle.node_a.id}
+              toId={selectedTriangle.node_b.id}
+              excludeIds={[selectedTriangle.node_a.id, selectedTriangle.node_b.id]}
+              onSuccess={() => {
+                setTriangles((prev) =>
+                  prev
+                    ? prev.filter(
+                        (t) =>
+                          !(t.node_a.id === selectedTriangle.node_a.id &&
+                            t.node_b.id === selectedTriangle.node_b.id),
+                      )
+                    : prev,
+                );
+                closePanel();
+              }}
+            />
+          </div>
+        </SlideOutPanel>
       )}
 
       {/* Bridge pair slide-out */}

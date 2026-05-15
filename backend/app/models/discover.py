@@ -12,6 +12,19 @@ class BridgeCandidate(BaseModel):
     similarity: float
 
 
+class TriangleCandidate(BaseModel):
+    """A pair of notes that share graph neighbours but have no direct edge.
+
+    `intermediates` are the shared-neighbour nodes (≥ `min_intermediates` per
+    ADR-056). Structural counterpart to BridgeCandidate.
+    """
+
+    node_a: NodeRef
+    node_b: NodeRef
+    intermediates: list[NodeRef]
+    intermediate_count: int
+
+
 class ClassifyBridgeRequest(BaseModel):
     """Two node IDs the user wants Claude to evaluate for a meaningful edge."""
 
