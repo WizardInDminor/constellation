@@ -59,7 +59,14 @@ from app.models.rag import (
     SuggestLinksResponse,
     SuggestPermanentResponse,
 )
-from app.models.search import SearchRequest, SearchResponse, SearchResult
+from app.models.search import (
+    DedupRequest,
+    DedupResponse,
+    DedupResult,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
 from app.models.source import (
     SourceCreate,
     SourceDetail,
@@ -122,6 +129,9 @@ __all__ = [
     "SearchRequest",
     "SearchResponse",
     "SearchResult",
+    "DedupRequest",
+    "DedupResponse",
+    "DedupResult",
     "GraphData",
     "GraphEdgeRef",
     "GraphNodeRef",

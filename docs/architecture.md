@@ -394,10 +394,17 @@ DELETE /sources/{id}
 ### Search
 
 ```
-POST   /search/semantic             # pure vector similarity
+POST   /search/semantic             # pure vector similarity; rank-normalised score
 POST   /search/fulltext             # FTS5 ranked
 POST   /search/hybrid               # RRF fusion of both (default)
+POST   /search/dedup                # top-K with raw clamped-cosine similarity (ADR-062)
 ```
+
+`/search/dedup` is distinct from `/search/semantic` in returning **raw**
+clamped-cosine similarity (the same `1 - distance²/2` projection used by
+`rag_service` and `discover_service`), not a rank-normalised score. Used
+by the capture-modal dedup panel to threshold against absolute "looks like
+a duplicate" / "looks related" bars rather than ranking.
 
 ### RAG
 

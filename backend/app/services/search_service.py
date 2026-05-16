@@ -92,3 +92,44 @@ async def hybrid_search(
     )
     merged = rrf_merge([semantic_ids, fts_ids])[:limit]
     return await _fetch_summaries(db, merged)
+
+
+# ---------------------------------------------------------------------------
+# Dedup search (ADR-062)
+# ---------------------------------------------------------------------------
+
+
+def _distance_to_similarity(distance: float) -> float:
+    """L2 distance → clamped cosine similarity. Mirrors rag_service helper."""
+    sim = 1.0 - (distance * distance) / 2.0
+    if sim < 0.0:
+        return 0.0
+    if sim > 1.0:
+        return 1.0
+    return sim
+
+
+async def dedup_search(
+    db: aiosqlite.Connection,
+    provider: EmbeddingProvider,
+    query: str,
+    *,
+    limit: int = 8,
+) -> list[tuple[NodeSummary, float]]:
+    """Top-K semantic matches with raw clamped-cosine similarities.
+
+    Distinct from `semantic_search` in that the returned scores are absolute
+    similarities (callable against a fixed threshold) rather than rank-
+    normalized positions. Used by the capture-modal dedup panel (ADR-062).
+    Ordering is by similarity descending.
+    """
+    vector = await provider.embed(query)
+    pairs = await embedding_service.search_similar_with_distances(
+        db, vector, limit=limit
+    )
+    if not pairs:
+        return []
+    ids = [nid for nid, _ in pairs]
+    summaries = await _fetch_summaries(db, ids)
+    sim_by_id = {nid: _distance_to_similarity(d) for nid, d in pairs}
+    return [(s, sim_by_id[s.id]) for s in summaries if s.id in sim_by_id]

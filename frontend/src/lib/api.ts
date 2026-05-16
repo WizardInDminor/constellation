@@ -20,6 +20,8 @@ export type SourceCreate = components["schemas"]["SourceCreate"];
 export type SourceUpdate = Partial<Omit<SourceCreate, "id">>;
 export type SearchResponse = components["schemas"]["SearchResponse"];
 export type SearchResult = components["schemas"]["SearchResult"];
+export type DedupResponse = components["schemas"]["DedupResponse"];
+export type DedupResult = components["schemas"]["DedupResult"];
 export type RagResponse = components["schemas"]["RagResponse"];
 export type RagMode = NonNullable<components["schemas"]["RagRequest"]["mode"]>;
 export type ActivityFeed = components["schemas"]["ActivityFeed"];
@@ -279,6 +281,16 @@ export function searchFulltext(query: string, limit = 20): Promise<SearchRespons
 
 export function searchHybrid(query: string, limit = 20): Promise<SearchResponse> {
   return request("/api/v1/search/hybrid", {
+    method: "POST",
+    body: JSON.stringify({ query, limit }),
+  });
+}
+
+// ADR-062: capture-time dedup search. Returns raw clamped-cosine similarities
+// (absolute, not rank-normalized) so callers can threshold against a fixed
+// "looks like a duplicate" bar.
+export function searchDedup(query: string, limit = 8): Promise<DedupResponse> {
+  return request("/api/v1/search/dedup", {
     method: "POST",
     body: JSON.stringify({ query, limit }),
   });

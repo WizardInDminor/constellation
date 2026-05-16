@@ -198,3 +198,75 @@ def test_hybrid_no_duplicates(search_client):
 def test_hybrid_empty_query(search_client):
     r = search_client.post("/api/v1/search/hybrid", json={"query": "  "})
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /search/dedup (ADR-062 — Phase 8.5)
+# ---------------------------------------------------------------------------
+# Distinct from /search/semantic: returns raw clamped-cosine similarities
+# (absolute, not rank-normalized) so callers can threshold against a fixed
+# "looks like a duplicate" bar.
+
+
+def test_dedup_empty_db(search_client):
+    r = search_client.post("/api/v1/search/dedup", json={"query": "anything"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["query"] == "anything"
+    assert body["results"] == []
+
+
+def test_dedup_empty_query(search_client):
+    r = search_client.post("/api/v1/search/dedup", json={"query": "   "})
+    assert r.status_code == 400
+
+
+def test_dedup_returns_raw_similarity(search_client):
+    """Similarity must be a 0-1 clamped cosine value, *not* a rank-normalised
+    1.0/0.5/0.0 ladder. With the fake embedder returning identical zero
+    vectors, distance = 0 for every pair, so similarity = 1.0 across the
+    board (clamped at top). The test only asserts the absolute-value
+    invariant; rank-normalisation would step down the values."""
+    _make_permanent(search_client, "Note Alpha")
+    _make_permanent(search_client, "Note Beta")
+    r = search_client.post("/api/v1/search/dedup", json={"query": "alpha"})
+    assert r.status_code == 200
+    results = r.json()["results"]
+    assert len(results) == 2
+    for res in results:
+        sim = res["similarity"]
+        assert 0.0 <= sim <= 1.0
+    # With the fake embedder, all similarities are 1.0 (identical vectors).
+    # The rank-normalised endpoint would give 1.0 then 0.5; this is the
+    # diagnostic that distinguishes the two scoring schemes.
+    assert all(res["similarity"] == 1.0 for res in results)
+
+
+def test_dedup_limit_respected(search_client):
+    for i in range(8):
+        _make_permanent(search_client, f"Note {i}")
+    r = search_client.post("/api/v1/search/dedup", json={"query": "note", "limit": 3})
+    assert r.status_code == 200
+    assert len(r.json()["results"]) <= 3
+
+
+def test_dedup_excludes_deleted_nodes(search_client):
+    alive = _make_permanent(search_client, "Alive note")
+    dead = _make_permanent(search_client, "Doomed note")
+    search_client.delete(f"/api/v1/nodes/{dead['id']}")
+    r = search_client.post("/api/v1/search/dedup", json={"query": "note"})
+    assert r.status_code == 200
+    ids = [res["node"]["id"] for res in r.json()["results"]]
+    assert alive["id"] in ids
+    assert dead["id"] not in ids
+
+
+def test_dedup_results_ordered_by_similarity_desc(search_client):
+    """When the fake embedder is identical, ties result; the test simply asserts
+    a non-increasing sequence (and not, e.g., ascending)."""
+    for i in range(5):
+        _make_permanent(search_client, f"Note {i}")
+    r = search_client.post("/api/v1/search/dedup", json={"query": "note"})
+    body = r.json()
+    sims = [res["similarity"] for res in body["results"]]
+    assert sims == sorted(sims, reverse=True)

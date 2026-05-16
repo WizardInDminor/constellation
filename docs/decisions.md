@@ -3284,6 +3284,165 @@ Two related design decisions came up during implementation:
 
 ---
 
+## ADR-062 — `/search/dedup` endpoint contract + capture-time link flow
+
+**Status:** Accepted; shipped 2026-05-15 (Phase 8.5 — backend endpoint +
+IntentionalCaptureDialog dedup panel).
+
+**Context:** Walkthrough scenario 10 framed capture-time dedup as the
+single highest-leverage pre-commit affordance: at the moment of writing
+a thought, the user wants to know "is there already a note like this in
+my corpus?" and, if so, "let me link to it from this one without
+leaving the capture flow." The existing `/search/semantic` endpoint
+returns rank-normalised scores (1.0 / 0.5 / 0.0 ladder by position),
+which is fine for ranking but useless for the absolute "looks like a
+duplicate" threshold question — a top-rank match with cosine 0.4 would
+score 1.0 and look just as concerning as a true 0.9 duplicate.
+
+Capture-time linking pairs naturally with this: once a related note is
+visible, the friction to attach a typed edge should be zero. The same
+panel surfaces both C3 (compare to corpus) and C6 (save-time typed-edge
+suggestion).
+
+**Decision:**
+
+- **New endpoint `POST /search/dedup`** with `DedupRequest { query,
+  limit }` and `DedupResponse { results: DedupResult[], query }`.
+  `DedupResult` is `{ node: NodeSummary, similarity: float }` where
+  `similarity` is the raw clamped-cosine projection of the underlying
+  L2 distance — the same `1 - distance^2 / 2` formula used by
+  `rag_service._distance_to_similarity` and `discover_service`,
+  clamped to [0, 1]. Results are ordered by similarity descending.
+- **No threshold baked into the endpoint.** The endpoint returns
+  top-K with raw similarities; the client decides what to surface.
+  Two thresholds live in the frontend:
+  - `DEDUP_SHOW_THRESHOLD = 0.65` — below this, hide the result.
+    Anchored at the lower end of the corpus's typed-edge endpoint
+    similarities (Phase 8.0 probe data: CONTRADICTS at 0.82, SUPPORTS
+    0.66–0.90, ANALOGOUS_TO 0.65–0.79). Set low to surface
+    "merely related" notes the user may want to link via
+    SUPPORTS / ELABORATES.
+  - `DEDUP_DUPLICATE_THRESHOLD = 0.85` — visual flag for "this looks
+    like a duplicate." Above ADR-049's 0.7 "plausibly same concept"
+    threshold for paired notes; tuned tighter because at capture
+    time we want a higher bar before flagging.
+  Both are constants in `IntentionalCaptureDialog.tsx`. Threshold
+  tuning is data-driven and may revisit after real use.
+- **Same embedding provider as `/search/semantic`.** No new
+  provider plumbing. Cost per dedup search is one embed + one vec0
+  KNN; trivial.
+- **Default `limit = 8`** (vs 20 for the rank-normalised endpoints).
+  The capture panel only renders top matches; a wider window is
+  wasted work.
+- **Frontend host: `IntentionalCaptureDialog`** — the modal already
+  designed for "capture with intent," already pairs with the edge
+  vocabulary, already collects tags/source. Adding the dedup panel
+  here keeps capture-with-edges contained. The quick-capture
+  `CaptureDialog` (fleeting-only) stays minimal — the dedup panel
+  would fight its frictionless intent.
+- **Trigger.** Debounced 800ms after `content` changes, only when
+  `content.trim().length >= 40`. Below 40 chars the embedding is
+  uninformative; above 40 the dedup signal is meaningful. Embedding
+  query is `title + "\n" + content` so the title is part of the
+  signal.
+- **"+ Link" flow.** Each result row has an inline edge-type
+  `<select>` (defaulting to SUPPORTS) and a "+ Link" button. Clicking
+  adds the match to a `pendingLinks` list shown above the form
+  buttons as "Will create on save." The Save button label updates to
+  "Save permanent note + 2 links" so the user can confirm the
+  bundled action.
+- **Partial-failure semantics on save.** Save creates the new note
+  *first*, then each pending edge in sequence. If an edge fails
+  (e.g., race with a UNIQUE conflict), the note is still kept and
+  the dialog closes; failures log to console for now. **Notes are
+  the load-bearing artifact; edges are recoverable from the graph
+  view.** A future polish surface is a toast for partial failures.
+
+**Rationale:**
+
+- **Why raw similarity, not a second rank-normalised endpoint.**
+  Rank-normalised scores answer "which is best" — useless when the
+  comparison the user actually wants is "is any of these *close
+  enough* to matter." The same `(distance² → similarity)`
+  projection used by Phase 8.0's probe and the bridges classifier
+  threshold lets every consumer of similarity work on the same
+  scale.
+- **Why thresholds in the frontend, not the API.** Different
+  surfaces want different thresholds: the capture panel surfaces
+  related notes at 0.65; an automated dedup-prevention check would
+  want 0.85+; a future "find related notes" sidebar might want
+  0.5+. Baking a single threshold into the endpoint would force
+  every consumer to share it. The endpoint returns raw data; clients
+  threshold.
+- **Why a `DEDUP_SHOW_THRESHOLD` of 0.65 specifically.** The
+  Phase 8.0 probe data showed the actual edge endpoint similarities
+  in this corpus span 0.65 to 0.90. Setting the show threshold at
+  the low end of *existing* typed-edge connections means the
+  capture panel will surface notes that, by the user's own past
+  judgments, are connectable. Going lower starts surfacing noise.
+- **Why default edge type SUPPORTS.** It's the most common
+  author-stance verb in the corpus and the most plausible default
+  for "I'm capturing a note related to this existing one." The
+  per-row select makes overrides one click.
+- **Why bundle save + link rather than save-then-prompt.** Two
+  separate confirmations is friction for what is conceptually a
+  single intent ("capture this thought, link to that note").
+  Bundling matches the walkthrough's framing of C3+C6 as one
+  affordance, not two.
+- **Why IntentionalCaptureDialog only.** Quick capture
+  (`CaptureDialog`, fleeting-only) is for the friction-free inbox
+  drop. Adding a dedup panel there would re-introduce the friction
+  intentional capture exists to replace. The two dialogs are now
+  semantically distinct: quick capture = ingest, intentional
+  capture = process.
+- **Why no AI edge-type classifier in capture.** ADR-049's
+  classifier is on-demand for the bridges flow (post-hoc, when the
+  user reviews potential connections). At capture time, the user
+  *knows* the relationship — that's why they're typing the new
+  note in relation to the old one. A classifier would add an LLM
+  call to every "+ Link" action; manual select is faster and
+  cheaper.
+
+**Consequences:**
+
+- **Cost.** Each dedup search is one embed call + one vec0 KNN
+  lookup. Voyage free tier (3 RPM) handles this comfortably for
+  realistic capture pacing (~1 capture / few minutes). The 800ms
+  debounce ensures one embed per pause, not per keystroke.
+- **The IntentionalCaptureDialog grows.** Six new pieces of state
+  (`dedupResults`, `dedupLoading`, `pendingLinks`, plus per-row
+  edge-type state inside `DedupPanelRow`). Still well within the
+  "single dialog component" cost budget; if it grows further, the
+  dedup pieces split into a sibling component cleanly.
+- **No new ingest-time dedup.** This ADR scopes to manual capture
+  via the dialog. Document import (`/ingest/document`) does not
+  currently dedup against the existing corpus. If duplicates become
+  a real problem there, the same endpoint can be called per
+  literature candidate during ingestion — but that's a separate
+  decision.
+- **Frontend types regenerated.** `pnpm types` (or the offline
+  spec-dump path) brings `DedupRequest`, `DedupResult`,
+  `DedupResponse` into `api-types.ts`. The systemd `constellation`
+  service needs a restart to expose `/search/dedup`.
+- **Interaction with ADR-061 (Scoped Ask).** The dedup search is
+  not currently scoped — the user wants to know about *any*
+  existing note. If a Phase 9 Project Workspace wants to scope
+  dedup to the active project ("does this duplicate any note in
+  this project?"), the endpoint should grow optional `tag_filter`
+  / `since` fields mirroring `RagRequest`. Not in scope for v1.
+- **Tests.** Six new endpoint tests in `test_search.py`: empty DB,
+  empty query, raw-similarity-not-rank-normalised, limit respected,
+  deleted-node exclusion, descending order. Frontend has no new
+  vitest coverage because the dialog state is integration-heavy;
+  manual QA via the dialog covers the flow.
+- **Phase 8 is now complete.** 8.0 prototype gate / 8.1 prompt-side
+  edge semantics / 8.3 resolved-edge state + D1 / 8.4 scoped Ask /
+  8.5 dedup endpoint + capture-time linking. 8.2 (retrieval-side
+  edge expansion) remains conditionally deferred per ADR-058's
+  reactivation criterion.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
