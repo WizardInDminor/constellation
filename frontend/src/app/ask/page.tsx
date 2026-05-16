@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ragQuery, saveAnswer } from "@/lib/api";
+import { listTags, ragQuery, saveAnswer } from "@/lib/api";
 import { resolveCitations } from "@/lib/citations";
-import type { RagResponse, NodeUsed, EdgeTraversed, RagMode } from "@/lib/api";
+import type { RagResponse, NodeUsed, EdgeTraversed, RagMode, TagRef } from "@/lib/api";
 
 const MODE_OPTIONS: {
   value: RagMode;
@@ -37,6 +37,20 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   structure: "bg-green-100 text-green-800",
   fleeting: "bg-yellow-100 text-yellow-800",
 };
+
+// ADR-061: recency presets. `null` means no `since` filter.
+const RECENCY_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: "Any time" },
+  { value: 7, label: "Last 7 days" },
+  { value: 30, label: "Last 30 days" },
+  { value: 90, label: "Last 90 days" },
+];
+
+function daysAgoIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
 
 function ProvenancePanel({
   provenance,
@@ -158,8 +172,23 @@ export default function AskPage() {
   const [response, setResponse] = useState<RagResponse | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(true);
   const [saving, setSaving] = useState(false);
+  // ADR-061: scope state.
+  const [allTags, setAllTags] = useState<TagRef[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [recencyDays, setRecencyDays] = useState<number | null>(null);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    listTags()
+      .then(setAllTags)
+      .catch(() => {
+        // Non-fatal — scope controls just won't list tags.
+      });
+  }, []);
+
+  const scopeActive = selectedTagIds.size > 0 || recencyDays !== null;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -168,7 +197,11 @@ export default function AskPage() {
     setError(null);
     setResponse(null);
     try {
-      const res = await ragQuery(query.trim(), { mode });
+      const res = await ragQuery(query.trim(), {
+        mode,
+        tag_filter: selectedTagIds.size > 0 ? Array.from(selectedTagIds) : undefined,
+        since: recencyDays !== null ? daysAgoIso(recencyDays) : undefined,
+      });
       setResponse(res);
       setProvenanceOpen(true);
     } catch (err) {
@@ -176,6 +209,20 @@ export default function AskPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleTag = (id: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearScope = () => {
+    setSelectedTagIds(new Set());
+    setRecencyDays(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -232,6 +279,97 @@ export default function AskPage() {
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
           autoFocus
         />
+
+        {/* ADR-061: scope controls. Collapsed by default to keep the page calm
+            when scope is off; opens to expose tag and recency selectors. */}
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
+          <button
+            type="button"
+            onClick={() => setScopeOpen((o) => !o)}
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <span className="flex items-center gap-2">
+              <span className="uppercase tracking-wide text-gray-500">Scope</span>
+              {scopeActive ? (
+                <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700 normal-case tracking-normal">
+                  {selectedTagIds.size > 0
+                    ? `${selectedTagIds.size} tag${selectedTagIds.size === 1 ? "" : "s"}`
+                    : null}
+                  {selectedTagIds.size > 0 && recencyDays !== null ? " · " : null}
+                  {recencyDays !== null
+                    ? RECENCY_OPTIONS.find((o) => o.value === recencyDays)?.label
+                    : null}
+                </span>
+              ) : (
+                <span className="text-gray-400 normal-case tracking-normal">any note, any time</span>
+              )}
+            </span>
+            <span className="text-gray-400">{scopeOpen ? "▲" : "▼"}</span>
+          </button>
+          {scopeOpen && (
+            <div className="border-t border-gray-200 px-3 pb-3 pt-2 space-y-3">
+              <div>
+                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                  Recency
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {RECENCY_OPTIONS.map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setRecencyDays(opt.value)}
+                      className={`rounded-full px-2.5 py-1 text-xs ${
+                        recencyDays === opt.value
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                  Tags (matches any selected)
+                </p>
+                {allTags.length === 0 ? (
+                  <p className="text-xs text-gray-400">No tags yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTags.map((tag) => {
+                      const active = selectedTagIds.has(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.id)}
+                          className={`rounded-full px-2.5 py-1 text-xs ${
+                            active
+                              ? "bg-blue-600 text-white"
+                              : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {scopeActive && (
+                <button
+                  type="button"
+                  onClick={clearScope}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  Clear scope
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="mt-3 flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
             <div className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-xs">

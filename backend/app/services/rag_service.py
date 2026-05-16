@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 import aiosqlite
 
@@ -86,6 +87,12 @@ _MAX_SEED_NODES = 8
 _MAX_NEIGHBOR_NODES = 12
 _EXCERPT_CHARS = 200
 
+# ADR-061 (Phase 8.4): widened search limits when a scope filter is active so
+# a narrow scope doesn't collapse the seed pool. Unscoped retrieval keeps the
+# pre-Phase-8.4 limits (10 each) for cost parity.
+_UNSCOPED_SEARCH_LIMIT = 10
+_SCOPED_SEARCH_LIMIT = 40
+
 # ADR-057: below this clamped-cosine similarity, the retrieved seeds are too
 # weak to honestly anchor an answer. The default-mode `/ask` prompt
 # pre-pends a hedge so the model leads with "your notes don't cover this"
@@ -109,6 +116,48 @@ def _distance_to_similarity(distance: float) -> float:
     if sim > 1.0:
         return 1.0
     return sim
+
+
+async def _resolve_scope(
+    db: aiosqlite.Connection,
+    *,
+    tag_filter: list[str] | None,
+    since: datetime | None,
+) -> set[str] | None:
+    """Compute the set of node IDs matching the scope (ADR-061).
+
+    Returns None when no filter is applied — callers treat None as "everything
+    in scope" and skip the seed-filter step.
+
+    `tag_filter` is a list of tag IDs with OR semantics (a node matches if it
+    carries any of the listed tags). `since` is a datetime; nodes with
+    `created_at >= since` (and not soft-deleted) match.
+    """
+    if not tag_filter and since is None:
+        return None
+
+    where_clauses = ["n.deleted_at IS NULL"]
+    params: list = []
+
+    if since is not None:
+        where_clauses.append("n.created_at >= ?")
+        params.append(since.isoformat())
+
+    if tag_filter:
+        placeholders = ",".join("?" * len(tag_filter))
+        sql = (
+            "SELECT DISTINCT n.id FROM nodes n "
+            "JOIN node_tags nt ON nt.node_id = n.id "
+            f"WHERE nt.tag_id IN ({placeholders}) AND "
+            + " AND ".join(where_clauses)
+        )
+        params = [*tag_filter, *params]
+    else:
+        sql = "SELECT n.id FROM nodes n WHERE " + " AND ".join(where_clauses)
+
+    cursor = await db.execute(sql, params)
+    rows = await cursor.fetchall()
+    return {r["id"] for r in rows}
 
 
 def _excerpt(text: str) -> str:
@@ -192,7 +241,15 @@ async def query(
     *,
     expansion_depth: int = 1,
     mode: RagMode | None = None,
+    tag_filter: list[str] | None = None,
+    since: datetime | None = None,
 ) -> RagResponse:
+    # ADR-061: resolve scope first so seed retrieval can be filtered. None
+    # means "no scope" and the pipeline behaves exactly as pre-Phase-8.4.
+    scope_ids = await _resolve_scope(db, tag_filter=tag_filter, since=since)
+    scoped = scope_ids is not None
+    search_limit = _SCOPED_SEARCH_LIMIT if scoped else _UNSCOPED_SEARCH_LIMIT
+
     # 1. Embed query
     try:
         vector = await embed_provider.embed(query_text)
@@ -201,11 +258,17 @@ async def query(
 
     # 2. Hybrid search → top seed candidates. Retain distances so we can detect
     # low-confidence retrieval (ADR-057) and prepend a hedge in default mode.
+    # When scope is active, the candidate lists are widened then filtered to
+    # scope before RRF merge so a narrow scope doesn't collapse the seed pool.
     semantic_pairs = await embedding_service.search_similar_with_distances(
-        db, vector, limit=10
+        db, vector, limit=search_limit
     )
+    if scoped:
+        semantic_pairs = [(nid, d) for nid, d in semantic_pairs if nid in scope_ids]
     semantic_ids = [nid for nid, _ in semantic_pairs]
-    fts_ids = await node_repo.fts_search(db, q=query_text, limit=10)
+    fts_ids = await node_repo.fts_search(db, q=query_text, limit=search_limit)
+    if scoped:
+        fts_ids = [nid for nid in fts_ids if nid in scope_ids]
     merged_ids = search_service.rrf_merge([semantic_ids, fts_ids])[:_MAX_SEED_NODES]
     top_similarity = (
         _distance_to_similarity(semantic_pairs[0][1]) if semantic_pairs else 0.0

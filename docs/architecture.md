@@ -407,6 +407,15 @@ POST   /rag/suggest-links/{id}      # AI suggests candidate edges for a node
 POST   /rag/suggest-permanent/{id}  # AI decomposes fleeting into atomic permanents
 ```
 
+`POST /rag/query` accepts optional scope filters on `RagRequest` (ADR-061):
+- `tag_filter: list[str] | null` — list of tag IDs with OR semantics; restricts
+  seed retrieval to notes carrying any listed tag.
+- `since: datetime | null` — ISO timestamp; restricts seeds to notes with
+  `created_at >= since`.
+Both default to NULL (open corpus). Scope applies to seed retrieval only;
+graph expansion is unrestricted so typed-edge context can still reach
+outside the scope.
+
 ### Config
 
 ```

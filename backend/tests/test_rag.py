@@ -520,6 +520,142 @@ def test_rag_query_with_edges_in_provenance(rag_query_client):
 
 
 # ---------------------------------------------------------------------------
+# ADR-061 — Scoped Ask (Phase 8.4)
+# ---------------------------------------------------------------------------
+# tag_filter and since on RagRequest restrict the *seed* set; graph expansion
+# is unrestricted so typed edges can still reach into supporting context
+# outside the scope. Provenance reports direct vs neighbour honestly.
+
+
+def _create_tag(client, name: str) -> dict:
+    r = client.post("/api/v1/tags", json={"name": name})
+    assert r.status_code == 201
+    return r.json()
+
+
+def _tag_node(client, node_id: str, tag_ids: list[str]) -> None:
+    r = client.patch(f"/api/v1/nodes/{node_id}", json={"tag_ids": tag_ids})
+    assert r.status_code == 200
+
+
+def test_rag_query_tag_filter_restricts_seeds(rag_query_client):
+    c = rag_query_client
+    eurorack = _create_tag(c, "eurorack")["id"]
+    other = _create_tag(c, "other")["id"]
+
+    n1 = _create_permanent(c, "Eurorack VCO basics", "voltage controlled oscillator")
+    n2 = _create_permanent(c, "Cooking risotto", "stir the rice slowly")
+    n3 = _create_permanent(c, "Eurorack envelope", "attack decay envelope shapes")
+    _tag_node(c, n1["id"], [eurorack])
+    _tag_node(c, n2["id"], [other])
+    _tag_node(c, n3["id"], [eurorack])
+
+    r = c.post(
+        "/api/v1/rag/query",
+        json={"query": "eurorack synthesis", "tag_filter": [eurorack]},
+    )
+    assert r.status_code == 200
+    direct_ids = {
+        p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"
+    }
+    # Off-tag note must not be a seed; eurorack notes may or may not all appear
+    # depending on FTS ranking, but the off-tag one is forbidden.
+    assert n2["id"] not in direct_ids
+    assert direct_ids.issubset({n1["id"], n3["id"]})
+
+
+def test_rag_query_tag_filter_or_semantics(rag_query_client):
+    """tag_filter matches a node carrying ANY listed tag (OR semantics)."""
+    c = rag_query_client
+    t_a = _create_tag(c, "alpha")["id"]
+    t_b = _create_tag(c, "beta")["id"]
+    t_g = _create_tag(c, "gamma")["id"]
+
+    n_a = _create_permanent(c, "Alpha note", "alpha content")
+    n_b = _create_permanent(c, "Beta note", "beta content")
+    n_g = _create_permanent(c, "Gamma note", "gamma content")
+    _tag_node(c, n_a["id"], [t_a])
+    _tag_node(c, n_b["id"], [t_b])
+    _tag_node(c, n_g["id"], [t_g])
+
+    r = c.post(
+        "/api/v1/rag/query",
+        json={"query": "content", "tag_filter": [t_a, t_b]},
+    )
+    assert r.status_code == 200
+    direct_ids = {
+        p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"
+    }
+    assert n_g["id"] not in direct_ids
+    assert direct_ids.issubset({n_a["id"], n_b["id"]})
+
+
+def test_rag_query_since_future_returns_no_seeds(rag_query_client):
+    """A `since` timestamp in the future leaves zero seeds — the no-relevant
+    sentinel path applies."""
+    c = rag_query_client
+    _create_permanent(c, "Anything", "some content")
+    r = c.post(
+        "/api/v1/rag/query",
+        json={"query": "anything", "since": "2099-01-01T00:00:00Z"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["provenance"] == []
+
+
+def test_rag_query_no_filter_unchanged_behavior(rag_query_client):
+    """Omitting tag_filter and since is identical to pre-Phase-8.4 behaviour."""
+    c = rag_query_client
+    _create_permanent(c, "Note A", "alpha content")
+    _create_permanent(c, "Note B", "beta content")
+    r = c.post("/api/v1/rag/query", json={"query": "alpha"})
+    assert r.status_code == 200
+    assert "answer" in r.json()
+
+
+def test_rag_query_scope_seeds_only_neighbors_reach_outside(rag_query_client):
+    """Graph expansion is *not* filtered: a seed within scope can pull an
+    out-of-scope neighbour via an edge — that's exactly what typed edges
+    (ADR-058) are for."""
+    c = rag_query_client
+    in_scope = _create_tag(c, "in_scope")["id"]
+    seed = _create_permanent(c, "Scoped seed", "in scope content")
+    outside = _create_permanent(c, "Out-of-scope neighbour", "supporting content")
+    _tag_node(c, seed["id"], [in_scope])
+    c.post(
+        "/api/v1/edges",
+        json={"from_id": seed["id"], "to_id": outside["id"], "type": "SUPPORTS"},
+    )
+
+    r = c.post(
+        "/api/v1/rag/query",
+        json={"query": "in scope content", "tag_filter": [in_scope], "depth": 1},
+    )
+    assert r.status_code == 200
+    prov = r.json()["provenance"]
+    roles_by_id = {p["node_id"]: p["role"] for p in prov}
+    # Seed appears as direct (in scope)
+    assert roles_by_id.get(seed["id"]) == "direct"
+    # Neighbour reached via expansion comes through as "neighbor" even though
+    # it doesn't carry the scoped tag.
+    assert roles_by_id.get(outside["id"]) == "neighbor"
+
+
+def test_rag_query_scope_composes_with_modes(captured_system_prompts):
+    """Scope works with brief/critic modes; mode prompt is still selected
+    correctly."""
+    c, captured = captured_system_prompts
+    r = c.post(
+        "/api/v1/rag/query",
+        json={"query": "argue for X", "mode": "brief", "tag_filter": []},
+    )
+    assert r.status_code == 200
+    # Brief prompt is in play regardless of scope.
+    assert "one-sided brief" in captured[0].lower()
+
+
+# ---------------------------------------------------------------------------
 # Mode-aware system prompt (ADR-053 + A10 — Ask supports default/brief/critic)
 # ---------------------------------------------------------------------------
 

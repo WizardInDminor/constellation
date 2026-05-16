@@ -3152,6 +3152,138 @@ that none of the existing types can express without ambiguity.
 
 ---
 
+## ADR-061 — Scoped Ask (tag + recency filters on RAG query)
+
+**Status:** Accepted; shipped 2026-05-15 (Phase 8.4 — backend + /ask UI).
+
+**Context:** Walkthrough scenarios surfaced that users frequently want
+to ask a question against a sub-corpus rather than the full knowledge
+base — "what do my eurorack notes say about envelope shapes" should not
+have to compete for retrieval slots with cooking notes that happen to
+share a vector neighbourhood. C1 in the build plan captured this. The
+build plan's Phase 8.4 framing called for "tag/recency scope on Ask"
+with a proposed `ScopedAskRequest` shape.
+
+Two related design decisions came up during implementation:
+
+1. **Where in the pipeline does scope filter.** Seed-only (filter
+   semantic + FTS candidates) vs. strict (also filter graph-expanded
+   neighbours).
+2. **Request model shape.** A new `ScopedAskRequest` parallel to
+   `ScopedRagRequest` (Synthesize) vs. additive fields on the existing
+   `RagRequest`.
+
+**Decision:**
+
+- Extend `RagRequest` with two optional fields:
+  - `tag_filter: list[str] | None` — list of tag IDs with **OR
+    semantics** (a node matches if it carries any of the listed tags).
+    NULL or empty means no tag filter.
+  - `since: datetime | None` — ISO 8601 timestamp. NULL means no
+    recency filter. When set, nodes with `created_at >= since` match.
+- **No new `ScopedAskRequest` model.** Adding optional fields keeps
+  the API additive; `ScopedRagRequest` is already taken by the
+  Synthesize flow (explicit node_ids, no retrieval) and a second
+  "scoped" name would be confusing. Both filters default to NULL,
+  preserving exact pre-Phase-8.4 behaviour when omitted.
+- **Seed-only scope.** Filter the semantic-search and FTS-search
+  candidate lists by scope **before** RRF merge. Graph expansion is
+  unrestricted: an in-scope seed can pull an out-of-scope neighbour
+  via a typed edge.
+- **Widen search limits when scope is active.** Unscoped retrieval
+  keeps the pre-Phase-8.4 `limit=10` per search list (cost parity).
+  Scoped retrieval widens to `limit=40` so a narrow scope doesn't
+  collapse the candidate pool before filtering. Both lists are still
+  truncated to `_MAX_SEED_NODES=8` after RRF merge.
+- **Scope-resolution helper.** A new `_resolve_scope(db, *,
+  tag_filter, since)` returns `set[str] | None` — `None` for the
+  unfiltered case (callers skip the filter step entirely), a set
+  otherwise. The query joins `nodes` to `node_tags` only when
+  `tag_filter` is non-empty.
+- **No interaction with `query_scoped()`.** That function (Synthesize)
+  takes an explicit `node_ids` list and bypasses retrieval entirely;
+  Phase 8.4 is about scoped *retrieval*, a distinct shape. Naming
+  remains: `query()` for retrieval-based Ask (optionally scoped);
+  `query_scoped()` for ID-list Synthesize.
+
+**Frontend:**
+
+- `/ask` page gains a collapsible "Scope" panel between the question
+  textarea and the mode/Ask row. Recency uses preset chips (Any time
+  / Last 7 / 30 / 90 days) that translate to `since = now - N days`.
+  Tag chips toggle membership of the `tag_filter` list.
+- A small badge in the scope header summarises the active filter
+  ("2 tags · Last 30 days") when collapsed, so the state is visible
+  without expansion.
+- Scope is **transient session state** — not URL-encoded, not
+  persisted. Closing the page resets it. Persistence belongs to
+  Phase 9's Project Workspace (scope sidecar on a structure node).
+
+**Rationale:**
+
+- **Why seed-only, not strict scope.** The strategic bet of
+  Phase 8 (ADR-058) is that typed edges become semantically
+  load-bearing in RAG. Strict scope would forbid the model from
+  reaching past the scope along a SUPPORTS edge into context — that
+  fights the entire premise. The user's intent when scoping is
+  "anchor the answer to these notes," not "forbid the model from
+  knowing anything else." Seeds-only honours both: the answer is
+  anchored to in-scope material, but typed-edge context still
+  contributes.
+- **Why widen to 40 not bigger.** With `tag_filter` selecting a
+  small minority of the corpus, the unscoped top-10 may contain 0
+  in-scope notes. Empirical: widening to 40 covers the common case
+  where the scope is 5-20% of the corpus. Beyond that, the
+  low-confidence hedge (ADR-057) should fire honestly. If users
+  routinely scope to single-tag sets of <5 notes, that's the
+  Synthesize flow's territory (explicit IDs).
+- **Why OR semantics for tag_filter.** Synthesize's pool builder
+  (A5) defaults to OR. Reusing the semantic keeps mental models
+  consistent — "tag chips" mean the same thing across surfaces.
+  AND semantics could be added later as a second axis if needed.
+- **Why `since` as datetime, not a `days_ago` int.** Datetime is
+  more expressive — supports "since my Monday review" not just
+  "since 7 days ago." The UI defaults to N-day presets, but the API
+  accepts any timestamp. This also matches `RecentEdge` /
+  `RecentActivity` conventions (ADR-054).
+- **Why drop the `ScopedAskRequest` name.** The build plan's
+  proposed shape worked when `query_scoped` didn't already exist,
+  but it does (Synthesize). Two scoped-named requests with different
+  semantics is precisely the kind of friction the architecture
+  rules against. Extending `RagRequest` with optional fields is the
+  smaller diff with the clearer intent.
+
+**Consequences:**
+
+- **Phase 9's Project Workspace inherits this for free.** The scoped
+  ask bar (Phase 9 §3 left panel) just sends `tag_filter` and `since`
+  from the workspace's saved scope; no new backend work needed.
+- **Brief / critic modes compose with scope.** Tested
+  (`test_rag_query_scope_composes_with_modes`). Brief + tag_filter
+  means "argue for X using only my eurorack notes" — a real use
+  case that previously required the Synthesize flow.
+- **Low-confidence hedge (ADR-057) still applies.** When scope
+  collapses the seed pool, `top_similarity` is computed from
+  whatever filtered seeds remain. If they're weak, the hedge fires
+  and the answer leads with "your notes don't directly cover this."
+  Honest behaviour without special-casing.
+- **Provenance UI is unchanged.** Direct vs neighbour roles are
+  already distinguishable in `/ask`'s `ProvenancePanel`, and that
+  was always honest about in-scope vs reach-through. No frontend
+  changes needed there.
+- **`/ingest`-time tagging discipline becomes more valuable.**
+  Scoped Ask is only useful if the corpus is well-tagged. The
+  import-time auto-tag work (Phase X) and the tag-editing UI
+  combine to make this a workflow the user already invests in.
+- **Cost.** The widened search (40 vs 10 candidates each) is a
+  ~4× DB read on the vec0 KNN and the FTS5 query. Both are O(log N)
+  in corpus size, so this is well under a millisecond on the
+  current corpus. Re-evaluate if corpus grows past ~100k notes.
+- **No graph_service changes.** Expansion is unchanged; the scope
+  filter never touches it.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

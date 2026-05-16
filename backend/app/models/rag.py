@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -69,6 +70,14 @@ class RagRequest(BaseModel):
     query: str
     depth: int = Field(default=1, ge=0, le=2)
     mode: RagMode | None = None
+    # ADR-061 (Phase 8.4): optional scope filters. Both apply to *seed*
+    # retrieval only — graph expansion stays unrestricted so typed edges can
+    # still reach into supporting context outside the scope (per ADR-058).
+    # `tag_filter` is a list of tag IDs with OR semantics (a note matches if
+    # it carries ANY of the listed tags). `since` restricts seeds to nodes
+    # whose `created_at` is on or after the timestamp.
+    tag_filter: list[str] | None = None
+    since: datetime | None = None
 
 
 class NodeUsed(BaseModel):

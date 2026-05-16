@@ -288,6 +288,8 @@ async def rag_query(
             body.query,
             expansion_depth=body.depth,
             mode=body.mode,
+            tag_filter=body.tag_filter,
+            since=body.since,
         )
     except rag_service.EmbedUnavailableError as exc:
         raise HTTPException(503, "Embedding service unavailable") from exc

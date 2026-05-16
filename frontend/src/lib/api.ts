@@ -387,7 +387,14 @@ export function clusterSuggestLinks(
 // RAG
 export function ragQuery(
   query: string,
-  opts: { depth?: number; mode?: RagMode } = {},
+  opts: {
+    depth?: number;
+    mode?: RagMode;
+    // ADR-061: optional scope filters. tag_filter is a list of tag IDs with
+    // OR semantics; since is an ISO timestamp (e.g. new Date().toISOString()).
+    tag_filter?: string[];
+    since?: string;
+  } = {},
 ): Promise<RagResponse> {
   return request("/api/v1/rag/query", {
     method: "POST",
@@ -395,6 +402,8 @@ export function ragQuery(
       query,
       depth: opts.depth ?? 1,
       mode: opts.mode,
+      tag_filter: opts.tag_filter && opts.tag_filter.length > 0 ? opts.tag_filter : null,
+      since: opts.since ?? null,
     }),
   });
 }
