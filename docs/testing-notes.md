@@ -158,8 +158,15 @@ At import time they look the same. Over time they diverge: a note about keybindi
   `{"opened": ..., "warning": ...}` and shown as a toast in the UI.
   Store-as-typed, expand-on-open. See ADR-047 and the ADR-024
   amendment.
+
 ## 5/14/26 - Observations 
+
 - Need to verify how I am handling running the backend, and how that may be 
 impacted by the new addition of tailscale.  I need to ensure I can see the 
 streaming log of the backend while it is running from my tmuxinator workflow.
 - The next phase build should focus on preprocessing as much as possible before permanant notes are saved.  Meaning that when we click process on a note in the inbox and we are brought to inbox/process/[id] we should be able to link to other notes, add tags, and generally enrich them before they hit the graph as an isolated note that we then need to track down to enrich.
+
+
+## 5/15/26 - Observations from testing.
+
+- When resolving a contradicts edge the UI updates properly, but as soon as the selection is changed and you click back on that edge it does not appear resolved.  Need to verify resolution is actually writing properly.
