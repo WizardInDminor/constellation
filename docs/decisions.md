@@ -3737,6 +3737,221 @@ the workspace UI composes the toggle around them.
 
 ---
 
+## ADR-069 — Session-scoped fleeting synthesis (`include_session_fleetings`)
+
+**Status:** Accepted (Phase 9 Slice 2)
+
+**Context:** Philosophy doc §5.6 open problem 4: in early research
+sessions, fleeting notes may be the only material a user has captured.
+The current `/rag/scoped` endpoint operates on an explicit `node_ids`
+list and the frontend Synthesize tab builds that list from permanents
+only (fleeting notes are intentionally excluded from search and
+suggest-links via ADR-019). A user who captured ten fleetings today
+during a focused session cannot ask "synthesize what I captured today"
+without first promoting each one to a permanent — friction that
+defeats the purpose of the session container.
+
+The need is narrow and timing-bounded: it applies to fleetings created
+*during the active session*, not fleetings in general. Pulling all
+fleetings into synthesis would re-introduce inbox noise; pulling
+*this session's* unprocessed captures is a useful, scoped widening.
+
+**Decision:**
+
+- **Extend `ScopedRagRequest`** with two optional fields:
+  - `include_session_fleetings: bool = False`
+  - `session_id: str | None = None`
+- **When `include_session_fleetings=True` and `session_id` is
+  provided**, the route augments the `node_ids` list with fleeting
+  nodes pulled from `session_nodes` joined on `nodes` where
+  `session_id = ?`, `session_tagged = 1`, `n.type = 'fleeting'`,
+  `n.processed_at IS NULL`, and `n.deleted_at IS NULL`. Deduped
+  against the explicit `node_ids` list (set-union semantics).
+- **Provided alone, neither field changes behavior.** A request that
+  sets `include_session_fleetings=True` but provides no `session_id`
+  is treated as if the flag were false (no implicit "all active
+  sessions" — explicit only). A `session_id` without the flag is
+  ignored.
+- **Frontend toggle**: the Synthesize scope builder gains a checkbox
+  "Include today's unprocessed captures" wired to
+  `include_session_fleetings`. The flag defaults to off. When
+  enabled, the workspace's active-session ID is passed as
+  `session_id`. The toggle is disabled (with a tooltip) when no
+  session is active — there's nothing to include.
+- **Session captures are labeled in synthesis output context.** The
+  context block for each session fleeting carries a `[session
+  capture]` annotation in the synthesis pool description so the
+  generated answer can distinguish "from polished notes" vs "from raw
+  capture" if it chooses to.
+
+**Rationale:**
+
+- **Two flags rather than auto-detection.** The route could plausibly
+  auto-detect an active session and silently widen scope, but silent
+  widening is exactly the kind of behavior ADR-068 names as wrong.
+  Explicit flag + explicit session_id makes the widening a deliberate
+  act of the caller.
+- **`session_tagged = 1` matters.** Philosophy doc §IIIb.6 introduces
+  the session bypass — a user can opt a capture out of session
+  attribution. The session synthesis flag must respect that: opted-out
+  captures stay out of scope even when the flag is on. The join
+  predicate (`session_tagged = 1`) does this without a separate
+  flag.
+- **Only fleetings, not permanents.** Permanents created during a
+  session are accessible through the normal scope-builder paths
+  (tags, manual selection). The flag's purpose is bridging the inbox
+  gap; widening it to all session content would be redundant.
+- **No new endpoint.** Extending `ScopedRagRequest` is forward-
+  compatible — existing callers don't set the new fields and see no
+  change. A new endpoint (`/rag/synthesize-session`) would duplicate
+  the scoped-RAG pipeline for one flag.
+
+**Consequences:**
+
+- **Set-union semantics, not replacement.** A user who picks 5
+  permanents *and* turns on the toggle gets `permanents + session
+  fleetings`. Not one or the other. This matches the intuitive
+  reading of "include also."
+- **The session_id is the workspace's responsibility.** The
+  Synthesize page outside the workspace (`/synthesize`) doesn't know
+  about active sessions; it leaves the field null. The workspace
+  Synthesize tab — which knows the active session — passes it.
+- **No persistence.** Whether the toggle is on or off does not
+  persist between Synthesize runs. The flag is per-call.
+- **Fleeting nodes still have no embedding** in this corpus' current
+  state (they're embedded after processing). Synthesize uses scoped
+  RAG which doesn't require embeddings (no retrieval, just direct
+  context assembly), so this is not a problem for ADR-069. If a
+  future pipeline change starts requiring fleeting embeddings, the
+  scoped path keeps working as long as `_build_context` doesn't need
+  vectors.
+- **Tests.** Backend gains coverage for the include-flag plumbing:
+  explicit fleetings included, opted-out fleetings excluded,
+  processed fleetings excluded, flag-without-session-id is a no-op,
+  session-id-without-flag is a no-op.
+
+---
+
+## ADR-070 — Learning mode source material workflow
+
+**Status:** Accepted (Phase 9 Slice 2)
+
+**Context:** Philosophy doc §5.6 open problem 1 is named **critical**:
+a learning map without mapped source materials is a curriculum without
+textbooks. The system cannot generate a great learning plan and say
+"good luck finding materials." A learning mode project's value
+depends on giving the user a path from "I want to learn motor
+encoders" to "here are five sources at the right level for phase 1,
+with free links where they exist."
+
+The design brief recommends a hybrid: AI-suggested free resources
+mapped to each phase, with the user able to confirm, replace, or
+supplement. This ADR records the implementation shape.
+
+**Decision:**
+
+- **Sources gain a `status` column** via migration
+  `0008_slice2_additions.sql`:
+  - `'suggested'` — AI-proposed during learning map generation; not
+    yet reviewed.
+  - `'confirmed'` — user reviewed and accepted as part of the plan.
+  - `'user_supplied'` — user added the source themselves, bypassing
+    the suggestion flow.
+  - Default `'user_supplied'` for backward-compatibility (existing
+    sources weren't AI-suggested).
+  - Adding a column (no CHECK rewrite) avoids the table-recreate
+    ceremony for what is one optional field.
+- **Web search at generation time.** The learning map endpoint
+  invokes the generation provider with the Anthropic `web_search`
+  server tool enabled. The prompt instructs the model to research
+  the topic before building the map: derive phases and sub-topics
+  from what it finds, then populate each phase with specific source
+  recommendations including direct URLs where they exist.
+- **The provider Protocol gains an `enable_web_search: bool`
+  parameter** on `complete`. Anthropic implements it (passes the
+  `web_search_20250305` tool definition to the messages API). Ollama
+  raises `NotImplementedError` if `enable_web_search=True` is passed
+  to it — local generation has no equivalent.
+- **The endpoint returns the structured plan**, not a free-form
+  answer. JSON shape:
+  ```
+  {
+    "phases": [
+      {
+        "name": "Phase name",
+        "goals": ["Bullet", "Bullet"],
+        "sources": [
+          {"title": "...", "url": "...", "type": "article",
+           "reasoning": "Why this source for this phase"}
+        ]
+      }
+    ]
+  }
+  ```
+  Phases become rows in the project's working state (no new table —
+  the briefing prompt or a structure note's content carries the
+  plan). Sources are created in the `sources` table with
+  `status='suggested'`.
+- **UI surfaces "Suggested — not verified."** Every suggested
+  source carries this label in the workspace until the user moves it
+  to `'confirmed'` or replaces it. This is the visible part of the
+  hybrid design — the user knows what the AI proposed vs what they
+  vouched for.
+- **Quality variance is a known risk.** Web-search-augmented
+  generation can produce inconsistent phase structures across runs
+  for the same prompt. This ADR accepts that risk for Slice 2;
+  tuning is Phase 10 work. If the variance is severe in practice,
+  the PR description will flag it and a follow-up ADR will name a
+  fix (lower temperature, structured output enforcement, or
+  caching).
+
+**Rationale:**
+
+- **Hybrid over pure AI-suggestion.** A pure-AI plan would force
+  users to either accept whatever the model produces or rebuild from
+  scratch. The status enum supports the natural workflow: AI seeds,
+  user refines.
+- **Status on `sources`, not a join table.** A source has one
+  current status; tracking history of how it got to that status is
+  not in scope. A column with a CHECK constraint is the minimum
+  viable schema; if status transitions become load-bearing,
+  promotion to a separate `source_status_history` table is forward-
+  compatible.
+- **Provider Protocol extension, not a side channel.** Adding tool
+  support to `complete` means future tool-use features (suggest-
+  links with web context, citation verification, etc.) reuse the
+  same plumbing rather than each invention re-doing it.
+- **Web search is server-side.** The Anthropic API's `web_search`
+  tool runs server-side at Anthropic; we don't proxy traffic to
+  external search engines from our backend. This is operationally
+  the simplest path and matches the existing constraint that all
+  generation goes through the provider abstraction.
+
+**Consequences:**
+
+- **Migration `0008_slice2_additions.sql`** adds the `status`
+  column on `sources`. Existing rows are backfilled to
+  `'user_supplied'`. Phase 9's narrative timeline migration shifts
+  from `0008` (build plan illustrative) to `0009`. No coordination
+  cost: migration numbers are assigned by landing order.
+- **`EmbeddingProvider` unchanged.** Only the generation Protocol
+  grows; embeddings have no tool concept.
+- **Anthropic-only feature in v1.** Ollama users see "Local
+  generation does not support web search" when they request a
+  learning map. This is acceptable — the alternative is silently
+  producing a map with no sources, which is the failure mode this
+  ADR exists to prevent.
+- **Cost.** Each learning map generation invokes web search and
+  longer-than-usual generation (multiple phases, multiple sources).
+  Expected cost is a small multiple of a regular generation call;
+  worth tracking once real usage exists. Not gated in v1.
+- **Frontend learning-mode panel** gains a "Generate learning map"
+  affordance and a per-phase source list with `Confirm` / `Replace`
+  actions on each suggested source. Replacement uses the existing
+  source-creation flow with `status='user_supplied'`.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

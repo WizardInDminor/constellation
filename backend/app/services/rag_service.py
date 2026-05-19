@@ -148,8 +148,7 @@ async def _resolve_scope(
         sql = (
             "SELECT DISTINCT n.id FROM nodes n "
             "JOIN node_tags nt ON nt.node_id = n.id "
-            f"WHERE nt.tag_id IN ({placeholders}) AND "
-            + " AND ".join(where_clauses)
+            f"WHERE nt.tag_id IN ({placeholders}) AND " + " AND ".join(where_clauses)
         )
         params = [*tag_filter, *params]
     else:
@@ -270,9 +269,7 @@ async def query(
     if scoped:
         fts_ids = [nid for nid in fts_ids if nid in scope_ids]
     merged_ids = search_service.rrf_merge([semantic_ids, fts_ids])[:_MAX_SEED_NODES]
-    top_similarity = (
-        _distance_to_similarity(semantic_pairs[0][1]) if semantic_pairs else 0.0
-    )
+    top_similarity = _distance_to_similarity(semantic_pairs[0][1]) if semantic_pairs else 0.0
 
     # 3. Fetch seed node details
     seed_nodes = []
@@ -303,9 +300,7 @@ async def query(
         # brief / critic modes have their own retrieval-aware prompts.
         is_default_mode = mode is None or mode == "default"
         low_confidence = (
-            is_default_mode
-            and seed_nodes
-            and top_similarity < _LOW_CONFIDENCE_THRESHOLD
+            is_default_mode and seed_nodes and top_similarity < _LOW_CONFIDENCE_THRESHOLD
         )
         if low_confidence:
             user_content = (
@@ -350,20 +345,59 @@ _SCOPED_INSTRUCTION = (
 )
 
 
+async def _fetch_session_fleetings(db: aiosqlite.Connection, session_id: str) -> list[str]:
+    """Return the IDs of unprocessed fleeting nodes attributed to this session.
+
+    Honors the session-bypass mechanism (philosophy doc §IIIb.6): a node with
+    `session_tagged = 0` was opted out and is excluded. Soft-deleted and
+    already-processed fleetings are also excluded.
+    """
+    cursor = await db.execute(
+        """SELECT n.id
+           FROM session_nodes sn
+           JOIN nodes n ON n.id = sn.node_id
+           WHERE sn.session_id = ?
+             AND sn.session_tagged = 1
+             AND n.type = 'fleeting'
+             AND n.processed_at IS NULL
+             AND n.deleted_at IS NULL""",
+        (session_id,),
+    )
+    rows = await cursor.fetchall()
+    return [r["id"] for r in rows]
+
+
 async def query_scoped(
     db: aiosqlite.Connection,
     gen_provider: GenerationProvider,
     query_text: str,
     node_ids: list[str],
     custom_prompt: str | None = None,
+    *,
+    include_session_fleetings: bool = False,
+    session_id: str | None = None,
 ) -> RagResponse:
     """Run RAG against an explicit list of node IDs — no retrieval, no expansion.
 
     Used by the /synthesize workflow where the user has already chosen which
     notes form the context (via tags, date range, or manual selection).
+
+    ADR-069: when `include_session_fleetings=True` AND `session_id` is provided,
+    the explicit list is augmented with unprocessed fleeting captures from the
+    named session. Set-union semantics: dedup against the explicit list.
+    Either flag alone is ignored — both must be present for the widening.
     """
+    effective_ids = list(dict.fromkeys(node_ids))  # preserve order, dedup
+    if include_session_fleetings and session_id is not None:
+        fleeting_ids = await _fetch_session_fleetings(db, session_id)
+        seen = set(effective_ids)
+        for fid in fleeting_ids:
+            if fid not in seen:
+                effective_ids.append(fid)
+                seen.add(fid)
+
     seed_nodes = []
-    for nid in node_ids:
+    for nid in effective_ids:
         node = await node_repo.get_by_id(db, nid)
         if node is not None:
             seed_nodes.append(node)

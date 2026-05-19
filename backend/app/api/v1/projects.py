@@ -1,8 +1,9 @@
-"""Project workspace routes — Phase 9 Slice 0.
+"""Project workspace routes — Phase 9.
 
 Endpoints:
     GET    /projects
     POST   /projects
+    GET    /projects/resolve
     GET    /projects/{hub_id}
     GET    /projects/{hub_id}/scope
     PATCH  /projects/{hub_id}/scope
@@ -12,17 +13,21 @@ Endpoints:
     POST   /projects/{hub_id}/sessions
     GET    /projects/{hub_id}/sessions
     PATCH  /projects/{hub_id}/sessions/{session_id}
+    POST   /projects/{hub_id}/learning-map   (Slice 2 — ADR-070)
 
-See ADR-063 for the data model and design rationale.
+See ADR-063 / ADR-068 / ADR-069 / ADR-070 for the data model and design
+rationale.
 """
 
+import json
+import re
 from sqlite3 import IntegrityError
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.core.deps import DB, EmbedProvider
+from app.core.deps import DB, EmbedProvider, GenProvider
 from app.models import (
     Draft,
     DraftUpdate,
@@ -36,8 +41,8 @@ from app.models import (
     WorkSessionCreate,
     WorkSessionUpdate,
 )
-from app.repositories import node_repo, project_repo
-from app.services import embedding_service
+from app.repositories import node_repo, project_repo, source_repo
+from app.services import embedding_service, generation_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -124,7 +129,12 @@ async def create_project(data: ProjectCreate, db: DB, provider: EmbedProvider) -
         hub_id = new_node.id
 
     try:
-        await project_repo.create_scope(db, hub_node_id=hub_id, mode=data.mode)
+        await project_repo.create_scope(
+            db,
+            hub_node_id=hub_id,
+            mode=data.mode,
+            prior_knowledge=data.prior_knowledge,
+        )
     except IntegrityError as exc:
         raise HTTPException(409, "Scope already exists for this hub") from exc
 
@@ -245,3 +255,285 @@ async def patch_session(
     updated = await project_repo.update_session(db, session_id, data)
     assert updated is not None
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Learning map (ADR-070)
+# ---------------------------------------------------------------------------
+
+
+_LEARNING_MAP_SYSTEM = """\
+You are a learning-plan architect. The user is starting a project to learn a \
+topic. Your job is to research the topic via web search, then return a phased \
+learning plan with specific source recommendations for each phase.
+
+Plan structure:
+- 3 to 6 phases, ordered from foundational to advanced
+- Each phase has a short name, 2-5 concrete goals, and 2-5 source recommendations
+- Source recommendations include direct URLs to free resources where they exist
+- Source types: 'article', 'video', 'book', 'manual', 'datasheet', 'podcast', 'other'
+
+Use web search liberally to find the best free resources. Prefer canonical \
+references (official docs, well-known textbooks, frequently-cited tutorials) \
+over random blog posts. Note that you cannot verify paywalls; treat any source \
+you can't confirm is free as 'other' and note "may require purchase" in the \
+reasoning.
+
+Return ONLY valid JSON in this exact shape, no markdown, no commentary:
+{
+  "phases": [
+    {
+      "name": "Phase name",
+      "goals": ["First goal", "Second goal"],
+      "sources": [
+        {
+          "title": "Source title",
+          "url": "https://...",
+          "type": "article",
+          "reasoning": "Why this source fits this phase"
+        }
+      ]
+    }
+  ]
+}
+"""
+
+
+class LearningMapRequest(BaseModel):
+    topic: str = Field(min_length=1)
+    prior_knowledge: str | None = None
+    goals: list[str] = []
+
+
+class LearningMapPhaseSource(BaseModel):
+    source_id: str
+    title: str
+    url: str | None = None
+    type: str
+    reasoning: str
+
+
+class LearningMapPhase(BaseModel):
+    name: str
+    goals: list[str]
+    sources: list[LearningMapPhaseSource]
+
+
+class LearningMapResponse(BaseModel):
+    phases: list[LearningMapPhase]
+    warnings: list[str] = []
+
+
+@router.post("/{hub_id}/learning-map")
+async def generate_learning_map(
+    hub_id: str,
+    body: LearningMapRequest,
+    db: DB,
+    gen_provider: GenProvider,
+) -> LearningMapResponse:
+    """Generate a phased learning map with AI-suggested free sources.
+
+    Per ADR-070: invokes generation with the Anthropic web_search tool to
+    research the topic, returns structured phases + sources, and persists
+    each suggested source with `status='suggested'`.
+    """
+    await _require_project(db, hub_id)
+
+    user_msg_parts = [f"Topic: {body.topic.strip()}"]
+    if body.prior_knowledge and body.prior_knowledge.strip():
+        user_msg_parts.append(f"What the learner already knows:\n{body.prior_knowledge.strip()}")
+    if body.goals:
+        bulleted = "\n".join(f"- {g}" for g in body.goals if g.strip())
+        if bulleted:
+            user_msg_parts.append(f"Stated goals:\n{bulleted}")
+    user_msg = "\n\n".join(user_msg_parts)
+
+    warnings: list[str] = []
+    try:
+        raw = await generation_service.complete(
+            gen_provider,
+            [{"role": "user", "content": user_msg}],
+            _LEARNING_MAP_SYSTEM,
+            max_tokens=4096,
+            enable_web_search=True,
+        )
+    except NotImplementedError:
+        # Ollama path — fall back to no-web-search generation. Quality will
+        # be lower (no live research) but the endpoint still produces a plan.
+        warnings.append(
+            "Local generation does not support web search; sources reflect "
+            "model knowledge only and may be stale."
+        )
+        raw = await generation_service.complete(
+            gen_provider,
+            [{"role": "user", "content": user_msg}],
+            _LEARNING_MAP_SYSTEM,
+            max_tokens=4096,
+        )
+
+    # Parse JSON, stripping markdown fences just in case the model added them.
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if match:
+        cleaned = match.group()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            500, f"Learning map generation returned unparseable JSON: {exc}"
+        ) from exc
+
+    raw_phases = data.get("phases", [])
+    if not isinstance(raw_phases, list) or not raw_phases:
+        raise HTTPException(500, "Learning map response had no phases")
+
+    from app.models.source import SourceCreate
+
+    out_phases: list[LearningMapPhase] = []
+    for raw_phase in raw_phases:
+        sources: list[LearningMapPhaseSource] = []
+        for raw_src in raw_phase.get("sources", []) or []:
+            title = (raw_src.get("title") or "").strip()
+            if not title:
+                continue
+            src_type = raw_src.get("type", "article")
+            if src_type not in (
+                "datasheet",
+                "manual",
+                "book",
+                "article",
+                "video",
+                "podcast",
+                "other",
+            ):
+                src_type = "other"
+            url = raw_src.get("url") or None
+            source_detail = await source_repo.create(
+                db,
+                SourceCreate(
+                    title=title,
+                    type=src_type,
+                    url=url,
+                    status="suggested",
+                ),
+            )
+            sources.append(
+                LearningMapPhaseSource(
+                    source_id=source_detail.id,
+                    title=title,
+                    url=url,
+                    type=src_type,
+                    reasoning=(raw_src.get("reasoning") or "").strip(),
+                )
+            )
+        out_phases.append(
+            LearningMapPhase(
+                name=(raw_phase.get("name") or "Phase").strip(),
+                goals=[g for g in raw_phase.get("goals", []) if isinstance(g, str)],
+                sources=sources,
+            )
+        )
+
+    return LearningMapResponse(phases=out_phases, warnings=warnings)
+
+
+# ---------------------------------------------------------------------------
+# Coverage stats (Slice 2)
+# ---------------------------------------------------------------------------
+
+
+class CoverageTag(BaseModel):
+    tag_id: str
+    tag_name: str
+    note_count: int
+    avg_edges: float
+
+
+class CoverageResponse(BaseModel):
+    """Per-tag coverage for the workspace left panel.
+
+    Items are ordered thin-to-dense (lowest avg edges first), so "sub-topics
+    that need attention" surface at the top.
+    """
+
+    tags: list[CoverageTag]
+
+
+@router.get("/{hub_id}/coverage")
+async def get_coverage(hub_id: str, db: DB) -> CoverageResponse:
+    await _require_project(db, hub_id)
+    scope = await project_repo.get_scope(db, hub_id)
+    if scope is None:
+        raise HTTPException(404, "Project scope not found")
+    raw = await project_repo.coverage_per_tag(db, scope.tag_ids)
+    return CoverageResponse(
+        tags=[
+            CoverageTag(
+                tag_id=r["tag_id"],
+                tag_name=r["tag_name"],
+                note_count=r["note_count"],
+                avg_edges=r["avg_edges"],
+            )
+            for r in raw
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session wrap counts (Slice 2 — supports the session-close summary)
+# ---------------------------------------------------------------------------
+
+
+class SessionWrapCounts(BaseModel):
+    nodes_created: int
+    fleetings_created: int
+    edges_created: int
+
+
+@router.get("/{hub_id}/sessions/{session_id}/wrap")
+async def get_session_wrap(hub_id: str, session_id: str, db: DB) -> SessionWrapCounts:
+    await _require_project(db, hub_id)
+    existing = await project_repo.get_session(db, session_id)
+    if existing is None or existing.project_id != hub_id:
+        raise HTTPException(404, "Session not found")
+    counts = await project_repo.session_wrap_counts(db, session_id)
+    return SessionWrapCounts(**counts)
+
+
+# ---------------------------------------------------------------------------
+# Session attribution — POST /sessions/{id}/attach (Slice 2)
+# ---------------------------------------------------------------------------
+
+
+class SessionAttachRequest(BaseModel):
+    node_id: str
+    session_tagged: bool = True
+
+
+@router.post("/{hub_id}/sessions/{session_id}/attach-node", status_code=201)
+async def attach_node_to_session(
+    hub_id: str, session_id: str, body: SessionAttachRequest, db: DB
+) -> dict:
+    """Best-effort: associate an existing node with a session.
+
+    The frontend calls this after creating a node within an active session
+    so the session_nodes join row exists for the wrap summary and for
+    `include_session_fleetings` (ADR-069). Idempotent.
+    """
+    await _require_project(db, hub_id)
+    existing = await project_repo.get_session(db, session_id)
+    if existing is None or existing.project_id != hub_id:
+        raise HTTPException(404, "Session not found")
+    node = await node_repo.get_by_id(db, body.node_id)
+    if node is None:
+        raise HTTPException(404, "Node not found")
+    await project_repo.attach_node_to_session(
+        db,
+        session_id=session_id,
+        node_id=body.node_id,
+        session_tagged=body.session_tagged,
+    )
+    return {"attached": True}

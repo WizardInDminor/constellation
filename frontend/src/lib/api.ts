@@ -258,7 +258,12 @@ export function getSource(id: string): Promise<SourceDetail> {
   return request(`/api/v1/sources/${id}`);
 }
 
-export function createSource(data: Omit<SourceCreate, "id">): Promise<SourceDetail> {
+// `status` defaults to "user_supplied" server-side; callers only need to pass
+// it when they explicitly want a different status (e.g. learning-map flow
+// marks suggestions with status="suggested").
+export function createSource(
+  data: Omit<SourceCreate, "id" | "status"> & { status?: SourceCreate["status"] },
+): Promise<SourceDetail> {
   return request("/api/v1/sources", {
     method: "POST",
     body: JSON.stringify(data),
@@ -569,5 +574,70 @@ export function patchSession(
   return request(`/api/v1/projects/${hubId}/sessions/${sessionId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+// Slice 2 additions
+export type CoverageResponse = components["schemas"]["CoverageResponse"];
+export type CoverageTag = components["schemas"]["CoverageTag"];
+export type SessionWrapCounts = components["schemas"]["SessionWrapCounts"];
+export type LearningMapRequest = components["schemas"]["LearningMapRequest"];
+export type LearningMapResponse = components["schemas"]["LearningMapResponse"];
+export type LearningMapPhase = components["schemas"]["LearningMapPhase"];
+export type LearningMapPhaseSource =
+  components["schemas"]["LearningMapPhaseSource"];
+
+export function getCoverage(hubId: string): Promise<CoverageResponse> {
+  return request(`/api/v1/projects/${hubId}/coverage`);
+}
+
+export function getSessionWrap(
+  hubId: string,
+  sessionId: string,
+): Promise<SessionWrapCounts> {
+  return request(`/api/v1/projects/${hubId}/sessions/${sessionId}/wrap`);
+}
+
+export function attachNodeToSession(
+  hubId: string,
+  sessionId: string,
+  nodeId: string,
+  sessionTagged = true,
+): Promise<{ attached: boolean }> {
+  return request(`/api/v1/projects/${hubId}/sessions/${sessionId}/attach-node`, {
+    method: "POST",
+    body: JSON.stringify({ node_id: nodeId, session_tagged: sessionTagged }),
+  });
+}
+
+export function generateLearningMap(
+  hubId: string,
+  body: LearningMapRequest,
+): Promise<LearningMapResponse> {
+  return request(`/api/v1/projects/${hubId}/learning-map`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// Synthesize (project-scoped) — ADR-069 widening
+export function ragScopedWithSession(
+  query: string,
+  nodeIds: string[],
+  opts: {
+    customPrompt?: string;
+    includeSessionFleetings?: boolean;
+    sessionId?: string | null;
+  } = {},
+): Promise<RagResponse> {
+  return request("/api/v1/rag/scoped", {
+    method: "POST",
+    body: JSON.stringify({
+      query,
+      node_ids: nodeIds,
+      custom_prompt: opts.customPrompt ?? null,
+      include_session_fleetings: !!opts.includeSessionFleetings,
+      session_id: opts.sessionId ?? null,
+    }),
   });
 }

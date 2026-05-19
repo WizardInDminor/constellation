@@ -202,6 +202,9 @@ CREATE TABLE sources (
                      'datasheet', 'manual', 'book',
                      'article', 'video', 'podcast', 'other')),
     published_at TEXT,
+    status       TEXT NOT NULL DEFAULT 'user_supplied'      -- ADR-070
+                 CHECK(status IN (
+                     'suggested', 'confirmed', 'user_supplied')),
     created_at   TEXT NOT NULL
 );
 
@@ -269,6 +272,7 @@ CREATE TABLE project_scopes (
     last_visited_at TEXT,
     mode            TEXT NOT NULL DEFAULT 'research'
                     CHECK(mode IN ('research', 'narrative', 'learning')),
+    prior_knowledge TEXT,                        -- learning-mode onboarding (ADR-070)
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
@@ -535,6 +539,10 @@ DELETE /projects/{hub_id}/draft               # clear draft (called after promot
 POST   /projects/{hub_id}/sessions            # start a work session (rejects if one is already active)
 GET    /projects/{hub_id}/sessions            # session history, newest first
 PATCH  /projects/{hub_id}/sessions/{id}       # progress notes, blockers, or close-session payload
+GET    /projects/{hub_id}/sessions/{id}/wrap  # nodes/edges/fleetings created during the session
+POST   /projects/{hub_id}/sessions/{id}/attach-node  # idempotent session-attribution row
+GET    /projects/{hub_id}/coverage            # per-tag note count + avg edge count (thin-to-dense)
+POST   /projects/{hub_id}/learning-map        # ADR-070: phased plan with AI-suggested sources
 ```
 
 `GET /projects/resolve` is the cross-surface project anchor: it joins

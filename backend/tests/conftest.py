@@ -25,7 +25,9 @@ class FakeGenerationProvider:
     def __init__(self, response: str = "fake response"):
         self._response = response
 
-    async def complete(self, messages, system, max_tokens=1024) -> str:
+    async def complete(
+        self, messages, system, max_tokens=1024, *, enable_web_search: bool = False
+    ) -> str:
         return self._response
 
 
