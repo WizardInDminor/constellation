@@ -34,9 +34,12 @@ interface Props {
 
 export function LeftPanel({ project, onScopeChanged }: Props) {
   const scope = project.scope;
-  const isSession1 = (project.active_session?.id ?? null) !== null
-    ? false  // active session = past Session 1 by definition
-    : true;  // no active session yet — we treat as pre-Session-1
+  // Render the quick-corrections panel whenever prior_knowledge exists and
+  // no session is yet active — mode-agnostic. Learning mode is where this
+  // surface is *most* useful, but a research project with a prior-knowledge
+  // entry should still see it (mode sets defaults, not gates).
+  const showQuickCorrections =
+    !!scope.prior_knowledge?.trim() && !project.active_session;
 
   return (
     <div className="px-3 py-4 space-y-5 text-xs">
@@ -45,9 +48,7 @@ export function LeftPanel({ project, onScopeChanged }: Props) {
       <TagsSection scope={scope} onScopeChanged={onScopeChanged} />
       <PrimaryTagSection scope={scope} onScopeChanged={onScopeChanged} />
       <CoveragePanel hubId={scope.hub_node_id} mode={scope.mode} />
-      {scope.mode === "learning" && isSession1 && (
-        <QuickCorrectionsPanel scope={scope} />
-      )}
+      {showQuickCorrections && <QuickCorrectionsPanel scope={scope} />}
     </div>
   );
 }
@@ -479,24 +480,10 @@ function CoveragePanel({
 // ---------------------------------------------------------------------------
 
 function QuickCorrectionsPanel({ scope }: { scope: ProjectScope }) {
-  if (!scope.prior_knowledge || !scope.prior_knowledge.trim()) {
-    return (
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-          Quick corrections
-        </p>
-        <p className="text-[11px] text-gray-400">
-          Add prior-knowledge notes during project creation to enable
-          per-session corrections. (Editing flow lands here in a future
-          slice.)
-        </p>
-      </div>
-    );
-  }
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-        Quick corrections
+        Prior knowledge
         <span className="ml-1 font-normal normal-case tracking-normal text-gray-300">
           (Session 1)
         </span>
@@ -505,7 +492,8 @@ function QuickCorrectionsPanel({ scope }: { scope: ProjectScope }) {
         {scope.prior_knowledge}
       </div>
       <p className="text-[10px] text-gray-300 mt-1">
-        From Session 2 onward, this slot switches to “My notes.”
+        Surfaces during Session 1 only. Once you start a session this slot
+        switches to “My notes” (Phase 10).
       </p>
     </div>
   );

@@ -222,25 +222,23 @@ function NewProjectDialog({
           />
         </div>
         <ModeSelect mode={mode} setMode={setMode} />
-        {mode === "learning" && (
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Prior knowledge (optional)
-            </label>
-            <p className="text-[10px] text-gray-400 mb-1.5">
-              What you already know about this topic. Surfaces as the
-              Session 1 quick-corrections panel and primes the learning-map
-              generator.
-            </p>
-            <textarea
-              value={priorKnowledge}
-              onChange={(e) => setPriorKnowledge(e.target.value)}
-              rows={3}
-              placeholder="e.g. I know basic embedded C. I've used SPI but never quadrature decoding."
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-            />
-          </div>
-        )}
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Prior knowledge (optional)
+          </label>
+          <p className="text-[10px] text-gray-400 mb-1.5">
+            What you already know about this topic. Surfaces as the
+            Session 1 Prior-knowledge panel and (in learning mode) primes
+            the learning-map generator. Available in every mode.
+          </p>
+          <textarea
+            value={priorKnowledge}
+            onChange={(e) => setPriorKnowledge(e.target.value)}
+            rows={3}
+            placeholder="e.g. I know basic embedded C. I've used SPI but never quadrature decoding."
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          />
+        </div>
         {error && (
           <p className="text-xs text-red-600">{error}</p>
         )}

@@ -43,10 +43,15 @@ const DEFAULT_TAB: Record<ProjectMode, CenterTab> = {
   learning: "learning-map",
 };
 
-const TABS_BASE: { id: CenterTab; label: string }[] = [
+// Tab list is the same in every mode (mode sets defaults, not gates —
+// build-plan philosophy). `DEFAULT_TAB` decides which one opens first.
+// A research-mode project can still open the Learning map tab; a learning-
+// mode project can still open Write or Synthesize.
+const ALL_TABS: { id: CenterTab; label: string }[] = [
   { id: "write", label: "Write" },
   { id: "notes", label: "Notes" },
   { id: "synthesize", label: "Synthesize" },
+  { id: "learning-map", label: "Learning map" },
 ];
 
 const DRAFT_DEBOUNCE_MS = 2000;
@@ -157,12 +162,7 @@ export default function WorkspacePage() {
   const mode = project.scope.mode;
   const accent = MODE_ACCENT[mode];
   const activeSession = project.active_session ?? null;
-  const tabs: { id: CenterTab; label: string }[] = [
-    ...TABS_BASE,
-    ...(mode === "learning"
-      ? [{ id: "learning-map" as CenterTab, label: "Learning map" }]
-      : []),
-  ];
+  const tabs = ALL_TABS;
 
   async function handleImplicitConfirm() {
     if (!hubId || !firstActivityRef.current) return;
