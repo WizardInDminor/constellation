@@ -44,6 +44,21 @@ from app.models.node import (
     PermanentCreate,
     StructureCreate,
 )
+from app.models.project import (
+    Draft,
+    DraftUpdate,
+    ProjectCreate,
+    ProjectDetail,
+    ProjectMode,
+    ProjectScope,
+    ProjectScopeUpdate,
+    ProjectSummary,
+    SessionMode,
+    SessionStatus,
+    WorkSession,
+    WorkSessionCreate,
+    WorkSessionUpdate,
+)
 from app.models.rag import (
     ClusterLinkProposal,
     ClusterSuggestRequest,
@@ -82,6 +97,10 @@ from app.models.tag import TagCreate, TagRef, TagUpdate
 # dependency at runtime. Now that both modules are loaded, resolve it.
 NodeDetail.model_rebuild()
 
+# ProjectDetail embeds NodeDetail and forward-references WorkSession; rebuild
+# now that NodeDetail's own forward references are resolved.
+ProjectDetail.model_rebuild()
+
 __all__ = [
     "ActivityFeed",
     "RecentEdge",
@@ -100,6 +119,19 @@ __all__ = [
     "NodeUpdate",
     "PermanentCreate",
     "StructureCreate",
+    "Draft",
+    "DraftUpdate",
+    "ProjectCreate",
+    "ProjectDetail",
+    "ProjectMode",
+    "ProjectScope",
+    "ProjectScopeUpdate",
+    "ProjectSummary",
+    "SessionMode",
+    "SessionStatus",
+    "WorkSession",
+    "WorkSessionCreate",
+    "WorkSessionUpdate",
     "EdgeCreate",
     "EdgeDetail",
     "EdgeResolveRequest",

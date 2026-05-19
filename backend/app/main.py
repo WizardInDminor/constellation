@@ -10,6 +10,7 @@ from app.api.v1 import (
     graph,
     ingest,
     nodes,
+    projects,
     rag,
     search,
     sources,
@@ -47,6 +48,7 @@ app.include_router(ingest.router, prefix=_v1_prefix)
 app.include_router(discover.router, prefix=_v1_prefix)
 app.include_router(admin.router, prefix=_v1_prefix)
 app.include_router(activity.router, prefix=_v1_prefix)
+app.include_router(projects.router, prefix=_v1_prefix)
 
 
 @app.get("/health")
