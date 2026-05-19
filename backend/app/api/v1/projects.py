@@ -29,19 +29,28 @@ from pydantic import BaseModel, Field
 
 from app.core.deps import DB, EmbedProvider, GenProvider
 from app.models import (
+    ActSpanCreate,
     Draft,
     DraftUpdate,
+    EdgeCreate,
     ProjectCreate,
     ProjectDetail,
     ProjectScope,
     ProjectScopeUpdate,
     ProjectSummary,
     StructureCreate,
+    TimelineResponse,
     WorkSession,
     WorkSessionCreate,
     WorkSessionUpdate,
 )
-from app.repositories import node_repo, project_repo, source_repo
+from app.repositories import (
+    edge_repo,
+    node_repo,
+    project_repo,
+    source_repo,
+    timeline_repo,
+)
 from app.services import embedding_service, generation_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -537,3 +546,62 @@ async def attach_node_to_session(
         session_tagged=body.session_tagged,
     )
     return {"attached": True}
+
+
+# ---------------------------------------------------------------------------
+# Narrative timeline (Slice 4 — ADR-064 / ADR-065 / ADR-066 / ADR-072)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{hub_id}/timeline")
+async def get_timeline(hub_id: str, db: DB, provider: EmbedProvider) -> TimelineResponse:
+    """Return all timeline lanes for the project.
+
+    Lazy-creates a default timeline structure node on first call when the
+    project has none yet — narrative-mode workspaces should always have a
+    canvas to draw on. The default timeline is named "<Project> Timeline"
+    and is COLLECTS-linked from the project hub.
+
+    Live query (ADR-066 / philosophy doc): no caching. Every call re-reads
+    the join + events + spans from the DB.
+    """
+    await _require_project(db, hub_id)
+    lanes = await timeline_repo.assemble_timeline(db, hub_id)
+    if not lanes:
+        hub = await node_repo.get_by_id(db, hub_id)
+        if hub is None:
+            raise HTTPException(404, "Project hub not found")
+        default = await node_repo.create_structure(
+            db,
+            StructureCreate(
+                title=f"{hub.title} Timeline",
+                content="Narrative timeline for this project.",
+            ),
+        )
+        await embedding_service.embed_or_queue(db, default.id, provider)
+        try:
+            await edge_repo.create(
+                db,
+                EdgeCreate(
+                    from_id=hub_id,
+                    to_id=default.id,
+                    type="COLLECTS",
+                    note="auto: default timeline",
+                ),
+            )
+        except IntegrityError:
+            pass
+        lanes = await timeline_repo.assemble_timeline(db, hub_id)
+    return TimelineResponse(lanes=lanes)
+
+
+@router.post("/{hub_id}/act-spans", status_code=201)
+async def create_act_span(hub_id: str, data: ActSpanCreate, db: DB):
+    """Create an act span on one of the project's timelines (ADR-072)."""
+    await _require_project(db, hub_id)
+    timeline = await node_repo.get_by_id(db, data.timeline_node_id)
+    if timeline is None or timeline.type != "structure":
+        raise HTTPException(422, "timeline_node_id must reference a structure node")
+    if data.start_position > data.end_position:
+        raise HTTPException(422, "start_position must be <= end_position")
+    return await timeline_repo.create_act_span(db, data)

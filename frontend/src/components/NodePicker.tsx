@@ -55,6 +55,7 @@ function NodePickerRow({
     created_at: now,
     updated_at: now,
     processed_at: null,
+    is_story_event: false,
     tags: [],
   };
 

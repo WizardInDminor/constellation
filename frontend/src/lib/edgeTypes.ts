@@ -22,6 +22,8 @@ export const EDGE_TYPES: EdgeType[] = [
   "SCOPED_TO",
   "REGIME_OF",
   "FOLLOWS_FROM",
+  // Narrative (ADR-052 Slice 4 addendum).
+  "EXPLAINS",
 ];
 
 // Tension-bearing edge types — the only types on which the "mark resolved"
@@ -49,6 +51,7 @@ export const EDGE_COLORS: Record<EdgeType, string> = {
   SCOPED_TO: "bg-sky-100 text-sky-700",
   REGIME_OF: "bg-fuchsia-100 text-fuchsia-700",
   FOLLOWS_FROM: "bg-lime-100 text-lime-700",
+  EXPLAINS: "bg-amber-100 text-amber-800",
 };
 
 export interface EdgeTypeMeta {
@@ -160,6 +163,13 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     directional: true,
     description: "A follows from B causally, logically, or temporally.",
     example: "Use for sequencing: when this note is a consequence of, or comes after, the other.",
+  },
+  EXPLAINS: {
+    label: "Explains",
+    directional: true,
+    description: "A (lore) provides backdrop/history/cause that explains B (character/location/event).",
+    example:
+      "Use from a lore note to a character whose behavior the lore makes sense of, or to a location whose atmosphere the lore underwrites.",
   },
 };
 

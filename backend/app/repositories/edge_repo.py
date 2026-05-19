@@ -34,6 +34,26 @@ async def get_by_id(db: aiosqlite.Connection, edge_id: str) -> EdgeDetail | None
     return _row_to_detail(row) if row is not None else None
 
 
+async def find_by_endpoints(
+    db: aiosqlite.Connection,
+    *,
+    from_id: str,
+    to_id: str,
+    edge_type: str,
+) -> EdgeDetail | None:
+    """Find a specific edge by its directional endpoints + type. Used by
+    timeline reorder (ADR-065) to locate the stale FOLLOWS_FROM edge it
+    must remove. Returns None if no such edge exists.
+    """
+    cursor = await db.execute(
+        f"SELECT {_SELECT_COLUMNS} FROM edges "  # noqa: S608
+        "WHERE from_id = ? AND to_id = ? AND type = ?",
+        (from_id, to_id, edge_type),
+    )
+    row = await cursor.fetchone()
+    return _row_to_detail(row) if row is not None else None
+
+
 async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
     edge_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()

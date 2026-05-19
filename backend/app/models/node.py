@@ -27,6 +27,9 @@ class NodeSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     processed_at: datetime | None = None
+    # Slice 4 (ADR-064): surfaced for the Notes "hide story events" filter
+    # and for the workspace's narrative-mode lists.
+    is_story_event: bool = False
     tags: list[TagRef] = []
 
 
@@ -39,6 +42,12 @@ class NodeDetail(BaseModel):
     source_id: str | None = None
     embedding_model: str | None = None
     processed_at: datetime | None = None
+    # Slice 4 (ADR-064, ADR-071): event-specific fields. Nullable for non-event
+    # nodes; populated only when is_story_event = True.
+    is_story_event: bool = False
+    story_time: str | None = None
+    prose_status: str | None = None
+    manuscript_location: str | None = None
     created_at: datetime
     updated_at: datetime
     outgoing_edges: list[EdgeSummary] = []

@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.deps import DB, EmbedProvider
 from app.models import (
+    EdgeCreate,
     FleetingCreate,
     LiteratureCreate,
     NeighborResult,
@@ -14,9 +15,11 @@ from app.models import (
     NodeUpdate,
     Paginated,
     PermanentCreate,
+    StoryEventCreate,
     StructureCreate,
+    TimelinePositionUpdate,
 )
-from app.repositories import edge_repo, node_repo, source_repo
+from app.repositories import edge_repo, node_repo, source_repo, timeline_repo
 from app.services import embedding_service
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -71,6 +74,78 @@ async def create_structure(data: StructureCreate, db: DB, provider: EmbedProvide
     return await node_repo.get_by_id(db, node.id) or node
 
 
+@router.post("/story-event", status_code=201)
+async def create_story_event(data: StoryEventCreate, db: DB, provider: EmbedProvider) -> NodeDetail:
+    """Phase 9 Slice 4 (ADR-064 + ADR-065).
+
+    Creates a permanent node flagged as a story event, places it at
+    `discourse_position` on the named timeline structure node, writes a
+    `COLLECTS` edge from the timeline to the event, and (when
+    `auto_follows_from`) chains a `FOLLOWS_FROM` edge from the preceding
+    event in that lane.
+    """
+    # Validate the timeline structure node exists.
+    timeline = await node_repo.get_by_id(db, data.timeline_node_id)
+    if timeline is None or timeline.type != "structure":
+        raise HTTPException(422, "timeline_node_id must reference a structure node")
+
+    # Create the event node itself.
+    event = await node_repo.create_story_event(
+        db,
+        title=data.title,
+        content=data.content,
+        story_time=data.story_time,
+        prose_status=data.prose_status,
+        manuscript_location=data.manuscript_location,
+    )
+
+    # Place on the timeline.
+    await timeline_repo.place_event(
+        db,
+        event_node_id=event.id,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=data.discourse_position,
+    )
+
+    # COLLECTS edge from the timeline to the new event (per ADR-065).
+    try:
+        await edge_repo.create(
+            db,
+            EdgeCreate(
+                from_id=data.timeline_node_id,
+                to_id=event.id,
+                type="COLLECTS",
+            ),
+        )
+    except IntegrityError:
+        # Edge already exists (idempotency); fine.
+        pass
+
+    # Auto-FOLLOWS_FROM from the preceding event in this lane (ADR-065).
+    if data.auto_follows_from:
+        predecessor_id = await timeline_repo.get_predecessor(
+            db,
+            timeline_node_id=data.timeline_node_id,
+            discourse_position=data.discourse_position,
+        )
+        if predecessor_id and predecessor_id != event.id:
+            try:
+                await edge_repo.create(
+                    db,
+                    EdgeCreate(
+                        from_id=event.id,
+                        to_id=predecessor_id,
+                        type="FOLLOWS_FROM",
+                        note="auto: timeline discourse order",
+                    ),
+                )
+            except IntegrityError:
+                pass
+
+    await embedding_service.embed_or_queue(db, event.id, provider)
+    return await node_repo.get_by_id(db, event.id) or event
+
+
 # ── parameterised paths ───────────────────────────────────────────────────────
 
 
@@ -82,11 +157,16 @@ async def list_nodes(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     no_summary: Annotated[bool, Query(description="Only notes with empty/null summary")] = False,
     no_outgoing: Annotated[bool, Query(description="Only notes with no outgoing edges")] = False,
-    no_edges: Annotated[bool, Query(description="Only notes with no edges in either direction")] = False,
+    no_edges: Annotated[
+        bool, Query(description="Only notes with no edges in either direction")
+    ] = False,
     summary_max_length: Annotated[
         int | None,
         Query(ge=1, description="Only notes whose non-null summary is shorter than N chars"),
     ] = None,
+    hide_story_events: Annotated[
+        bool, Query(description="Exclude is_story_event=1 nodes (ADR-064)")
+    ] = False,
 ) -> Paginated[NodeSummary]:
     items, total = await node_repo.list_nodes(
         db,
@@ -97,6 +177,7 @@ async def list_nodes(
         no_outgoing=no_outgoing,
         no_edges=no_edges,
         summary_max_length=summary_max_length,
+        hide_story_events=hide_story_events,
     )
     return Paginated(
         items=items,
@@ -166,3 +247,86 @@ async def process_node(node_id: str, db: DB) -> NodeDetail:
     result = await node_repo.mark_processed(db, node_id)
     assert result is not None
     return result
+
+
+@router.patch("/{node_id}/timeline-position")
+async def update_timeline_position(
+    node_id: str, data: TimelinePositionUpdate, db: DB
+) -> NodeDetail:
+    """Phase 9 Slice 4 (ADR-065). Updates a story event's
+    `discourse_position` on the named timeline and rewires the
+    `FOLLOWS_FROM` chain so the moved event's predecessor edge points at
+    the new predecessor (per-lane chain consistency).
+
+    Edges to events in *other* timelines are not touched (ADR-065:
+    positions are per-timeline).
+    """
+    node = await node_repo.get_by_id(db, node_id)
+    if node is None:
+        raise HTTPException(404, "Event not found")
+    if not node.is_story_event:
+        raise HTTPException(422, "timeline-position updates are only valid for story events")
+
+    # Find the old position (if any) so we can update the previous
+    # predecessor's outgoing FOLLOWS_FROM edge as needed.
+    old_position = await timeline_repo.get_position(
+        db,
+        event_node_id=node_id,
+        timeline_node_id=data.timeline_node_id,
+    )
+    if old_position is None:
+        raise HTTPException(404, "Event is not placed on the named timeline")
+
+    # Identify the OLD predecessor and OLD successor (in the lane, by old pos)
+    # and the NEW predecessor (by new pos). We need this before mutating the
+    # join row, so the queries reflect the pre-move state.
+    old_pred = await timeline_repo.get_predecessor(
+        db,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=old_position,
+    )
+
+    # Move the join row.
+    await timeline_repo.place_event(
+        db,
+        event_node_id=node_id,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=data.discourse_position,
+    )
+
+    new_pred = await timeline_repo.get_predecessor(
+        db,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=data.discourse_position,
+    )
+
+    # Rewire FOLLOWS_FROM only if the predecessor changed.
+    if old_pred != new_pred:
+        # Remove the stale FOLLOWS_FROM (this event -> old predecessor).
+        if old_pred is not None and old_pred != node_id:
+            stale = await edge_repo.find_by_endpoints(
+                db,
+                from_id=node_id,
+                to_id=old_pred,
+                edge_type="FOLLOWS_FROM",
+            )
+            if stale is not None:
+                await edge_repo.delete(db, stale.id)
+        # Create the new FOLLOWS_FROM if there's a new predecessor.
+        if new_pred is not None and new_pred != node_id:
+            try:
+                await edge_repo.create(
+                    db,
+                    EdgeCreate(
+                        from_id=node_id,
+                        to_id=new_pred,
+                        type="FOLLOWS_FROM",
+                        note="auto: timeline discourse order",
+                    ),
+                )
+            except IntegrityError:
+                pass
+
+    refreshed = await node_repo.get_by_id(db, node_id)
+    assert refreshed is not None
+    return refreshed

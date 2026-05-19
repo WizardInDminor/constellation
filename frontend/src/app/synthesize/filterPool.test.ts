@@ -15,6 +15,7 @@ function mkNode(id: string, tagIds: string[], createdDaysAgo: number): NodeSumma
     created_at: new Date(createdMs).toISOString(),
     updated_at: new Date(createdMs).toISOString(),
     processed_at: null,
+    is_story_event: false,
     tags: tagIds.map((t) => ({ id: t, name: t, color: null })),
   };
 }

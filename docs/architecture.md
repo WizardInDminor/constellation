@@ -98,25 +98,32 @@ via FTS5. Both are bundled with modern SQLite builds.
 -- NODES
 -- ================================================================
 CREATE TABLE nodes (
-    id              TEXT PRIMARY KEY,            -- UUIDv4
-    type            TEXT NOT NULL CHECK(type IN (
-                        'fleeting', 'literature',
-                        'permanent', 'structure')),
-    title           TEXT NOT NULL,
-    content         TEXT NOT NULL,
-    summary         TEXT,                        -- AI-generated, used for context assembly
-    source_id       TEXT REFERENCES sources(id), -- literature notes only
-    embedding_model TEXT,                        -- model used for current vector
-    processed_at    TEXT,                        -- NULL for unprocessed fleeting notes
-    is_project_hub  INTEGER NOT NULL DEFAULT 0,  -- ADR-063: structure-note-as-project-root flag
-    created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL,
-    deleted_at      TEXT                         -- soft delete
+    id                  TEXT PRIMARY KEY,            -- UUIDv4
+    type                TEXT NOT NULL CHECK(type IN (
+                            'fleeting', 'literature',
+                            'permanent', 'structure')),
+    title               TEXT NOT NULL,
+    content             TEXT NOT NULL,
+    summary             TEXT,                        -- AI-generated, used for context assembly
+    source_id           TEXT REFERENCES sources(id), -- literature notes only
+    embedding_model     TEXT,                        -- model used for current vector
+    processed_at        TEXT,                        -- NULL for unprocessed fleeting notes
+    is_project_hub      INTEGER NOT NULL DEFAULT 0,  -- ADR-063: structure-note-as-project-root flag
+    artifact_type       TEXT CHECK(artifact_type IN ('note', 'artifact')),         -- Slice 3
+    artifact_format     TEXT CHECK(artifact_format IN ('mermaid','gantt','document')),
+    is_story_event      INTEGER NOT NULL DEFAULT 0,  -- ADR-064: narrative-event flag
+    story_time          TEXT,                        -- ADR-064: free-text axis position
+    prose_status        TEXT CHECK(prose_status IN ('planned','draft','written','revised')),
+    manuscript_location TEXT,                        -- ADR-071: opaque external-manuscript pointer
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT                         -- soft delete
 );
 
 CREATE INDEX idx_nodes_type         ON nodes(type)           WHERE deleted_at IS NULL;
 CREATE INDEX idx_nodes_processed    ON nodes(processed_at)   WHERE deleted_at IS NULL;
 CREATE INDEX idx_nodes_project_hub  ON nodes(is_project_hub) WHERE is_project_hub = 1 AND deleted_at IS NULL;
+CREATE INDEX idx_nodes_story_event  ON nodes(is_story_event) WHERE is_story_event = 1 AND deleted_at IS NULL;
 
 -- ================================================================
 -- VECTOR INDEX (sqlite-vec)
@@ -176,7 +183,8 @@ CREATE TABLE edges (
                               'BUILDS_ON', 'APPLIES_TO', 'MEASURES',
                               'EXTENDS', 'REFINES',
                               'SUPERSEDED_BY', 'SCOPED_TO',
-                              'REGIME_OF', 'FOLLOWS_FROM')),
+                              'REGIME_OF', 'FOLLOWS_FROM',
+                              'EXPLAINS')),                     -- ADR-052 Slice 4 addendum
     note                 TEXT,                       -- why does this edge exist?
     classifier_rationale TEXT,                       -- AI bridge classifier's apply-time reasoning (ADR-049)
     resolved_at          TEXT,                       -- ISO 8601; NULL when edge is active (ADR-059)
@@ -342,6 +350,32 @@ CREATE TABLE dismissed_corpus_suggestions (
     dismissed_at TEXT NOT NULL,
     PRIMARY KEY (project_id, node_id)
 );
+
+-- ================================================================
+-- NARRATIVE TIMELINE (Phase 9 Slice 4 — ADR-065, ADR-072)
+-- ================================================================
+-- Per-timeline discourse position for events. Composite PK lets one event
+-- appear in multiple timelines (crossover scenes — Slice 5).
+CREATE TABLE event_timeline_positions (
+    event_node_id      TEXT NOT NULL REFERENCES nodes(id),
+    timeline_node_id   TEXT NOT NULL REFERENCES nodes(id),
+    discourse_position INTEGER NOT NULL,
+    PRIMARY KEY (event_node_id, timeline_node_id)
+);
+CREATE INDEX idx_etp_timeline ON event_timeline_positions(timeline_node_id, discourse_position);
+
+-- Act spans — separate from event_timeline_positions because acts are
+-- spans, not points (ADR-072).
+CREATE TABLE act_spans (
+    id                TEXT PRIMARY KEY,
+    timeline_node_id  TEXT NOT NULL REFERENCES nodes(id),
+    label             TEXT NOT NULL,
+    start_position    INTEGER NOT NULL,
+    end_position      INTEGER NOT NULL,
+    color             TEXT,
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX idx_act_spans_timeline ON act_spans(timeline_node_id);
 ```
 
 ---
@@ -543,7 +577,14 @@ GET    /projects/{hub_id}/sessions/{id}/wrap  # nodes/edges/fleetings created du
 POST   /projects/{hub_id}/sessions/{id}/attach-node  # idempotent session-attribution row
 GET    /projects/{hub_id}/coverage            # per-tag note count + avg edge count (thin-to-dense)
 POST   /projects/{hub_id}/learning-map        # ADR-070: phased plan with AI-suggested sources
+GET    /projects/{hub_id}/timeline            # ADR-065: lanes (events + act spans); lazy-creates default
+POST   /projects/{hub_id}/act-spans           # ADR-072: act span on a timeline
+POST   /nodes/story-event                     # ADR-064/065: event + COLLECTS + auto-FOLLOWS_FROM
+PATCH  /nodes/{id}/timeline-position          # ADR-065: reorder + FOLLOWS_FROM rewire
 ```
+
+The Notes list (`GET /nodes`) gains `hide_story_events: bool` (ADR-064)
+in addition to the existing B2 filter predicates.
 
 `GET /projects/resolve` is the cross-surface project anchor: it joins
 `project_scopes.primary_tag_id` against `tags.name` (case-insensitive) and

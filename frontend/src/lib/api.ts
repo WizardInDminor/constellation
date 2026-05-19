@@ -577,6 +577,47 @@ export function patchSession(
   });
 }
 
+// Slice 4 — narrative timeline (ADR-064/065/066/072)
+export type TimelineResponse = components["schemas"]["TimelineResponse"];
+export type TimelineLane = components["schemas"]["TimelineLane"];
+export type TimelineEvent = components["schemas"]["TimelineEvent"];
+export type StoryEventCreate = components["schemas"]["StoryEventCreate"];
+export type TimelinePositionUpdate = components["schemas"]["TimelinePositionUpdate"];
+export type ActSpan = components["schemas"]["ActSpan"];
+export type ActSpanCreate = components["schemas"]["ActSpanCreate"];
+export type ProseStatus = NonNullable<TimelineEvent["prose_status"]>;
+
+export function getTimeline(hubId: string): Promise<TimelineResponse> {
+  return request(`/api/v1/projects/${hubId}/timeline`);
+}
+
+export function createStoryEvent(data: StoryEventCreate): Promise<NodeDetail> {
+  return request("/api/v1/nodes/story-event", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTimelinePosition(
+  nodeId: string,
+  data: TimelinePositionUpdate,
+): Promise<NodeDetail> {
+  return request(`/api/v1/nodes/${nodeId}/timeline-position`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function createActSpan(
+  hubId: string,
+  data: ActSpanCreate,
+): Promise<ActSpan> {
+  return request(`/api/v1/projects/${hubId}/act-spans`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // Slice 2 additions
 export type CoverageResponse = components["schemas"]["CoverageResponse"];
 export type CoverageTag = components["schemas"]["CoverageTag"];

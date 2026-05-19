@@ -2248,7 +2248,8 @@ constraint via migration `0004_expanded_edge_types.sql` — shared with
 
 ## ADR-052 — Expanded EdgeType vocabulary (literature stance)
 
-**Status:** Accepted
+**Status:** Accepted (extended by Slice 4 narrative work — see "Slice 4
+addendum" at the bottom of this ADR for the `EXPLAINS` addition)
 
 **Context:** The walkthrough's finding #11 (2026-05-14, sharpened across
 Sc 4, Sc 9, Sc 12) names the EdgeType vocabulary as one-dimensional: it
@@ -2326,6 +2327,41 @@ module gains color + label + description metadata for each.
   returns `NO_CONNECTION` for pairs where no type fits — this remains
   a first-class result; the broader vocabulary doesn't force a type
   onto every pair.
+
+### Slice 4 addendum — `EXPLAINS` edge type (2026-05-19)
+
+Phase 9 Slice 4 adds one more edge type:
+
+- `EXPLAINS` — A → B: A (typically a lore note) explains a property,
+  history, or backdrop of B (typically a character, location, or
+  event).
+
+The narrative-mode use case is the one that earns its place: a lore
+note ("the underground started as a grief support network") connects
+via `EXPLAINS` to a location node (a basement bar) and via `EXPLAINS`
+to a character node (a regular at that bar). Scene Context View
+(Slice 5) walks `EXPLAINS` edges from a scene's characters and
+locations to surface relevant lore automatically.
+
+`EXPLAINS` does not fit any of the existing types: it's not author-
+stance (`ELABORATES` zooms in on the same idea, while `EXPLAINS`
+provides causal/contextual backdrop), not literature-stance, not
+evolution, not structural. It is genuinely a new shape.
+
+**The CHECK constraint is updated via `0010_narrative_timeline.sql`**,
+which already pays the table-recreate ceremony for `EXPLAINS` alongside
+the narrative-timeline schema additions. The full set of edge types
+after this migration:
+
+`SUPPORTS`, `CONTRADICTS`, `ELABORATES`, `ANALOGOUS_TO`, `QUESTIONS`,
+`INSPIRED_BY`, `COLLECTS`, `CITES`, `BUILDS_ON`, `APPLIES_TO`,
+`MEASURES`, `EXTENDS`, `REFINES`, `SUPERSEDED_BY`, `SCOPED_TO`,
+`REGIME_OF`, `FOLLOWS_FROM`, **`EXPLAINS`**.
+
+This addendum is recorded under ADR-052 (rather than as a new ADR)
+because the structural decision — "add a verb when no existing one
+fits" — is the same decision ADR-052 made; this is a narrative-
+specific extension of the same vocabulary policy, not a new policy.
 
 ---
 
@@ -3949,6 +3985,523 @@ supplement. This ADR records the implementation shape.
   affordance and a per-phase source list with `Confirm` / `Replace`
   actions on each suggested source. Replacement uses the existing
   source-creation flow with `status='user_supplied'`.
+
+---
+
+## ADR-064 — Narrative event node design (flag on permanent nodes)
+
+**Status:** Accepted (Phase 9 Slice 4)
+
+**Context:** The narrative timeline needs an event primitive — the
+spine of the inverted workflow described in
+`docs/constellation-use-case-philosophy.md` §2.2 and the build plan.
+A scene, beat, or story event is something the user places on the
+timeline canvas; it has a position in story time, a position in
+discourse order, and connections to characters, themes, and lore.
+
+Two structural shapes were considered (concept doc §8 "Node type
+decision"):
+
+- **Option A — new `event` node type.** A fifth value in the
+  `NodeType` enum alongside `fleeting | literature | permanent |
+  structure`. Events get dedicated fields and dedicated API surfaces.
+- **Option B — `is_story_event` flag on permanent nodes.** A boolean
+  column plus event-specific nullable columns. Events appear in the
+  same Notes/Search/Ask surfaces as any other permanent note.
+
+**Decision:** Option B. Story events are permanent nodes with the
+following Slice 4 column additions on `nodes` (migration
+`0010_narrative_timeline.sql`):
+
+- `is_story_event INTEGER NOT NULL DEFAULT 0` — boolean flag.
+- `story_time TEXT` — nullable; free-text or ISO date. Free-text is
+  the dominant shape ("Act 2, Scene 3" / "Day 14"). The axis renders
+  these positions; ordering is by `discourse_position`, not by parsing
+  `story_time`.
+- `prose_status TEXT CHECK(prose_status IN ('planned', 'draft',
+  'written', 'revised'))` — nullable; tracks where in the writing
+  pipeline this scene is (ADR-071).
+- `manuscript_location TEXT` — nullable; opaque pointer to where the
+  scene lives in the external manuscript (ADR-071).
+
+**Rationale:**
+
+- **Events are graph citizens immediately.** Search, Ask, suggest-
+  links, and the embedding pipeline already operate on permanent
+  nodes. Option B inherits all of them for free; Option A would
+  require copying every plumbing point.
+- **ADR-006 holds.** The node-type vocabulary stays at four entries.
+  Adding "event" as a fifth type was rejected explicitly in the
+  concept doc for the same reason ADR-006 caps the enum: each type
+  costs surface-area in every component that pattern-matches on it.
+- **Same flag-vs-type pattern as projects.** ADR-063 made `structure`
+  nodes specialize via `is_project_hub`. Story events specialize the
+  same way via `is_story_event`. One consistent specialization
+  pattern across the codebase.
+- **Migration is column-add only.** No CHECK-constraint table-recreate
+  on `nodes` (the `nodes.type` CHECK doesn't change). The
+  `prose_status` CHECK is added on a brand-new column with no
+  pre-existing rows to validate, so it works in pure ALTER ADD.
+
+**Consequences:**
+
+- **Notes view needs a "hide story events" toggle.** A narrative
+  project with 80 scenes will otherwise drown the Notes list. The
+  toggle uses the B2 filter framework (already shipped) with a new
+  predicate `is_story_event = 0`. Default off — events visible by
+  default, matching the principle that no feature is gated on mode.
+- **Ask and Search see event nodes.** This is a feature: "what did I
+  encode about the harbor scene?" returns the event node. The
+  embedding service operates on title + content, both of which the
+  user authors on event creation.
+- **Event nodes are embeddable without changes.** They go through
+  `embed_or_queue` like every other permanent. The narrative-timeline
+  surface is a *lens* over the same graph — not a parallel store.
+- **Migration path to Option A is open.** If event-specific fields
+  proliferate to the point that they pollute the permanent row, a
+  future migration adds the `event` enum value, backfills
+  `type = 'event' WHERE is_story_event = 1`, and removes the flag.
+  ADR-006's "if the project grows substantially, revisit" clause
+  applies. Not in scope for Phase 9.
+- **The Notes filter API gains one new predicate.** Backend repo
+  `list_nodes` learns `hide_story_events: bool`. ADR-055 (the filter
+  contract) covers compose-with-AND semantics; no new ADR needed.
+
+---
+
+## ADR-065 — Parallel timeline data model (structure-node-per-timeline + join table)
+
+**Status:** Accepted (Phase 9 Slice 4 — implementation Slice 5)
+
+**Context:** A narrative project may have one timeline (a simple
+single-thread story) or many (parallel storylines, alternating POVs,
+multi-protagonist epics). The design brief §1 Decision 5 commits to
+multiple-timelines-by-design rather than retrofitting later. The
+schema must support:
+
+- One event appearing in multiple timelines with different discourse
+  positions (a crossover scene).
+- Adding a timeline without changing the event nodes themselves.
+- A timeline being a graph citizen (it can have COLLECTS edges to its
+  events, can be the target of QUESTIONS edges, etc.).
+
+Two shapes were considered:
+
+- **Option X — `discourse_position` as a column on `nodes`.** Simple
+  for single-timeline cases but cannot represent the same event at
+  different positions in different timelines.
+- **Option Y — structure-node-per-timeline + join table.** Each
+  timeline is a structure node; events relate to timelines through a
+  separate `event_timeline_positions(event_node_id, timeline_node_id,
+  discourse_position)` join with composite primary key.
+
+**Decision:** Option Y. Each parallel timeline is a structure node.
+The workspace timeline canvas treats every timeline structure node as
+a lane (swim lane in Slice 5; single-lane single-timeline in Slice 4).
+Migration `0010_narrative_timeline.sql` creates:
+
+```sql
+CREATE TABLE event_timeline_positions (
+    event_node_id      TEXT NOT NULL REFERENCES nodes(id),
+    timeline_node_id   TEXT NOT NULL REFERENCES nodes(id),
+    discourse_position INTEGER NOT NULL,
+    PRIMARY KEY (event_node_id, timeline_node_id)
+);
+CREATE INDEX idx_etp_timeline ON event_timeline_positions(timeline_node_id);
+```
+
+**Discourse position is scoped to the timeline, not global.** A
+crossover scene has two rows — same `event_node_id`, different
+`timeline_node_id`, different `discourse_position`. Reordering one
+lane doesn't disturb the other.
+
+**Creating an event on the canvas:**
+
+1. User clicks empty space within a lane (timeline structure node).
+2. Frontend creates a permanent node with `is_story_event = 1`.
+3. A `COLLECTS` edge is created from the timeline structure node to
+   the new event node.
+4. A `FOLLOWS_FROM` edge is created from the preceding event node
+   (within the same lane, by discourse position) to the new event
+   node — if one exists.
+5. A row is inserted into `event_timeline_positions` with the
+   `discourse_position` derived from the click X-coordinate.
+
+**Rationale:**
+
+- **Crossover scenes have a natural representation.** Two rows in the
+  join table, both pointing at the same event. No special handling,
+  no "is_crossover" flag, no parent/child links.
+- **Reordering is per-lane.** Updating `discourse_position` updates
+  one join row; the same event's position in another lane is
+  untouched.
+- **Timeline is a graph citizen.** Because a timeline is a structure
+  node, it has the same graph integrations as any other structure
+  node — including the workspace's `COLLECTS`-based scope, the
+  graph viz, and Ask context.
+- **`COLLECTS` is the right semantic.** A timeline structure node
+  *collects* its events. ADR-052 and ADR-051 fixed the meaning of
+  `COLLECTS` as "structural inclusion in a map of content"; a
+  timeline is exactly that kind of map.
+
+**Consequences:**
+
+- **The `event_timeline_positions` join is the source of truth for
+  ordering.** The Slice 4 single-timeline UI still uses this table —
+  it just queries `WHERE timeline_node_id = ?` for one timeline.
+- **A project can have zero timeline structure nodes** (research or
+  learning project with no narrative work). The timeline tab renders
+  an empty-state with a "Create your first timeline" affordance.
+  Slice 4 ships single-timeline auto-creation: if a narrative project
+  has no timeline structure node yet, opening the timeline tab
+  creates one. Slice 5 adds explicit timeline creation for
+  multi-thread stories.
+- **`FOLLOWS_FROM` edges are per-lane too.** When an event is
+  re-ordered within a lane, its incoming `FOLLOWS_FROM` edges are
+  updated by removing the stale edge and creating a new one to the
+  current predecessor in that lane. Edges to events in *other* lanes
+  are untouched.
+- **Discourse position is an integer.** Frontend reorder operations
+  may need to renumber a lane; the backend exposes
+  `PATCH /nodes/{id}/timeline-position` that accepts the new integer
+  and the timeline_node_id. Atomic single-row update; no batch
+  renumbering required in Slice 4.
+
+---
+
+## ADR-066 — Narrative timeline component (custom SVG/Canvas)
+
+**Status:** Accepted (Phase 9 Slice 4)
+
+**Context:** The narrative timeline canvas is the primary authoring
+surface for the narrative-mode workflow (philosophy doc §2.2; concept
+doc §8). It is not a utility component; it is *the* surface where the
+spine of a story is built. Picking the right substrate matters because
+this component will accrete features through Slices 4, 5, and Phase
+10+.
+
+Three options were considered (design brief §1 Decision 3):
+
+- **`vis-timeline`** — mature, MIT-licensed, two-axis support, drag-
+  and-drop included.
+- **`react-chrono`** — simpler, React-native, fewer features.
+- **Custom SVG/Canvas** — full control, significant build cost.
+
+**Decision:** Custom SVG/Canvas. Both library options are rejected.
+
+**Rationale:**
+
+1. **Story-time x-axis is incompatible with library assumptions.**
+   `vis-timeline` and `react-chrono` both assume calendar time on the
+   x-axis. Story time is narrative beats, acts, free-text positions
+   ("Day 14", "Act 2 Scene 3") with no real-world date. Every feature
+   added on top of a calendar-time foundation compounds friction —
+   the axis labels, the scaling logic, the zoom behavior, the
+   "today" indicator all have to be fought against rather than
+   leaned on.
+2. **Theme density overlay (Slice 5) is a drawing operation.** Showing
+   where a motif is dense vs. sparse across the timeline is a visual
+   overlay across event lanes, not a row of events. Library
+   components treat this as an unsupported edge case. Custom SVG/
+   Canvas handles it as a first-class rendering pass.
+3. **Character arc curves (Phase 10) are a drawing operation.**
+   Rendering a character's emotional trajectory as a curve overlaid
+   on their events is similarly unsupported by library options. The
+   component architecture must support it without a rewrite.
+4. **Visual language ownership.** Library timeline components carry
+   the aesthetic of project management or scheduling tools. The
+   narrative timeline should feel like it belongs to Constellation —
+   a storyboard surface, not a Gantt chart.
+
+**Technical substrate:**
+
+- **SVG** for the timeline structure: lanes, gridlines, axis labels,
+  event card positions, FOLLOWS_FROM connectors. SVG has clean hit-
+  testing, scales well at the personal-tool event scale (50–500
+  events), and is accessible. Slice 4 uses SVG only.
+- **Canvas** for density / heatmap overlays in Slice 5 — avoids SVG
+  performance issues when many translucent rectangles overlap. Slice
+  4 does not introduce canvas.
+- **Drag-and-drop via pointer events.** Slice 4 implements drag-to-
+  reorder using SVG pointer events directly (mousedown / pointermove
+  / pointerup), not via `@dnd-kit/core`. The interaction is simple
+  enough (horizontal drag within a lane) that adding a dependency
+  is unjustified. If Slice 5's cross-lane dragging requires it, the
+  dependency can be added then.
+- **Zoom and pan** via CSS `transform` on the SVG viewport — simple
+  and performant at this scale. Not in Slice 4 scope; deferred.
+
+**Phased scope (held tight in Slice 4):**
+
+- **Slice 4:** Single timeline lane, story-time x-axis (rendered as
+  positions, not parsed dates), event cards, click-to-create, drag-
+  to-reorder, FOLLOWS_FROM auto-edge on creation, act spans as
+  background regions, click event → side panel.
+- **Slice 5:** Parallel swim lanes, lane toggle, character lane
+  filtering, theme/motif attachment UI, crossover-scene support.
+- **Phase 10:** Theme density overlay, character arc curves, advanced
+  visual vocabulary. Drawing-pass additions, not rewrites.
+
+**The component owns:**
+
+- Lane rendering (single in Slice 4; structure ready for multiple).
+- Axis labels and gridlines.
+- Event card positioning by discourse_position within a lane.
+- Click-on-empty-space → create event affordance.
+- Drag-to-reorder within a lane.
+- FOLLOWS_FROM connector rendering between adjacent cards.
+- Selection → side panel integration.
+
+**The component does not own:**
+
+- Event node CRUD (delegates to `POST /nodes/story-event` and the
+  existing node endpoints).
+- Edge CRUD (delegates to existing edge endpoints).
+- Character / lore management (managed via normal node detail views;
+  the timeline only renders attachments to events).
+
+**Consequences:**
+
+- **The component is built with Slice 5 extensibility in mind.** The
+  SVG layout takes a lane identifier even when only one lane is
+  rendered in Slice 4 — adding multiple lanes is a layout pass, not
+  a rewrite. Event card components accept a lane id; coordinate
+  calculations are scoped to a lane.
+- **No new dependencies in Slice 4.** No `@dnd-kit`, no `react-zoom-
+  pan-pinch`, no SVG charting library. Mermaid (Slice 3) is already
+  in the bundle for the diagram-rendering case; the timeline is
+  separate.
+- **Custom-component cost is the single largest piece of Phase 9.**
+  Build budget is held by tight Slice 4 scope: single lane, no
+  themes, no characters. Anything that creeps into Slice 4 from
+  Slice 5 must be flagged and pushed back.
+
+---
+
+## ADR-067 — Synthesis history association
+
+**Status:** Accepted (Phase 9 Slice 2 / Slice 3 — recorded retroactively)
+
+**Context:** The workspace's resume-briefing flow generates a permanent
+note from a Synthesize call against the project scope. The synthesis
+history list in the workspace needs to know which permanents are
+briefings belonging to *this* project.
+
+Three options were considered (concept doc §6 Decision 3):
+
+a. Query for permanents whose CITES edges point at ≥2 nodes within
+   the project scope.
+b. Tag synthesis outputs with the project's primary tag at save time.
+c. A new `synthesis_runs` join table associating each saved synthesis
+   with a project.
+
+**Decision:** Option (b) — tag synthesis outputs with the project's
+primary tag at save time. The workspace surfaces synthesis history by
+filtering permanents tagged with the primary tag where the content
+came from `saveAnswer` (heuristic: title starts with "Briefing —").
+
+**Rationale:**
+
+- **Reuses existing tag plumbing.** No new schema, no new endpoint,
+  no new join queries. The primary tag is already the cross-surface
+  project anchor (ADR-063); using it as the synthesis-history anchor
+  is consistent with the rest of the workspace.
+- **Option (a) is fragile.** A synthesis happens to cite two
+  project-tagged notes incidentally — it would surface as project
+  history even when it's not. The user would have no way to opt out
+  short of removing the CITES edge.
+- **Option (c) is right but premature.** A dedicated join table is
+  the correct shape if synthesis history becomes load-bearing
+  (cross-project search, dated history queries, etc.). It is not
+  worth the migration cost in Slice 2.
+- **Forward-compatible.** A future `synthesis_runs` table can be
+  populated by inspecting CITES edges and tag membership of existing
+  saved briefings; no data is lost by deferring.
+
+**Consequences:**
+
+- **Resume briefing depends on the project having a primary tag.**
+  ADR-063's silent-failure guardrail already covers this: the UI
+  must surface the "no primary tag" state prominently. The Slice 2
+  workspace left panel does so.
+- **A user manually tagging a non-briefing permanent with the primary
+  tag will see it in synthesis history.** This is a minor source of
+  noise. Acceptable for now; a `is_synthesis` boolean on nodes is
+  the next-step fix if it becomes a real problem.
+- **Migration path:** when ready, `synthesis_runs(synthesis_id,
+  project_id, prompt, created_at)` would be populated by the
+  save-answer flow going forward and backfilled from CITES + tag
+  membership for existing rows.
+
+---
+
+## ADR-071 — Manuscript source handling in narrative mode
+
+**Status:** Accepted (Phase 9 Slice 4)
+
+**Context:** The standard source model (the `sources` table) assumes
+a stable, finished external document — a datasheet, a textbook chapter,
+an article URL. A manuscript in active development violates this in
+every direction:
+
+- It is one massive, constantly changing artifact.
+- The relationship is inverted: the manuscript is built *with* the
+  notes (events on the timeline become scenes in the manuscript),
+  not extracted *from* them.
+- Specific positions within the manuscript ("light motif first
+  appearance, page 47") matter and shift as the manuscript is edited.
+
+The philosophy doc §5.6 names this as an open problem; the design
+brief leaves implementation shape to Slice 4. Three approaches were
+considered:
+
+- **Treat manuscript as a giant source** (force-fit the existing
+  model). The source row would be massive, edits would mean
+  re-ingesting, position-tracking would be impossible.
+- **Build a dedicated manuscript editor inside Constellation.** Out
+  of scope for v1 — the philosophy doc commits to "writing alongside
+  an external editor" (§2.7), not "writing in Constellation."
+- **Light integration: open-in-editor + per-scene status + opaque
+  location pointer.** Scenes (story event nodes) carry their own
+  prose-status and an optional manuscript_location string.
+
+**Decision:** Approach 3. Slice 4 adds two columns to `nodes`:
+
+- `prose_status TEXT CHECK(prose_status IN ('planned', 'draft',
+  'written', 'revised'))` — per-scene writing-pipeline state.
+- `manuscript_location TEXT` — opaque free-text pointer to the
+  scene's location in the external manuscript. Examples:
+  "manuscript.md L427", "FireStoker_draft3.docx p47", "/scenes/harbor.md".
+
+**Both are nullable** and unused by non-narrative nodes. The schema
+does not interpret `manuscript_location`; the field is purely a
+reminder for the writer.
+
+**No manuscript ingestion in Phase 9.** Importing the manuscript as
+a source for Ask retrieval, parsing position pointers, syncing scene
+changes back into Constellation — all deferred to Phase 11+.
+
+**Rationale:**
+
+- **Respects the external-editor commitment.** Constellation is the
+  *context* layer; the manuscript lives in the user's editor of
+  choice. The columns added here serve the writer's recall, not the
+  app's automation.
+- **`prose_status` makes timeline filtering possible.** Slice 4
+  ships the column; the side panel renders a status selector. A
+  future Slice or Phase 10 surface can filter the timeline to "show
+  only `planned` scenes" — directly the writer's "what's next"
+  view.
+- **`manuscript_location` is opaque.** Any structured pointer
+  (filepath + line number, chapter + paragraph, etc.) would break
+  the moment the writer edits the manuscript. Free-text is robust:
+  the writer maintains it as they see fit, and Constellation never
+  needs to parse it. If a future Phase 11 manuscript-aware feature
+  needs structure, a separate column or table can encode it without
+  invalidating this one.
+- **`CHECK` constraint for `prose_status` enforces the enum.**
+  Reduces the chance of typos in the values flowing through API
+  payloads and frontend code.
+
+**Consequences:**
+
+- **Migration column-add only.** No table-recreate for these two.
+- **The event side panel shows a `prose_status` dropdown.** Slice 4
+  ships this. The four values are surfaced as a small badge on the
+  event card itself so the writer scans the timeline and sees which
+  scenes are which color of "done."
+- **`manuscript_location` is shown but not validated.** The side
+  panel renders the string with a "Copy" button next to it. No
+  attempt to launch the editor or follow the pointer.
+- **The launch-in-editor affordance** mentioned in the concept doc
+  is deferred to a future polish pass. The manuscript_location field
+  ships now; the editor-handoff UI does not (cross-OS launching is
+  a separate concern).
+- **Future Phase 11+ manuscript integration** has a clear extension
+  point: a new `manuscripts` table or a new source type, populated
+  from `manuscript_location` values that already exist in the user's
+  scenes.
+
+---
+
+## ADR-072 — Act span schema (separate table for span events)
+
+**Status:** Accepted (Phase 9 Slice 4)
+
+**Context:** Acts in a story are spans, not points: "Act 2 runs from
+the inciting incident through the climax." The timeline must render
+acts as background regions with labels — the visual frame within
+which point events sit. The current `event_timeline_positions` schema
+(ADR-065) handles point events only; acts cannot be represented as
+events because they don't have a single discourse position.
+
+Two shapes were considered (philosophy doc §5.6 open problem 5):
+
+- **Special act node type with start/end position columns.** Reuses
+  the node table; events and acts coexist in one timeline-positions
+  table.
+- **Separate `act_spans` table.** Spans live in their own table;
+  point events stay in `event_timeline_positions`.
+
+**Decision:** Separate `act_spans` table. Migration
+`0010_narrative_timeline.sql` adds:
+
+```sql
+CREATE TABLE act_spans (
+    id                TEXT PRIMARY KEY,
+    timeline_node_id  TEXT NOT NULL REFERENCES nodes(id),
+    label             TEXT NOT NULL,
+    start_position    INTEGER NOT NULL,
+    end_position      INTEGER NOT NULL,
+    color             TEXT,
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX idx_act_spans_timeline ON act_spans(timeline_node_id);
+```
+
+Act spans are scoped per timeline (one timeline = one set of acts;
+multiple timelines = multiple sets). `start_position` and `end_position`
+are integers on the same discourse-position axis as
+`event_timeline_positions.discourse_position`. Renaming or restructuring
+the axis affects both consistently.
+
+**Rationale:**
+
+- **Acts are not events.** They don't have a single position, they
+  don't connect via `FOLLOWS_FROM` to adjacent events, they don't
+  carry the same fields (`prose_status`, `story_time`). Forcing them
+  into the event table would either pollute the event schema or
+  require flags everywhere code touches events.
+- **Acts are not graph citizens (in Slice 4).** They're a visual
+  framing device for the timeline canvas. The user doesn't write
+  Ask queries about "act 2" as a primary noun — they write about
+  the scenes within act 2. Keeping acts out of `nodes` reflects
+  that: they're a property of a timeline, not a knowledge object.
+  If Phase 10+ wants acts to be queryable, a `node_id` column can
+  be added to `act_spans` without disturbing existing rows.
+- **The `color` column is optional.** Default rendering picks a
+  color based on the span's index in the timeline; the user can
+  override via the side panel. Storing the override here keeps the
+  color stable across re-renders.
+
+**Consequences:**
+
+- **API surface:** `POST /projects/{hub_id}/act-spans` creates a
+  span; `GET /projects/{hub_id}/timeline` includes the spans for the
+  project's active timeline structure node(s). No standalone
+  `/act-spans/{id}` GET in Slice 4 — the timeline-view endpoint is
+  the only consumer.
+- **No CHECK on positions.** The DB allows `start_position >
+  end_position` and overlapping spans across rows. The frontend
+  prevents both at create-time. Future tightening can add a CHECK
+  if the lax form proves to be a source of bugs.
+- **Drag-to-resize is Slice 5+ work.** Slice 4 ships act-span
+  creation via a "Define act" dialog (label + start + end picker
+  pulling from the timeline's event positions). The drag-to-resize
+  affordance on the canvas waits.
+- **Multiple timelines means multiple act sets.** A two-protagonist
+  story with two timelines can have its own "Act 1 / Act 2 / Act 3"
+  per timeline. No cross-timeline coupling.
 
 ---
 

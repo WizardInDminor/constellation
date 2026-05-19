@@ -28,6 +28,7 @@ import { LeftPanel } from "./LeftPanel";
 import { RightPanel } from "./RightPanel";
 import { ResumeBriefing } from "./ResumeBriefing";
 import { LearningMapPanel } from "./LearningMapPanel";
+import { TimelinePanel } from "./TimelinePanel";
 import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
 
 const MODE_ACCENT: Record<ProjectMode, { dot: string; chip: string }> = {
@@ -45,22 +46,28 @@ const MODE_ACCENT: Record<ProjectMode, { dot: string; chip: string }> = {
   },
 };
 
-type CenterTab = "write" | "notes" | "synthesize" | "learning-map";
+type CenterTab =
+  | "write"
+  | "notes"
+  | "synthesize"
+  | "timeline"
+  | "learning-map";
 
 const DEFAULT_TAB: Record<ProjectMode, CenterTab> = {
   research: "write",
-  narrative: "write",
+  narrative: "timeline",
   learning: "learning-map",
 };
 
 // Tab list is the same in every mode (mode sets defaults, not gates —
 // build-plan philosophy). `DEFAULT_TAB` decides which one opens first.
-// A research-mode project can still open the Learning map tab; a learning-
-// mode project can still open Write or Synthesize.
+// A research-mode project can still open the Timeline or Learning map tab;
+// a narrative-mode project can still open Write or Synthesize.
 const ALL_TABS: { id: CenterTab; label: string }[] = [
   { id: "write", label: "Write" },
   { id: "notes", label: "Notes" },
   { id: "synthesize", label: "Synthesize" },
+  { id: "timeline", label: "Timeline" },
   { id: "learning-map", label: "Learning map" },
 ];
 
@@ -320,6 +327,7 @@ export default function WorkspacePage() {
                 onScopeChanged={handleScopeChanged}
               />
             )}
+            {tab === "timeline" && <TimelinePanel scope={project.scope} />}
             {tab === "learning-map" && (
               <LearningMapPanel scope={project.scope} />
             )}
