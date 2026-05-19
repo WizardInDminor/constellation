@@ -112,6 +112,11 @@ export function updateNode(
     summary?: string;
     source_id?: string | null;
     tag_ids?: string[] | null;
+    // Slice 5 (ADR-064/071): event-specific PATCH support. Explicit null
+    // clears the column; omitting the field leaves it unchanged.
+    story_time?: string | null;
+    prose_status?: string | null;
+    manuscript_location?: string | null;
   },
 ): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`, {
@@ -617,6 +622,59 @@ export function createActSpan(
     body: JSON.stringify(data),
   });
 }
+
+// Slice 5
+export type SceneContextResponse =
+  components["schemas"]["SceneContextResponse"];
+export type SceneContextItem = components["schemas"]["SceneContextItem"];
+export type NarrativeDumpRequest =
+  components["schemas"]["NarrativeDumpRequest"];
+export type NarrativeDumpResponse =
+  components["schemas"]["NarrativeDumpResponse"];
+export type NarrativeCandidate = components["schemas"]["NarrativeCandidate"];
+
+export function createTimeline(
+  hubId: string,
+  data: { title: string; content?: string },
+): Promise<NodeDetail> {
+  return request(`/api/v1/projects/${hubId}/timelines`, {
+    method: "POST",
+    body: JSON.stringify({ title: data.title, content: data.content ?? "" }),
+  });
+}
+
+export function getSceneContext(
+  hubId: string,
+  eventId: string,
+  sessionNumber?: number,
+): Promise<SceneContextResponse> {
+  const qs = sessionNumber ? `?session_number=${sessionNumber}` : "";
+  return request(`/api/v1/projects/${hubId}/scene-context/${eventId}${qs}`);
+}
+
+export function narrativeDump(
+  data: NarrativeDumpRequest,
+): Promise<NarrativeDumpResponse> {
+  return request("/api/v1/rag/narrative-dump", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Reserved narrative tag names — mirror backend constants. Used by the
+// character/theme/lore/location list views to identify narrative-role nodes.
+export const NARRATIVE_TAGS = {
+  CHARACTER: "narrative:character",
+  THEME: "narrative:theme",
+  LOCATION: "narrative:location",
+  LORE_PREFIX: "narrative:lore-",
+  LORE_WORLD_RULE: "narrative:lore-world-rule",
+  LORE_HISTORY: "narrative:lore-history",
+  LORE_POWER: "narrative:lore-power",
+  LORE_FABRIC: "narrative:lore-fabric",
+  LORE_BACKSTORY: "narrative:lore-backstory",
+  LORE_SECRET: "narrative:lore-secret",
+} as const;
 
 // Slice 2 additions
 export type CoverageResponse = components["schemas"]["CoverageResponse"];

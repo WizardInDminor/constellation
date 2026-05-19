@@ -578,10 +578,28 @@ POST   /projects/{hub_id}/sessions/{id}/attach-node  # idempotent session-attrib
 GET    /projects/{hub_id}/coverage            # per-tag note count + avg edge count (thin-to-dense)
 POST   /projects/{hub_id}/learning-map        # ADR-070: phased plan with AI-suggested sources
 GET    /projects/{hub_id}/timeline            # ADR-065: lanes (events + act spans); lazy-creates default
+POST   /projects/{hub_id}/timelines           # Slice 5: create parallel timeline structure node
 POST   /projects/{hub_id}/act-spans           # ADR-072: act span on a timeline
+GET    /projects/{hub_id}/scene-context/{id}  # Slice 5 — live graph assembly (no cache)
 POST   /nodes/story-event                     # ADR-064/065: event + COLLECTS + auto-FOLLOWS_FROM
 PATCH  /nodes/{id}/timeline-position          # ADR-065: reorder + FOLLOWS_FROM rewire
+POST   /rag/narrative-dump                    # Slice 5: extract candidate nodes from prose
 ```
+
+`PATCH /nodes/{id}` (Slice 5) accepts `story_time`, `prose_status`,
+`manuscript_location` in addition to the existing fields; CHECK
+violations on `prose_status` are surfaced as 422.
+
+Narrative-role identification (Slice 5) uses reserved tag names rather
+than schema flags. The workspace UI auto-attaches these via the
+character/lore/location/theme quick-create flows:
+
+- `narrative:character` — character structure nodes
+- `narrative:theme` — theme structure nodes
+- `narrative:location` — location structure nodes
+- `narrative:lore-world-rule`, `narrative:lore-history`,
+  `narrative:lore-power`, `narrative:lore-fabric`,
+  `narrative:lore-backstory`, `narrative:lore-secret` — lore categories
 
 The Notes list (`GET /nodes`) gains `hide_story_events: bool` (ADR-064)
 in addition to the existing B2 filter predicates.

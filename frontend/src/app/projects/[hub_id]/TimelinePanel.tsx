@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Narrative timeline canvas — Phase 9 Slice 4 (ADR-066).
+ * Narrative timeline canvas — Phase 9 Slices 4 & 5 (ADR-066).
  *
- * Custom SVG. Single lane in Slice 4; the component is structured so
- * Slice 5 can add swim lanes without architectural changes. Pointer-
- * event drag-to-reorder (no @dnd-kit dependency in Slice 4).
+ * Slice 4: custom SVG, single lane, click-to-create, drag-to-reorder,
+ * FOLLOWS_FROM auto-edges. Slice 5: parallel swim lanes, lane toggle,
+ * "Add timeline", crossover indicator, character highlight filter,
+ * theme-density dots, NodeInteractionPopup on cards, "Open in Scene
+ * Context" enabled, prose_status / manuscript_location PATCH support.
  *
- * Live query (ADR-066 / philosophy doc): re-fetches on mount and after
- * every mutation. No cached timeline state.
+ * Live query (ADR-066 / philosophy doc §6.8): re-fetches on mount and
+ * after every mutation. No cached timeline state at any layer.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +18,7 @@ import Link from "next/link";
 import {
   createActSpan,
   createStoryEvent,
+  createTimeline,
   getTimeline,
   updateTimelinePosition,
   updateNode,
@@ -23,12 +26,18 @@ import {
 import type {
   ActSpan,
   ActSpanCreate,
+  NodeDetail,
   ProjectScope,
   ProseStatus,
   TimelineEvent,
   TimelineLane,
   TimelineResponse,
 } from "@/lib/api";
+import {
+  NodeInteractionPopup,
+  useNodeInteraction,
+} from "@/components/NodeInteractionPopup";
+import { SceneContextView } from "./SceneContextView";
 
 interface Props {
   scope: ProjectScope;
@@ -63,7 +72,21 @@ export function TimelinePanel({ scope }: Props) {
     discoursePosition: number;
   } | null>(null);
   const [actDialog, setActDialog] = useState<string | null>(null); // laneId
+  const [newTimelineOpen, setNewTimelineOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Slice 5: per-lane visibility (lane toggle panel)
+  const [hiddenLanes, setHiddenLanes] = useState<Set<string>>(new Set());
+  // Slice 5: character highlight filter. When set, events with this
+  // character in their `character_ids` render at full opacity; others
+  // dim. NOT a hide — philosophy doc §6.8 / build plan: highlight.
+  const [highlightedCharacterId, setHighlightedCharacterId] = useState<
+    string | null
+  >(null);
+  // Slice 5: Scene Context View entry. Opened from the side panel's
+  // "Open in Scene Context" button. Replaces the timeline view temporarily.
+  const [sceneContextEventId, setSceneContextEventId] = useState<string | null>(
+    null,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -107,6 +130,21 @@ export function TimelinePanel({ scope }: Props) {
       )
     : null;
 
+  // Scene Context View takes over the entire surface when entered.
+  if (sceneContextEventId !== null) {
+    return (
+      <SceneContextView
+        hubId={scope.hub_node_id}
+        eventId={sceneContextEventId}
+        onBack={() => setSceneContextEventId(null)}
+      />
+    );
+  }
+
+  const visibleLanes = timeline.lanes.filter(
+    (l) => !hiddenLanes.has(l.timeline.id),
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -116,22 +154,49 @@ export function TimelinePanel({ scope }: Props) {
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
             Click empty canvas to add an event. Drag a card to reorder.
-            Click a card for details.
+            Click a card for details. Ctrl+click for quick-edit.
           </p>
         </div>
-        <button
-          onClick={() => setActDialog(timeline.lanes[0].timeline.id)}
-          className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
-        >
-          + Act span
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setNewTimelineOpen(true)}
+            className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            title="Create a parallel timeline (Slice 5)"
+          >
+            + Timeline
+          </button>
+          <button
+            onClick={() => setActDialog(timeline.lanes[0].timeline.id)}
+            className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+          >
+            + Act span
+          </button>
+        </div>
       </div>
 
-      {/* Slice 4: single lane. Lanes array stays — Slice 5 renders > 1. */}
-      {timeline.lanes.map((lane) => (
+      {/* Slice 5: lane toggle + character highlight filter */}
+      {(timeline.lanes.length > 1 || highlightedCharacterId) && (
+        <LaneToggle
+          lanes={timeline.lanes}
+          hidden={hiddenLanes}
+          onToggle={(id) =>
+            setHiddenLanes((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
+          highlightedCharacterId={highlightedCharacterId}
+          onClearHighlight={() => setHighlightedCharacterId(null)}
+        />
+      )}
+
+      {visibleLanes.map((lane) => (
         <TimelineLaneCanvas
           key={lane.timeline.id}
           lane={lane}
+          highlightedCharacterId={highlightedCharacterId}
           onSelectEvent={setSelectedEventId}
           onRequestCreate={(pos) =>
             setCreateDialog({
@@ -150,6 +215,7 @@ export function TimelinePanel({ scope }: Props) {
               setError(e instanceof Error ? e.message : "Reorder failed");
             }
           }}
+          onEventEdited={refresh}
         />
       ))}
 
@@ -159,6 +225,14 @@ export function TimelinePanel({ scope }: Props) {
           lane={selectedLane}
           onClose={() => setSelectedEventId(null)}
           onUpdated={refresh}
+          onHighlightCharacter={(id) => {
+            setHighlightedCharacterId(id);
+            setSelectedEventId(null);
+          }}
+          onOpenSceneContext={() => {
+            setSceneContextEventId(selectedEvent.node.id);
+            setSelectedEventId(null);
+          }}
         />
       )}
 
@@ -185,6 +259,79 @@ export function TimelinePanel({ scope }: Props) {
           }}
         />
       )}
+
+      {newTimelineOpen && (
+        <NewTimelineDialog
+          hubId={scope.hub_node_id}
+          onClose={() => setNewTimelineOpen(false)}
+          onCreated={async () => {
+            setNewTimelineOpen(false);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lane toggle + highlight chip (Slice 5)
+// ---------------------------------------------------------------------------
+
+function LaneToggle({
+  lanes,
+  hidden,
+  onToggle,
+  highlightedCharacterId,
+  onClearHighlight,
+}: {
+  lanes: TimelineLane[];
+  hidden: Set<string>;
+  onToggle: (id: string) => void;
+  highlightedCharacterId: string | null;
+  onClearHighlight: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs flex-wrap">
+      {lanes.length > 1 && (
+        <>
+          <span className="text-gray-400 uppercase tracking-wider text-[10px]">
+            Lanes
+          </span>
+          {lanes.map((l) => {
+            const isHidden = hidden.has(l.timeline.id);
+            return (
+              <button
+                key={l.timeline.id}
+                onClick={() => onToggle(l.timeline.id)}
+                className={`rounded-full border px-2 py-0.5 ${
+                  isHidden
+                    ? "border-gray-200 text-gray-400 line-through"
+                    : "border-indigo-300 bg-indigo-50 text-indigo-700"
+                }`}
+                title={
+                  isHidden ? "Show this lane" : "Hide this lane"
+                }
+              >
+                {l.timeline.title}
+              </button>
+            );
+          })}
+        </>
+      )}
+      {highlightedCharacterId && (
+        <div className="ml-auto flex items-center gap-1">
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
+            Character highlight active
+          </span>
+          <button
+            onClick={onClearHighlight}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            clear
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -198,6 +345,8 @@ interface LaneProps {
   onSelectEvent: (id: string) => void;
   onRequestCreate: (discoursePosition: number) => void;
   onReorder: (eventId: string, newPosition: number) => Promise<void>;
+  highlightedCharacterId?: string | null;
+  onEventEdited?: () => void;
 }
 
 function TimelineLaneCanvas({
@@ -205,12 +354,19 @@ function TimelineLaneCanvas({
   onSelectEvent,
   onRequestCreate,
   onReorder,
+  highlightedCharacterId,
+  onEventEdited,
 }: LaneProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<{
     eventId: string;
     currentPosition: number;
   } | null>(null);
+  // Slice 5: Ctrl+click an event card opens the NodeInteractionPopup
+  // (philosophy doc §6.9). Track the popped event at the lane level so
+  // the popup renders outside the SVG, where position: fixed actually
+  // anchors to the viewport.
+  const [popupEventId, setPopupEventId] = useState<string | null>(null);
 
   // Range of positions in this lane — used to set SVG viewBox width.
   const { minPos, maxPos } = useMemo(() => {
@@ -383,24 +539,42 @@ function TimelineLaneCanvas({
         })}
 
         {/* Event cards */}
-        {lane.events.map((event) => (
-          <EventCard
-            key={event.node.id}
-            event={event}
-            x={
-              drag?.eventId === event.node.id
-                ? positionToX(drag.currentPosition)
-                : positionToX(event.discourse_position)
-            }
-            y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
-            onPointerDown={() =>
-              startDrag(event.node.id, event.discourse_position)
-            }
-            onClick={() => onSelectEvent(event.node.id)}
-            ghost={drag?.eventId === event.node.id}
-          />
-        ))}
+        {lane.events.map((event) => {
+          const dimmed =
+            highlightedCharacterId !== null &&
+            highlightedCharacterId !== undefined &&
+            !event.character_ids?.includes(highlightedCharacterId);
+          return (
+            <EventCard
+              key={event.node.id}
+              event={event}
+              x={
+                drag?.eventId === event.node.id
+                  ? positionToX(drag.currentPosition)
+                  : positionToX(event.discourse_position)
+              }
+              y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
+              onPointerDown={() =>
+                startDrag(event.node.id, event.discourse_position)
+              }
+              onClick={() => onSelectEvent(event.node.id)}
+              onCtrlClick={() => setPopupEventId(event.node.id)}
+              ghost={drag?.eventId === event.node.id}
+              dimmed={dimmed}
+            />
+          );
+        })}
       </svg>
+      {popupEventId && (
+        <NodeInteractionPopup
+          nodeId={popupEventId}
+          onClose={() => setPopupEventId(null)}
+          onSaved={() => {
+            setPopupEventId(null);
+            onEventEdited?.();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -415,14 +589,18 @@ function EventCard({
   y,
   onPointerDown,
   onClick,
+  onCtrlClick,
   ghost,
+  dimmed,
 }: {
   event: TimelineEvent;
   x: number;
   y: number;
   onPointerDown: () => void;
   onClick: () => void;
+  onCtrlClick: () => void;
   ghost: boolean;
+  dimmed?: boolean;
 }) {
   const status = event.prose_status
     ? PROSE_STATUS_COLORS[event.prose_status as ProseStatus]
@@ -433,71 +611,113 @@ function EventCard({
     written: "#10b981",
     revised: "#3b82f6",
   };
+  const themeColors = ["#e8a94a", "#6ba3d6", "#d47a7a", "#9b7fd4", "#5db888"];
+  const isCrossover = (event.timeline_count ?? 1) > 1;
+
+  let opacity = 1;
+  if (ghost) opacity = 0.5;
+  else if (dimmed) opacity = 0.3;
+
   return (
-    <g
-      transform={`translate(${x}, ${y})`}
-      style={{ cursor: "grab", opacity: ghost ? 0.5 : 1 }}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onPointerDown();
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      <rect
-        x={0}
-        y={0}
-        width={EVENT_CARD_WIDTH}
-        height={EVENT_CARD_HEIGHT}
-        rx={6}
-        fill="white"
-        stroke="#a1a1aa"
-        strokeWidth={1.5}
-      />
-      {/* prose_status dot in top-right */}
-      {event.prose_status && (
-        <circle
-          cx={EVENT_CARD_WIDTH - 10}
-          cy={10}
-          r={5}
-          fill={statusColor[event.prose_status as ProseStatus]}
-        />
-      )}
-      <text
-        x={10}
-        y={20}
-        fontSize={12}
-        fontWeight={600}
-        fill="#27272a"
-        style={{ pointerEvents: "none" }}
+    <>
+      <g
+        transform={`translate(${x}, ${y})`}
+        style={{ cursor: "grab", opacity }}
+        onPointerDown={(e) => {
+          // Don't start drag on a Ctrl+click (that opens the popup).
+          if (e.ctrlKey || e.metaKey) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onPointerDown();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (e.ctrlKey || e.metaKey) {
+            onCtrlClick();
+            return;
+          }
+          onClick();
+        }}
       >
-        {truncate(event.node.title, 24)}
-      </text>
-      {event.story_time && (
+        <rect
+          x={0}
+          y={0}
+          width={EVENT_CARD_WIDTH}
+          height={EVENT_CARD_HEIGHT}
+          rx={6}
+          fill="white"
+          stroke={isCrossover ? "#a97830" : "#a1a1aa"}
+          strokeWidth={isCrossover ? 2.5 : 1.5}
+          strokeDasharray={isCrossover ? "6 3" : undefined}
+        />
+        {isCrossover && (
+          <text
+            x={6}
+            y={EVENT_CARD_HEIGHT + 12}
+            fontSize={9}
+            fill="#a97830"
+            fontWeight={600}
+            style={{ pointerEvents: "none" }}
+          >
+            crossover · {event.timeline_count} lanes
+          </text>
+        )}
+        {/* prose_status dot in top-right */}
+        {event.prose_status && (
+          <circle
+            cx={EVENT_CARD_WIDTH - 10}
+            cy={10}
+            r={5}
+            fill={statusColor[event.prose_status as ProseStatus]}
+          />
+        )}
+        {/* Theme density dots in top-left strip */}
+        {event.theme_ids?.slice(0, 6).map((tid, i) => (
+          <circle
+            key={tid}
+            cx={12 + i * 8}
+            cy={EVENT_CARD_HEIGHT - 12}
+            r={3}
+            fill={themeColors[i % themeColors.length]}
+            style={{ pointerEvents: "none" }}
+          />
+        ))}
         <text
           x={10}
-          y={38}
-          fontSize={10}
-          fill="#71717a"
+          y={20}
+          fontSize={12}
+          fontWeight={600}
+          fill="#27272a"
           style={{ pointerEvents: "none" }}
         >
-          {truncate(event.story_time, 26)}
+          {truncate(event.node.title, 24)}
         </text>
-      )}
-      <text
-        x={10}
-        y={EVENT_CARD_HEIGHT - 8}
-        fontSize={9}
-        fill="#a1a1aa"
-        style={{ pointerEvents: "none" }}
-      >
-        pos {event.discourse_position}
-        {status && ` · ${status.label}`}
-      </text>
-    </g>
+        {event.story_time && (
+          <text
+            x={10}
+            y={38}
+            fontSize={10}
+            fill="#71717a"
+            style={{ pointerEvents: "none" }}
+          >
+            {truncate(event.story_time, 26)}
+          </text>
+        )}
+        <text
+          x={10}
+          y={EVENT_CARD_HEIGHT - 22}
+          fontSize={9}
+          fill="#a1a1aa"
+          style={{ pointerEvents: "none" }}
+        >
+          pos {event.discourse_position}
+          {status && ` · ${status.label}`}
+          {event.character_ids?.length
+            ? ` · ${event.character_ids.length} char`
+            : ""}
+        </text>
+      </g>
+    </>
   );
 }
 
@@ -514,11 +734,15 @@ function EventSidePanel({
   lane,
   onClose,
   onUpdated,
+  onHighlightCharacter,
+  onOpenSceneContext,
 }: {
   event: TimelineEvent;
   lane: TimelineLane;
   onClose: () => void;
   onUpdated: () => void;
+  onHighlightCharacter: (id: string) => void;
+  onOpenSceneContext: () => void;
 }) {
   const [proseStatus, setProseStatus] = useState<ProseStatus | "">(
     event.prose_status ?? "",
@@ -527,32 +751,50 @@ function EventSidePanel({
     event.manuscript_location ?? "",
   );
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [characters, setCharacters] = useState<NodeDetail[]>([]);
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
 
-  // The current PATCH /nodes/{id} accepts title/content/summary/tag_ids but
-  // not the event-specific columns. For Slice 4 we update prose_status and
-  // manuscript_location via a workaround: PATCH on title is the existing
-  // endpoint. The event-field updates use the same node endpoint with
-  // body fields the backend ignores today — leaving the update path here
-  // as a follow-up (the prose_status badge already renders from the
-  // existing GET). For now, the side panel shows the data read-only and
-  // the badge state on the card.
-  // TODO Slice 5: extend NodeUpdate with event-specific fields.
+  // Pull full character details so we can show name/title in the list.
+  useEffect(() => {
+    let cancelled = false;
+    if (!event.character_ids?.length) {
+      setCharacters([]);
+      return;
+    }
+    Promise.all(
+      event.character_ids.map((cid) =>
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/nodes/${cid}`,
+        )
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      setCharacters(results.filter((x: NodeDetail | null): x is NodeDetail => x !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [event.character_ids]);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  // Save event-specific fields immediately on blur/change (debounce-free —
+  // small payload, low latency). NodeUpdate now supports the columns.
+  async function saveField(payload: {
+    prose_status?: string | null;
+    manuscript_location?: string | null;
+  }) {
     setSaving(true);
     setError(null);
     try {
-      // Update plain fields the existing PATCH /nodes/{id} supports.
-      await updateNode(event.node.id, { title: event.node.title });
-      // Note: prose_status + manuscript_location PATCH support is a Slice 5
-      // follow-up. The form below is currently a read-only display with a
-      // local-state preview so the user sees the intended UX.
+      await updateNode(event.node.id, payload);
+      setSavedAt(new Date());
       onUpdated();
-      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
       setSaving(false);
     }
   }
@@ -587,7 +829,11 @@ function EventSidePanel({
           <dd>
             <select
               value={proseStatus}
-              onChange={(e) => setProseStatus(e.target.value as ProseStatus | "")}
+              onChange={(e) => {
+                const v = e.target.value as ProseStatus | "";
+                setProseStatus(v);
+                saveField({ prose_status: v || null });
+              }}
               className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs"
             >
               <option value="">— unset —</option>
@@ -597,9 +843,6 @@ function EventSidePanel({
                 </option>
               ))}
             </select>
-            <p className="text-[10px] text-amber-600 mt-1">
-              Status changes save to the node in a Slice 5 follow-up.
-            </p>
           </dd>
         </div>
         <div>
@@ -609,19 +852,68 @@ function EventSidePanel({
               type="text"
               value={manuscriptLoc}
               onChange={(e) => setManuscriptLoc(e.target.value)}
+              onBlur={() => saveField({ manuscript_location: manuscriptLoc || null })}
               placeholder="e.g. manuscript.md L427"
               className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs font-mono"
             />
           </dd>
         </div>
         <div>
-          <dt className="font-medium text-gray-500">Characters</dt>
-          <dd className="text-gray-300 italic">Slice 5</dd>
+          <dt className="font-medium text-gray-500">
+            Characters in scene
+            <span className="ml-1 text-gray-300 font-normal">
+              ({characters.length})
+            </span>
+          </dt>
+          <dd>
+            {characters.length === 0 ? (
+              <em className="text-gray-300">No characters attached.</em>
+            ) : (
+              <ul className="space-y-0.5">
+                {characters.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <button
+                      onClick={() => onHighlightCharacter(c.id)}
+                      className="truncate text-indigo-600 hover:underline text-left flex-1"
+                      title="Click to highlight this character's events"
+                    >
+                      {c.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              onClick={() => setShowCharacterPicker((x) => !x)}
+              className="mt-1 text-[10px] text-indigo-600 hover:text-indigo-700"
+            >
+              {showCharacterPicker ? "cancel" : "+ attach character"}
+            </button>
+            {showCharacterPicker && (
+              <AttachCharacterPicker
+                eventId={event.node.id}
+                onAttached={() => {
+                  setShowCharacterPicker(false);
+                  onUpdated();
+                }}
+              />
+            )}
+          </dd>
         </div>
-        <div>
-          <dt className="font-medium text-gray-500">Themes</dt>
-          <dd className="text-gray-300 italic">Slice 5</dd>
-        </div>
+        {event.theme_ids?.length ? (
+          <div>
+            <dt className="font-medium text-gray-500">
+              Themes ({event.theme_ids.length})
+            </dt>
+            <dd className="text-gray-400 italic">
+              Theme attachment editor lands in Phase 10. Dots on the card
+              show count.
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       <div className="mt-4 flex justify-between items-center">
@@ -633,17 +925,231 @@ function EventSidePanel({
         </Link>
         <button
           type="button"
-          disabled
-          title="Scene Context View ships in Slice 5"
-          className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-400 cursor-not-allowed"
+          onClick={onOpenSceneContext}
+          className="rounded bg-amber-500 px-3 py-1 text-xs font-medium text-white hover:bg-amber-600"
+          title="Live graph assembly — every open is a fresh query"
         >
-          Open in Scene Context
+          Scene Context →
         </button>
       </div>
 
-      {error && (
-        <p className="mt-2 text-xs text-red-600">{error}</p>
+      {saving && (
+        <p className="mt-2 text-[10px] text-gray-400">Saving…</p>
       )}
+      {savedAt && !saving && (
+        <p className="mt-2 text-[10px] text-emerald-600">
+          Saved {savedAt.toLocaleTimeString()}
+        </p>
+      )}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AttachCharacterPicker — search + COLLECTS edge create (Slice 5)
+// ---------------------------------------------------------------------------
+
+function AttachCharacterPicker({
+  eventId,
+  onAttached,
+}: {
+  eventId: string;
+  onAttached: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const [creating, setCreating] = useState(false);
+
+  // Search character-tagged structure nodes via the existing FTS search +
+  // client-side filter for the narrative:character tag. For Slice 5 we
+  // accept the round-trip cost — the corpus of characters is small.
+  useEffect(() => {
+    if (!search.trim()) {
+      setResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const { searchNodes, getNode } = await import("@/lib/api");
+      const refs = await searchNodes(search.trim(), 12);
+      if (cancelled) return;
+      // Filter to structure nodes; then verify they carry the character tag.
+      const candidates = refs.filter((r) => r.type === "structure");
+      const verified = await Promise.all(
+        candidates.map(async (r) => {
+          const d = await getNode(r.id).catch(() => null);
+          if (!d) return null;
+          if (d.tags.some((t) => t.name === "narrative:character")) {
+            return { id: r.id, title: r.title } as {
+              id: string;
+              title: string;
+            };
+          }
+          return null;
+        }),
+      );
+      if (!cancelled) {
+        setResults(
+          verified.filter(
+            (x): x is { id: string; title: string } => x !== null,
+          ),
+        );
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [search]);
+
+  async function attach(characterId: string) {
+    setCreating(true);
+    try {
+      const { createEdge } = await import("@/lib/api");
+      await createEdge({
+        from_id: characterId,
+        to_id: eventId,
+        type: "COLLECTS",
+      });
+      onAttached();
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="mt-1 space-y-1">
+      <input
+        type="text"
+        autoFocus
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="search characters…"
+        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs"
+      />
+      {results.length > 0 && (
+        <div className="rounded border border-gray-100 bg-gray-50 max-h-32 overflow-y-auto">
+          {results.map((r) => (
+            <button
+              key={r.id}
+              disabled={creating}
+              onClick={() => attach(r.id)}
+              className="block w-full px-2 py-1 text-left text-xs hover:bg-white truncate"
+            >
+              {r.title}
+            </button>
+          ))}
+        </div>
+      )}
+      {search.trim() && results.length === 0 && (
+        <p className="text-[10px] text-gray-400">
+          No matching characters. Create one from the Characters tab.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NewTimelineDialog — create a parallel lane (Slice 5)
+// ---------------------------------------------------------------------------
+
+function NewTimelineDialog({
+  hubId,
+  onClose,
+  onCreated,
+}: {
+  hubId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createTimeline(hubId, {
+        title: title.trim(),
+        content: content.trim(),
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Create failed");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">New parallel timeline</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Title
+            </label>
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Vincent's thread"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Description (optional)
+            </label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={2}
+              placeholder="What this thread covers"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !title.trim()}
+              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {saving ? "Creating…" : "Create timeline"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

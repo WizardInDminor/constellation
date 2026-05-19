@@ -77,9 +77,9 @@ class ActSpanCreate(BaseModel):
 
 
 class TimelineEvent(BaseModel):
-    """One event positioned in one timeline. Slice 4 carries enough for the
-    canvas to render a card; Slice 5 will extend with character / theme
-    attachments via additional fields or a separate lookup pass.
+    """One event positioned in one timeline. Slice 5 adds the crossover
+    indicator and per-event character/theme references so the canvas can
+    render highlights and theme-density dots without a second round trip.
     """
 
     node: NodeRef
@@ -87,6 +87,17 @@ class TimelineEvent(BaseModel):
     story_time: str | None = None
     prose_status: ProseStatus | None = None
     manuscript_location: str | None = None
+    # Slice 5: > 1 means this event has rows in event_timeline_positions
+    # for multiple timeline_node_ids — a crossover scene (ADR-065).
+    timeline_count: int = 1
+    # Slice 5: IDs of attached character structure nodes (those with the
+    # 'narrative:character' tag that COLLECTS this event). Used by the
+    # left-panel character filter (highlight on click).
+    character_ids: list[str] = []
+    # Slice 5: IDs of attached theme structure nodes (those tagged
+    # 'narrative:theme', either source or target of any non-COLLECTS edge
+    # involving this event). Used for the theme-density dots.
+    theme_ids: list[str] = []
 
 
 class TimelineLane(BaseModel):
@@ -106,3 +117,45 @@ class TimelineResponse(BaseModel):
     """
 
     lanes: list[TimelineLane]
+
+
+# ---------------------------------------------------------------------------
+# Scene Context View (Slice 5)
+# ---------------------------------------------------------------------------
+
+
+class SceneContextItem(BaseModel):
+    """One contextual node surfaced into Scene Context View. The
+    `relevance` field reflects graph proximity per philosophy doc §6.8:
+      - "strong"     — direct edge to a scene element
+      - "moderate"   — one hop away
+      - "background" — world rules always present
+    """
+
+    node: NodeRef
+    relevance: Literal["strong", "moderate", "background"]
+    role: Literal["character", "location", "lore", "theme", "arc_note", "world_rule"]
+    edge_type: str | None = None  # the edge label connecting it to the scene
+    edge_note: str | None = None
+    # Optional supplemental fields for character cards (Slice 5 carries only
+    # what the read view shows; full character sheet is Phase 10).
+    summary: str | None = None
+    category: str | None = None  # lore category from the reserved tag
+
+
+class SceneContextResponse(BaseModel):
+    """All context surrounding one scene. Always assembled live (philosophy
+    doc §6.8 "Live graph assembly"); no caching at any layer.
+
+    The frontend renders `items` grouped by `role` and `relevance`. The
+    `world_rules_collapsed_hint` controls the session-aware collapse copy
+    on the right panel.
+    """
+
+    event: NodeRef
+    timeline: NodeRef | None = None
+    discourse_position: int | None = None
+    preceding_event: NodeRef | None = None
+    following_event: NodeRef | None = None
+    items: list[SceneContextItem]
+    world_rules_collapsed_hint: str | None = None

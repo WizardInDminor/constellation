@@ -567,6 +567,14 @@ async def update(db: aiosqlite.Connection, node_id: str, data: NodeUpdate) -> No
         updates["summary"] = data.summary
     if "source_id" in data.model_fields_set:
         updates["source_id"] = data.source_id
+    # Slice 5: event-specific field writes. Use model_fields_set so explicit
+    # null clears the column (distinct from "leave alone").
+    if "story_time" in data.model_fields_set:
+        updates["story_time"] = data.story_time
+    if "prose_status" in data.model_fields_set:
+        updates["prose_status"] = data.prose_status
+    if "manuscript_location" in data.model_fields_set:
+        updates["manuscript_location"] = data.manuscript_location
 
     if updates:
         now = datetime.now(UTC).isoformat()

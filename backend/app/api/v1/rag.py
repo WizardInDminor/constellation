@@ -3,7 +3,7 @@ import json
 import re
 
 from fastapi import APIRouter, HTTPException
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.core.deps import DB, EmbedProvider, GenProvider
 from app.models import EdgeCreate, NodeDetail, NodeRef, PermanentCreate
@@ -124,9 +124,7 @@ async def _suggest_links_for_node(
     endpoints share the same retrieval + LLM call + parsing logic.
     """
     vector = await embed_provider.embed(f"{source.title}\n\n{source.content}")
-    candidate_ids = await embedding_service.find_similar(
-        db, vector, exclude_id=source.id, limit=10
-    )
+    candidate_ids = await embedding_service.find_similar(db, vector, exclude_id=source.id, limit=10)
     if not candidate_ids:
         return []
 
@@ -383,3 +381,121 @@ async def save_answer(body: SaveAnswerRequest, db: DB, embed_provider: EmbedProv
     refreshed = await node_repo.get_by_id(db, node.id)
     assert refreshed is not None
     return refreshed
+
+
+# ---------------------------------------------------------------------------
+# Narrative dump → proposed nodes (Slice 5)
+# ---------------------------------------------------------------------------
+
+
+_NARRATIVE_DUMP_SYSTEM = """\
+You are a narrative-mode assistant. The user has dumped a block of \
+unstructured narrative thinking — a character rant, a sequence of beats, \
+a tangle of theme observations — and wants you to extract structured \
+candidate nodes from it. They will review your proposals individually \
+before any of them become real graph data.
+
+The user passes a `dump_type`:
+
+- `"story-arc"` — extract candidate STORY EVENT nodes (scenes / beats). \
+For each, return a short title (5-12 words), a `story_time` if the dump \
+implies one (e.g. "Act 2 Scene 3", "Day 14"), and a 2-3 sentence \
+description that becomes the event's content.
+- `"character"` — extract candidate CHARACTER nodes (people in the \
+story). For each, return name, archetype (Protagonist / Antagonist / \
+Supporting / Other / Complex), and a 2-3 sentence description.
+- `"themes"` — extract candidate THEME nodes (motifs, recurring ideas, \
+subtext). For each, return a short label and a one-sentence canonical \
+usage note.
+
+Be conservative. Three sharp candidates is better than nine vague ones. \
+Don't invent details the dump doesn't support; if the dump is thin, \
+return fewer candidates.
+
+Return ONLY valid JSON, no markdown:
+{
+  "candidates": [
+    {"title": "...", "description": "...", "story_time": "..." | null,
+     "archetype": "..." | null, "subtype": "event|character|theme"}
+  ]
+}
+"""
+
+
+class NarrativeDumpRequest(BaseModel):
+    dump_text: str
+    dump_type: str  # "story-arc" | "character" | "themes"
+
+
+class NarrativeCandidate(BaseModel):
+    title: str
+    description: str
+    story_time: str | None = None
+    archetype: str | None = None
+    subtype: str  # "event" | "character" | "theme"
+
+
+class NarrativeDumpResponse(BaseModel):
+    candidates: list[NarrativeCandidate]
+
+
+@router.post("/narrative-dump")
+async def narrative_dump(
+    body: NarrativeDumpRequest, db: DB, gen_provider: GenProvider
+) -> NarrativeDumpResponse:
+    """Extract proposed event / character / theme nodes from a free-form
+    narrative dump (philosophy doc §2.7 — "Story Dump" surface). The user
+    reviews proposals individually before any become real nodes.
+    """
+    if not body.dump_text.strip():
+        raise HTTPException(400, "dump_text cannot be empty")
+    if body.dump_type not in ("story-arc", "character", "themes"):
+        raise HTTPException(422, "dump_type must be one of: story-arc, character, themes")
+
+    user_msg = f"dump_type: {body.dump_type}\n\nDump:\n{body.dump_text.strip()}"
+    raw = await generation_service.complete(
+        gen_provider,
+        [{"role": "user", "content": user_msg}],
+        _NARRATIVE_DUMP_SYSTEM,
+        max_tokens=2048,
+    )
+
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if match:
+        cleaned = match.group()
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(500, f"Narrative dump returned unparseable JSON: {exc}") from exc
+
+    raw_candidates = data.get("candidates", [])
+    if not isinstance(raw_candidates, list):
+        return NarrativeDumpResponse(candidates=[])
+    out: list[NarrativeCandidate] = []
+    for c in raw_candidates:
+        if not isinstance(c, dict):
+            continue
+        title = (c.get("title") or "").strip()
+        if not title:
+            continue
+        subtype = c.get("subtype", "")
+        if subtype not in ("event", "character", "theme"):
+            # Infer from dump_type if missing
+            subtype = {
+                "story-arc": "event",
+                "character": "character",
+                "themes": "theme",
+            }.get(body.dump_type, "event")
+        out.append(
+            NarrativeCandidate(
+                title=title,
+                description=(c.get("description") or "").strip(),
+                story_time=c.get("story_time") or None,
+                archetype=c.get("archetype") or None,
+                subtype=subtype,
+            )
+        )
+    return NarrativeDumpResponse(candidates=out)

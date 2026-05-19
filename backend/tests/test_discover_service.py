@@ -186,9 +186,7 @@ async def test_bridges_returns_similarity_in_unit_range(db):
 
 
 async def _attach_tag(db, node_id: str, tag_id: str) -> None:
-    await db.execute(
-        "INSERT INTO node_tags(node_id, tag_id) VALUES (?, ?)", (node_id, tag_id)
-    )
+    await db.execute("INSERT INTO node_tags(node_id, tag_id) VALUES (?, ?)", (node_id, tag_id))
     await db.commit()
 
 
@@ -207,9 +205,7 @@ async def test_bridges_cross_tag_drops_pairs_with_shared_tag(db):
     assert tuple(sorted([a.id, b.id])) in pair_ids
 
     # With cross_tag=True the pair is filtered out
-    filtered = await discover_service.find_bridges(
-        db, limit=10, min_similarity=0.0, cross_tag=True
-    )
+    filtered = await discover_service.find_bridges(db, limit=10, min_similarity=0.0, cross_tag=True)
     filtered_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
     assert tuple(sorted([a.id, b.id])) not in filtered_ids
 
@@ -223,9 +219,7 @@ async def test_bridges_cross_tag_keeps_disjoint_tag_pairs(db):
     await _attach_tag(db, a.id, "t1")
     await _attach_tag(db, b.id, "t2")
 
-    filtered = await discover_service.find_bridges(
-        db, limit=10, min_similarity=0.0, cross_tag=True
-    )
+    filtered = await discover_service.find_bridges(db, limit=10, min_similarity=0.0, cross_tag=True)
     pair_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
     assert tuple(sorted([a.id, b.id])) in pair_ids
 
@@ -235,9 +229,7 @@ async def test_bridges_cross_tag_keeps_untagged_pairs(db):
     a = await _insert_node_with_vec(db, "A", seed=0)
     b = await _insert_node_with_vec(db, "B", seed=1)
 
-    filtered = await discover_service.find_bridges(
-        db, limit=10, min_similarity=0.0, cross_tag=True
-    )
+    filtered = await discover_service.find_bridges(db, limit=10, min_similarity=0.0, cross_tag=True)
     pair_ids = {tuple(sorted([br.node_a.id, br.node_b.id])) for br in filtered}
     assert tuple(sorted([a.id, b.id])) in pair_ids
 
@@ -269,9 +261,7 @@ async def test_triangles_surfaces_pair_with_shared_neighbours(db):
     assert tuple(sorted([c.id, d.id])) in pair_keys
 
     # The (A,B) candidate carries C and D as intermediates
-    ab = next(
-        t for t in triangles if {t.node_a.id, t.node_b.id} == {a.id, b.id}
-    )
+    ab = next(t for t in triangles if {t.node_a.id, t.node_b.id} == {a.id, b.id})
     assert {n.id for n in ab.intermediates} == {c.id, d.id}
     assert ab.intermediate_count == 2
 

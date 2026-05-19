@@ -33,9 +33,7 @@ async def delete_edge(edge_id: str, db: DB) -> None:
 
 
 @router.post("/{edge_id}/resolve")
-async def resolve_edge(
-    edge_id: str, data: EdgeResolveRequest, db: DB
-) -> EdgeDetail:
+async def resolve_edge(edge_id: str, data: EdgeResolveRequest, db: DB) -> EdgeDetail:
     """Mark a tension edge resolved (ADR-059).
 
     Restricted to `RESOLVABLE_EDGE_TYPES` (CONTRADICTS, QUESTIONS) — resolution
@@ -56,9 +54,7 @@ async def resolve_edge(
         if resolver is None:
             raise HTTPException(422, "resolved_by_node_id does not reference an existing node")
 
-    updated = await edge_repo.resolve(
-        db, edge_id, resolved_by_node_id=data.resolved_by_node_id
-    )
+    updated = await edge_repo.resolve(db, edge_id, resolved_by_node_id=data.resolved_by_node_id)
     assert updated is not None  # existence already verified above
     return updated
 

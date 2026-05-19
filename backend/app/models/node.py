@@ -89,3 +89,11 @@ class NodeUpdate(BaseModel):
     summary: str | None = None
     source_id: str | None = None
     tag_ids: list[str] | None = None
+    # Slice 5: event-specific field writes (closes Slice 4 deferral).
+    # These are pass-throughs to the same columns added in Slice 4
+    # (ADR-064 / ADR-071). The route only writes them when they appear in
+    # the request's model_fields_set, so omitting them leaves the value as
+    # is. Sending null explicitly clears the column.
+    story_time: str | None = None
+    prose_status: str | None = None
+    manuscript_location: str | None = None
