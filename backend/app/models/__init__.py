@@ -68,6 +68,7 @@ from app.models.timeline import (
     StoryEventCreate,
     TimelineEvent,
     TimelineLane,
+    TimelinePlacementRequest,
     TimelinePositionUpdate,
     TimelineResponse,
 )
@@ -152,6 +153,7 @@ __all__ = [
     "StoryEventCreate",
     "TimelineEvent",
     "TimelineLane",
+    "TimelinePlacementRequest",
     "TimelinePositionUpdate",
     "TimelineResponse",
     "EdgeCreate",

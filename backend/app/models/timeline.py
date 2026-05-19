@@ -48,6 +48,26 @@ class TimelinePositionUpdate(BaseModel):
     discourse_position: int
 
 
+class TimelinePlacementRequest(BaseModel):
+    """`POST /nodes/{id}/timeline-placement` — place an existing event onto
+    a (possibly different) timeline. Used by the cross-lane drag-and-drop
+    surface in Slice 5.
+
+    - When `remove_from_timeline_node_id` is null, this is a CROSSOVER /
+      COPY: the event keeps its source placement and gains a placement on
+      the target timeline. ADR-065 documents the supported shape.
+    - When `remove_from_timeline_node_id` is set (and differs from
+      `timeline_node_id`), this is a MOVE: the source-lane placement +
+      its COLLECTS edge are removed; the event is placed on the target
+      lane. The source-lane FOLLOWS_FROM chain may end up with a gap;
+      the workspace does not auto-compact in Slice 5.
+    """
+
+    timeline_node_id: str
+    discourse_position: int
+    remove_from_timeline_node_id: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Act spans
 # ---------------------------------------------------------------------------

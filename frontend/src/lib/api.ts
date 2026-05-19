@@ -613,6 +613,21 @@ export function updateTimelinePosition(
   });
 }
 
+// Slice 5: cross-lane drag-and-drop. `remove_from_timeline_node_id`
+// null = crossover/copy; set = move.
+export type TimelinePlacementRequest =
+  components["schemas"]["TimelinePlacementRequest"];
+
+export function placeOnTimeline(
+  nodeId: string,
+  data: TimelinePlacementRequest,
+): Promise<NodeDetail> {
+  return request(`/api/v1/nodes/${nodeId}/timeline-placement`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export function createActSpan(
   hubId: string,
   data: ActSpanCreate,

@@ -20,6 +20,7 @@ import {
   createStoryEvent,
   createTimeline,
   getTimeline,
+  placeOnTimeline,
   updateTimelinePosition,
   updateNode,
 } from "@/lib/api";
@@ -64,6 +65,31 @@ const PROSE_STATUS_COLORS: Record<ProseStatus, { dot: string; label: string }> =
   revised: { dot: "bg-blue-500", label: "Revised" },
 };
 
+// Slice 5: registered lane info — each lane reports its SVG ref + a
+// position converter to the parent so cross-lane drag can hit-test the
+// cursor against any lane's bounding rect and translate clientX to that
+// lane's discourse_position axis.
+interface LaneRegistration {
+  svg: SVGSVGElement;
+  xToPosition: (clientX: number) => number;
+}
+
+// Slice 5: cross-lane drag state lives on the parent (TimelinePanel)
+// because only the parent sees all lanes. Each lane just contributes
+// its registration via the ref store; the parent owns pointermove /
+// pointerup and dispatches to the right backend endpoint.
+interface DragState {
+  eventId: string;
+  sourceLaneId: string;
+  sourcePosition: number;
+  // Current cursor target — updated by the parent's window pointermove.
+  targetLaneId: string;
+  targetPosition: number;
+  // Held-modifier reflects user intent at drop time. Recomputed on every
+  // pointermove so the visual indicator stays in sync.
+  altHeld: boolean;
+}
+
 export function TimelinePanel({ scope }: Props) {
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -88,6 +114,39 @@ export function TimelinePanel({ scope }: Props) {
     null,
   );
 
+  // Slice 5: cross-lane drag. Lifted from TimelineLaneCanvas (where it
+  // lived for Slice 4's intra-lane-only drag) — the parent sees all
+  // lanes, so it is the only level that can hit-test across them.
+  const [drag, setDrag] = useState<DragState | null>(null);
+  // Stable registry of lane SVGs. Each lane calls `registerLane` on
+  // mount and `unregisterLane` on unmount; the parent's pointermove
+  // walks this map to find which lane the cursor is over.
+  const laneRegistry = useRef<Map<string, LaneRegistration>>(new Map());
+
+  const registerLane = useCallback(
+    (laneId: string, reg: LaneRegistration) => {
+      laneRegistry.current.set(laneId, reg);
+    },
+    [],
+  );
+  const unregisterLane = useCallback((laneId: string) => {
+    laneRegistry.current.delete(laneId);
+  }, []);
+
+  const startDrag = useCallback(
+    (eventId: string, sourceLaneId: string, sourcePosition: number) => {
+      setDrag({
+        eventId,
+        sourceLaneId,
+        sourcePosition,
+        targetLaneId: sourceLaneId,
+        targetPosition: sourcePosition,
+        altHeld: false,
+      });
+    },
+    [],
+  );
+
   const refresh = useCallback(async () => {
     try {
       setTimeline(await getTimeline(scope.hub_node_id));
@@ -96,6 +155,80 @@ export function TimelinePanel({ scope }: Props) {
       setError(e instanceof Error ? e.message : "Failed to load timeline");
     }
   }, [scope.hub_node_id]);
+
+  // Slice 5: window-level pointermove/pointerup once a drag is active.
+  // Hit-tests the cursor against every registered lane's rect; whichever
+  // lane contains the cursor becomes the target lane and the target
+  // position is computed in that lane's coordinate space. On pointerup,
+  // dispatches to the right backend endpoint.
+  useEffect(() => {
+    if (!drag) return;
+
+    function onPointerMove(ev: PointerEvent) {
+      // Walk registered lanes; first one whose rect contains the cursor wins.
+      let hitLaneId: string | null = null;
+      let hitPosition: number | null = null;
+      for (const [laneId, reg] of laneRegistry.current.entries()) {
+        const rect = reg.svg.getBoundingClientRect();
+        if (
+          ev.clientX >= rect.left &&
+          ev.clientX <= rect.right &&
+          ev.clientY >= rect.top &&
+          ev.clientY <= rect.bottom
+        ) {
+          hitLaneId = laneId;
+          hitPosition = reg.xToPosition(ev.clientX);
+          break;
+        }
+      }
+      setDrag((d) => {
+        if (!d) return null;
+        // Outside all lanes — keep last known target, just update altHeld.
+        if (hitLaneId === null || hitPosition === null) {
+          return { ...d, altHeld: ev.altKey };
+        }
+        return {
+          ...d,
+          targetLaneId: hitLaneId,
+          targetPosition: Math.max(0, hitPosition),
+          altHeld: ev.altKey,
+        };
+      });
+    }
+
+    async function onPointerUp(ev: PointerEvent) {
+      const final = drag;
+      setDrag(null);
+      if (!final) return;
+      const altCopy = ev.altKey;
+      try {
+        if (final.targetLaneId === final.sourceLaneId) {
+          // Same lane → existing reorder path (PATCH timeline-position).
+          await updateTimelinePosition(final.eventId, {
+            timeline_node_id: final.sourceLaneId,
+            discourse_position: final.targetPosition,
+          });
+        } else {
+          // Cross-lane: Alt held = crossover (keep source), default = move.
+          await placeOnTimeline(final.eventId, {
+            timeline_node_id: final.targetLaneId,
+            discourse_position: final.targetPosition,
+            remove_from_timeline_node_id: altCopy ? null : final.sourceLaneId,
+          });
+        }
+        await refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Drag drop failed");
+      }
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [drag, refresh]);
 
   useEffect(() => {
     refresh();
@@ -204,18 +337,11 @@ export function TimelinePanel({ scope }: Props) {
               discoursePosition: pos,
             })
           }
-          onReorder={async (eventId, newPosition) => {
-            try {
-              await updateTimelinePosition(eventId, {
-                timeline_node_id: lane.timeline.id,
-                discourse_position: newPosition,
-              });
-              await refresh();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Reorder failed");
-            }
-          }}
           onEventEdited={refresh}
+          drag={drag}
+          onStartDrag={startDrag}
+          onRegisterLane={registerLane}
+          onUnregisterLane={unregisterLane}
         />
       ))}
 
@@ -344,29 +470,43 @@ interface LaneProps {
   lane: TimelineLane;
   onSelectEvent: (id: string) => void;
   onRequestCreate: (discoursePosition: number) => void;
-  onReorder: (eventId: string, newPosition: number) => Promise<void>;
   highlightedCharacterId?: string | null;
   onEventEdited?: () => void;
+  // Slice 5 — drag orchestration is now owned by the parent.
+  drag: DragState | null;
+  onStartDrag: (
+    eventId: string,
+    sourceLaneId: string,
+    sourcePosition: number,
+  ) => void;
+  onRegisterLane: (laneId: string, reg: LaneRegistration) => void;
+  onUnregisterLane: (laneId: string) => void;
 }
 
 function TimelineLaneCanvas({
   lane,
   onSelectEvent,
   onRequestCreate,
-  onReorder,
   highlightedCharacterId,
   onEventEdited,
+  drag,
+  onStartDrag,
+  onRegisterLane,
+  onUnregisterLane,
 }: LaneProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [drag, setDrag] = useState<{
-    eventId: string;
-    currentPosition: number;
-  } | null>(null);
   // Slice 5: Ctrl+click an event card opens the NodeInteractionPopup
   // (philosophy doc §6.9). Track the popped event at the lane level so
   // the popup renders outside the SVG, where position: fixed actually
   // anchors to the viewport.
   const [popupEventId, setPopupEventId] = useState<string | null>(null);
+
+  // Is this the source lane of the active drag?
+  const isDragSource = drag?.sourceLaneId === lane.timeline.id;
+  // Is this the lane the cursor is currently over?
+  const isDragTarget = drag?.targetLaneId === lane.timeline.id;
+  // Cross-lane target = a target lane that isn't the source.
+  const isCrossLaneTarget = isDragTarget && !isDragSource;
 
   // Range of positions in this lane — used to set SVG viewBox width.
   const { minPos, maxPos } = useMemo(() => {
@@ -392,6 +532,33 @@ function TimelineLaneCanvas({
     return Math.round(minPos + (x - X_PADDING) / POSITION_SCALE);
   }
 
+  // Slice 5: register this lane with the parent so the orchestrator can
+  // hit-test the cursor against it during cross-lane drags. The lane
+  // supplies its SVG element + a `clientX → discourse_position` converter
+  // so the parent doesn't need to know about canvasWidth or minPos.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const reg: LaneRegistration = {
+      svg: el,
+      xToPosition: (clientX: number) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0) return minPos;
+        const xInViewBox = ((clientX - rect.left) / rect.width) * canvasWidth;
+        return Math.round(minPos + (xInViewBox - X_PADDING) / POSITION_SCALE);
+      },
+    };
+    const laneId = lane.timeline.id;
+    onRegisterLane(laneId, reg);
+    return () => onUnregisterLane(laneId);
+  }, [
+    lane.timeline.id,
+    canvasWidth,
+    minPos,
+    onRegisterLane,
+    onUnregisterLane,
+  ]);
+
   function handleCanvasClick(e: React.MouseEvent<SVGSVGElement>) {
     if (drag) return; // Don't create while dragging
     // Only respond to clicks on background <rect> elements, not event cards.
@@ -400,47 +567,29 @@ function TimelineLaneCanvas({
       return;
     }
     const rect = svgRef.current!.getBoundingClientRect();
-    const x =
-      ((e.clientX - rect.left) / rect.width) * canvasWidth;
+    const x = ((e.clientX - rect.left) / rect.width) * canvasWidth;
     const pos = xToPosition(x);
     if (pos < minPos) return;
     onRequestCreate(pos);
   }
 
-  // Drag handling — pointer events on event cards.
+  // Slice 5: starting a drag delegates to the parent so the orchestrator
+  // has the (event, source-lane, source-position) tuple from the outset.
   function startDrag(eventId: string, currentPos: number) {
-    setDrag({ eventId, currentPosition: currentPos });
+    onStartDrag(eventId, lane.timeline.id, currentPos);
   }
 
-  useEffect(() => {
-    if (!drag || !svgRef.current) return;
-    const svg = svgRef.current;
-
-    function onPointerMove(ev: PointerEvent) {
-      const rect = svg.getBoundingClientRect();
-      const x = ((ev.clientX - rect.left) / rect.width) * canvasWidth;
-      const newPos = Math.max(minPos, xToPosition(x));
-      setDrag((d) => (d ? { ...d, currentPosition: newPos } : null));
-    }
-
-    async function onPointerUp() {
-      if (!drag) return;
-      const finalPos = drag.currentPosition;
-      setDrag(null);
-      await onReorder(drag.eventId, finalPos);
-    }
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag, canvasWidth, minPos]);
+  // Slice 5: highlight the target lane while a cross-lane drag is in flight.
+  const containerBorder = isCrossLaneTarget
+    ? drag?.altHeld
+      ? "border-amber-400 ring-2 ring-amber-200"
+      : "border-blue-400 ring-2 ring-blue-200"
+    : "border-gray-200";
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-x-auto bg-gray-50">
+    <div
+      className={`border rounded-lg overflow-x-auto bg-gray-50 transition-shadow ${containerBorder}`}
+    >
       <div className="px-3 py-2 border-b border-gray-200 bg-white text-xs text-gray-500 flex items-center gap-2">
         <span className="font-medium text-gray-700 truncate">
           {lane.timeline.title}
@@ -456,6 +605,15 @@ function TimelineLaneCanvas({
               {lane.act_spans.length} act{lane.act_spans.length === 1 ? "" : "s"}
             </span>
           </>
+        )}
+        {isCrossLaneTarget && (
+          <span
+            className={`ml-auto text-[10px] uppercase tracking-wider font-semibold ${
+              drag?.altHeld ? "text-amber-700" : "text-blue-700"
+            }`}
+          >
+            {drag?.altHeld ? "Drop = copy to both" : "Drop = move here"}
+          </span>
         )}
       </div>
       <svg
@@ -544,13 +702,19 @@ function TimelineLaneCanvas({
             highlightedCharacterId !== null &&
             highlightedCharacterId !== undefined &&
             !event.character_ids?.includes(highlightedCharacterId);
+          // Ghost rendering: the dragged event card follows the cursor
+          // in whichever lane the cursor is over. In the source lane,
+          // the original card dims and disappears (ghost=true) so the
+          // drag visually "lifts" it.
+          const isDragged = drag?.eventId === event.node.id;
+          const dragInThisLane = isDragged && isDragTarget;
           return (
             <EventCard
               key={event.node.id}
               event={event}
               x={
-                drag?.eventId === event.node.id
-                  ? positionToX(drag.currentPosition)
+                dragInThisLane
+                  ? positionToX(drag.targetPosition)
                   : positionToX(event.discourse_position)
               }
               y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
@@ -559,11 +723,53 @@ function TimelineLaneCanvas({
               }
               onClick={() => onSelectEvent(event.node.id)}
               onCtrlClick={() => setPopupEventId(event.node.id)}
-              ghost={drag?.eventId === event.node.id}
+              ghost={isDragged}
               dimmed={dimmed}
             />
           );
         })}
+
+        {/* Slice 5: ghost card rendered IN THIS LANE when the cursor is
+            over this lane but the dragged event lives in another lane.
+            This makes cross-lane drag legible — the user sees the card
+            preview hovering over the target lane. */}
+        {drag && isCrossLaneTarget && (() => {
+          const sourceEvent = drag.eventId;
+          // Build a minimal ghost event for the card renderer.
+          const ghostEvent = {
+            node: { id: sourceEvent, title: "(dragging…)", type: "permanent" as const },
+            discourse_position: drag.targetPosition,
+            story_time: null,
+            prose_status: null,
+            manuscript_location: null,
+            timeline_count: 1,
+            character_ids: [],
+            theme_ids: [],
+          };
+          return (
+            <g style={{ pointerEvents: "none", opacity: 0.7 }}>
+              <EventCard
+                event={ghostEvent}
+                x={positionToX(drag.targetPosition)}
+                y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
+                onPointerDown={() => {}}
+                onClick={() => {}}
+                onCtrlClick={() => {}}
+                ghost={false}
+                dimmed={false}
+              />
+              <text
+                x={positionToX(drag.targetPosition)}
+                y={LANE_HEIGHT - 4}
+                fontSize={10}
+                fontWeight={600}
+                fill={drag.altHeld ? "#a97830" : "#3b82f6"}
+              >
+                {drag.altHeld ? "Copy to both (crossover)" : "Move here"}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
       {popupEventId && (
         <NodeInteractionPopup

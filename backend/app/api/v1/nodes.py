@@ -17,6 +17,7 @@ from app.models import (
     PermanentCreate,
     StoryEventCreate,
     StructureCreate,
+    TimelinePlacementRequest,
     TimelinePositionUpdate,
 )
 from app.repositories import edge_repo, node_repo, source_repo, timeline_repo
@@ -330,6 +331,129 @@ async def update_timeline_position(
                 )
             except IntegrityError:
                 pass
+
+    refreshed = await node_repo.get_by_id(db, node_id)
+    assert refreshed is not None
+    return refreshed
+
+
+@router.post("/{node_id}/timeline-placement")
+async def place_on_timeline(
+    node_id: str, data: TimelinePlacementRequest, db: DB
+) -> NodeDetail:
+    """Phase 9 Slice 5 — cross-lane drag-and-drop endpoint.
+
+    Two modes, distinguished by whether `remove_from_timeline_node_id` is
+    set:
+
+    - **CROSSOVER (copy)** — `remove_from_timeline_node_id` is null.
+      Idempotently places the event on the target timeline (insert join
+      row, ensure target-timeline COLLECTS edge). Source-lane placement
+      is untouched. The event renders in both lanes.
+
+    - **MOVE** — `remove_from_timeline_node_id` is set and != target.
+      Removes the source-lane join row and the source-timeline's
+      COLLECTS edge, then places the event on the target. The source
+      lane's FOLLOWS_FROM chain may end up with a gap — Slice 5 does
+      not auto-compact lanes.
+
+    In both cases the event's outgoing FOLLOWS_FROM is rewired to point
+    at the new predecessor in the target lane (same logic as
+    `PATCH /timeline-position`), reflecting the most-recent placement.
+    Schema limitation per ADR-065: FOLLOWS_FROM is one-edge-per-pair so
+    only one lane's predecessor can be encoded at a time; for crossovers
+    the user may need to add a second FOLLOWS_FROM via the EdgePanel.
+    """
+    node = await node_repo.get_by_id(db, node_id)
+    if node is None:
+        raise HTTPException(404, "Event not found")
+    if not node.is_story_event:
+        raise HTTPException(422, "timeline-placement only applies to story events")
+
+    target = await node_repo.get_by_id(db, data.timeline_node_id)
+    if target is None or target.type != "structure":
+        raise HTTPException(422, "timeline_node_id must reference a structure node")
+
+    source_id = data.remove_from_timeline_node_id
+    is_move = source_id is not None and source_id != data.timeline_node_id
+
+    if is_move:
+        source_pos = await timeline_repo.get_position(
+            db,
+            event_node_id=node_id,
+            timeline_node_id=source_id,
+        )
+        if source_pos is None:
+            raise HTTPException(
+                404,
+                "Event is not placed on remove_from_timeline_node_id",
+            )
+
+    # Place on target (insert-or-update). Idempotent on (event, timeline).
+    await timeline_repo.place_event(
+        db,
+        event_node_id=node_id,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=data.discourse_position,
+    )
+
+    # Ensure the target timeline COLLECTS this event.
+    try:
+        await edge_repo.create(
+            db,
+            EdgeCreate(
+                from_id=data.timeline_node_id,
+                to_id=node_id,
+                type="COLLECTS",
+                note="auto: timeline placement",
+            ),
+        )
+    except IntegrityError:
+        pass  # Edge already exists; fine.
+
+    # MOVE: tear down source-lane structural state.
+    if is_move:
+        await timeline_repo.remove_event_from_timeline(
+            db,
+            event_node_id=node_id,
+            timeline_node_id=source_id,
+        )
+        stale_collects = await edge_repo.find_by_endpoints(
+            db,
+            from_id=source_id,
+            to_id=node_id,
+            edge_type="COLLECTS",
+        )
+        if stale_collects is not None:
+            await edge_repo.delete(db, stale_collects.id)
+
+    # Rewire FOLLOWS_FROM to the target-lane predecessor (mirrors the
+    # PATCH /timeline-position behavior). Same one-edge-per-pair caveat.
+    new_pred = await timeline_repo.get_predecessor(
+        db,
+        timeline_node_id=data.timeline_node_id,
+        discourse_position=data.discourse_position,
+    )
+    existing_follows = await edge_repo.get_outgoing(db, node_id)
+    for e in existing_follows:
+        if e.type == "FOLLOWS_FROM":
+            # Stale if it doesn't point at the new predecessor (or there
+            # is no new predecessor).
+            if new_pred is None or e.neighbor.id != new_pred:
+                await edge_repo.delete(db, e.id)
+    if new_pred is not None and new_pred != node_id:
+        try:
+            await edge_repo.create(
+                db,
+                EdgeCreate(
+                    from_id=node_id,
+                    to_id=new_pred,
+                    type="FOLLOWS_FROM",
+                    note="auto: timeline discourse order",
+                ),
+            )
+        except IntegrityError:
+            pass
 
     refreshed = await node_repo.get_by_id(db, node_id)
     assert refreshed is not None
