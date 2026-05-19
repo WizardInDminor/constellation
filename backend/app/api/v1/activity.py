@@ -26,12 +26,8 @@ async def get_activity(
     captured = await node_repo.list_recently_captured(
         db, since_iso=since_iso, limit=_PER_SECTION_LIMIT
     )
-    edited = await node_repo.list_recently_edited(
-        db, since_iso=since_iso, limit=_PER_SECTION_LIMIT
-    )
-    edges = await edge_repo.list_recent(
-        db, since_iso=since_iso, limit=_PER_SECTION_LIMIT
-    )
+    edited = await node_repo.list_recently_edited(db, since_iso=since_iso, limit=_PER_SECTION_LIMIT)
+    edges = await edge_repo.list_recent(db, since_iso=since_iso, limit=_PER_SECTION_LIMIT)
 
     return ActivityFeed(
         captured=captured,

@@ -29,7 +29,10 @@ import { RightPanel } from "./RightPanel";
 import { ResumeBriefing } from "./ResumeBriefing";
 import { LearningMapPanel } from "./LearningMapPanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { StoryDumpPanel } from "./StoryDumpPanel";
+import { NarrativeRoleList } from "./NarrativeRoleList";
 import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
+import { NARRATIVE_TAGS } from "@/lib/api";
 
 const MODE_ACCENT: Record<ProjectMode, { dot: string; chip: string }> = {
   research: {
@@ -51,7 +54,12 @@ type CenterTab =
   | "notes"
   | "synthesize"
   | "timeline"
-  | "learning-map";
+  | "learning-map"
+  | "story-dump"
+  | "characters"
+  | "world-lore"
+  | "locations"
+  | "themes";
 
 const DEFAULT_TAB: Record<ProjectMode, CenterTab> = {
   research: "write",
@@ -69,6 +77,11 @@ const ALL_TABS: { id: CenterTab; label: string }[] = [
   { id: "synthesize", label: "Synthesize" },
   { id: "timeline", label: "Timeline" },
   { id: "learning-map", label: "Learning map" },
+  { id: "story-dump", label: "Story Dump" },
+  { id: "characters", label: "Characters" },
+  { id: "world-lore", label: "World / Lore" },
+  { id: "locations", label: "Locations" },
+  { id: "themes", label: "Themes" },
 ];
 
 const DRAFT_DEBOUNCE_MS = 2000;
@@ -330,6 +343,55 @@ export default function WorkspacePage() {
             {tab === "timeline" && <TimelinePanel scope={project.scope} />}
             {tab === "learning-map" && (
               <LearningMapPanel scope={project.scope} />
+            )}
+            {tab === "story-dump" && (
+              <StoryDumpPanel scope={project.scope} />
+            )}
+            {tab === "characters" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.CHARACTER}
+                roleLabel="Character"
+                roleLabelPlural="Characters"
+                nodeKind="structure"
+              />
+            )}
+            {tab === "world-lore" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.LORE_WORLD_RULE}
+                roleLabel="Lore note"
+                roleLabelPlural="World / Lore"
+                nodeKind="permanent"
+                categoryTags={[
+                  {
+                    value: NARRATIVE_TAGS.LORE_WORLD_RULE,
+                    label: "World rule",
+                  },
+                  { value: NARRATIVE_TAGS.LORE_HISTORY, label: "History" },
+                  { value: NARRATIVE_TAGS.LORE_POWER, label: "Power" },
+                  { value: NARRATIVE_TAGS.LORE_FABRIC, label: "Fabric" },
+                  {
+                    value: NARRATIVE_TAGS.LORE_BACKSTORY,
+                    label: "Backstory",
+                  },
+                  { value: NARRATIVE_TAGS.LORE_SECRET, label: "Secret" },
+                ]}
+              />
+            )}
+            {tab === "locations" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.LOCATION}
+                roleLabel="Location"
+                roleLabelPlural="Locations"
+                nodeKind="structure"
+              />
+            )}
+            {tab === "themes" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.THEME}
+                roleLabel="Theme"
+                roleLabelPlural="Themes"
+                nodeKind="structure"
+              />
             )}
           </div>
         </section>

@@ -63,7 +63,7 @@ async def _open_url(url: str) -> str | None:
         )
         try:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("xdg-open did not exit within 5 s for %r", url)
             return None
         msg = stderr.decode().strip() if stderr else ""

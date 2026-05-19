@@ -220,7 +220,11 @@ async def update_node(
             if src is None:
                 raise HTTPException(422, f"Source '{data.source_id}' does not exist")
 
-    node = await node_repo.update(db, node_id, data)
+    try:
+        node = await node_repo.update(db, node_id, data)
+    except IntegrityError as exc:
+        # CHECK-constraint violation (e.g. bogus prose_status) — surface as 422.
+        raise HTTPException(422, str(exc)) from exc
     if node is None:
         raise HTTPException(404, "Node not found")
     if {"title", "content"} & data.model_fields_set and node.type != "fleeting":

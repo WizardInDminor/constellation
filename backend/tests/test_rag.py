@@ -555,9 +555,7 @@ def test_rag_query_tag_filter_restricts_seeds(rag_query_client):
         json={"query": "eurorack synthesis", "tag_filter": [eurorack]},
     )
     assert r.status_code == 200
-    direct_ids = {
-        p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"
-    }
+    direct_ids = {p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"}
     # Off-tag note must not be a seed; eurorack notes may or may not all appear
     # depending on FTS ranking, but the off-tag one is forbidden.
     assert n2["id"] not in direct_ids
@@ -583,9 +581,7 @@ def test_rag_query_tag_filter_or_semantics(rag_query_client):
         json={"query": "content", "tag_filter": [t_a, t_b]},
     )
     assert r.status_code == 200
-    direct_ids = {
-        p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"
-    }
+    direct_ids = {p["node_id"] for p in r.json()["provenance"] if p["role"] == "direct"}
     assert n_g["id"] not in direct_ids
     assert direct_ids.issubset({n_a["id"], n_b["id"]})
 

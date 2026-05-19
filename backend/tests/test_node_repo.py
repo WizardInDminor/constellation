@@ -123,9 +123,7 @@ async def test_list_nodes_no_outgoing_filter(db):
 
     linked = await node_repo.create_permanent(db, PermanentCreate(title="Linked", content="x"))
     target = await node_repo.create_permanent(db, PermanentCreate(title="Target", content="y"))
-    isolated = await node_repo.create_permanent(
-        db, PermanentCreate(title="Isolated", content="z")
-    )
+    isolated = await node_repo.create_permanent(db, PermanentCreate(title="Isolated", content="z"))
     from app.repositories import edge_repo as er
 
     await er.create(db, EdgeCreate(from_id=linked.id, to_id=target.id, type="SUPPORTS"))
@@ -144,9 +142,7 @@ async def test_list_nodes_no_edges_filter_excludes_either_direction(db):
 
     a = await node_repo.create_permanent(db, PermanentCreate(title="A", content="x"))
     b = await node_repo.create_permanent(db, PermanentCreate(title="B", content="y"))
-    isolated = await node_repo.create_permanent(
-        db, PermanentCreate(title="Isolated", content="z")
-    )
+    isolated = await node_repo.create_permanent(db, PermanentCreate(title="Isolated", content="z"))
     from app.repositories import edge_repo as er
 
     await er.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
@@ -164,11 +160,12 @@ async def test_list_nodes_summary_max_length_excludes_long_and_null(db):
         db, PermanentCreate(title="Short", content="x", summary="ok")
     )
     long_ = await node_repo.create_permanent(
-        db, PermanentCreate(
+        db,
+        PermanentCreate(
             title="Long",
             content="x",
             summary="this is a longer summary line than the limit",
-        )
+        ),
     )
     no_sum = await node_repo.create_permanent(db, PermanentCreate(title="None", content="x"))
 
@@ -196,9 +193,7 @@ async def test_list_nodes_filters_and_compose(db):
     )  # isolated AND no summary
     from app.repositories import edge_repo as er
 
-    await er.create(
-        db, EdgeCreate(from_id=linked_no_summary.id, to_id=target.id, type="SUPPORTS")
-    )
+    await er.create(db, EdgeCreate(from_id=linked_no_summary.id, to_id=target.id, type="SUPPORTS"))
 
     items, total = await node_repo.list_nodes(db, no_summary=True, no_edges=True)
     ids = {n.id for n in items}

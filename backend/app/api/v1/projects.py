@@ -38,6 +38,7 @@ from app.models import (
     ProjectScope,
     ProjectScopeUpdate,
     ProjectSummary,
+    SceneContextResponse,
     StructureCreate,
     TimelineResponse,
     WorkSession,
@@ -605,3 +606,77 @@ async def create_act_span(hub_id: str, data: ActSpanCreate, db: DB):
     if data.start_position > data.end_position:
         raise HTTPException(422, "start_position must be <= end_position")
     return await timeline_repo.create_act_span(db, data)
+
+
+class TimelineCreate(BaseModel):
+    """Body for `POST /projects/{hub_id}/timelines` — creates a parallel
+    timeline structure node (Slice 5; ADR-065).
+    """
+
+    title: str = Field(min_length=1)
+    content: str = ""
+
+
+@router.post("/{hub_id}/timelines", status_code=201)
+async def create_timeline(hub_id: str, data: TimelineCreate, db: DB, provider: EmbedProvider):
+    """Create an additional parallel timeline structure node on the project
+    and COLLECTS-link it from the hub. Slice 5 / ADR-065: each parallel
+    timeline is a structure node. The lazy-default-timeline (Slice 4) covers
+    the first lane; this endpoint covers everything after.
+    """
+    await _require_project(db, hub_id)
+    timeline = await node_repo.create_structure(
+        db,
+        StructureCreate(title=data.title, content=data.content),
+    )
+    await embedding_service.embed_or_queue(db, timeline.id, provider)
+    try:
+        await edge_repo.create(
+            db,
+            EdgeCreate(
+                from_id=hub_id,
+                to_id=timeline.id,
+                type="COLLECTS",
+                note="parallel timeline",
+            ),
+        )
+    except IntegrityError:
+        pass
+    return timeline
+
+
+# ---------------------------------------------------------------------------
+# Scene Context View (Slice 5; philosophy doc §6.8)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{hub_id}/scene-context/{event_id}")
+async def get_scene_context(
+    hub_id: str,
+    event_id: str,
+    db: DB,
+    session_number: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            description=(
+                "If set, controls the session-aware world-rules collapse "
+                "hint (philosophy doc §6.8). Optional."
+            ),
+        ),
+    ] = None,
+) -> SceneContextResponse:
+    """Live graph assembly: walks the current graph state on every call.
+    No caching. Soft-deleting an edge between two calls must change the
+    result (philosophy doc §6.8 / build plan Slice 5 DoD).
+    """
+    await _require_project(db, hub_id)
+    try:
+        return await timeline_repo.assemble_scene_context(
+            db,
+            event_id=event_id,
+            project_hub_id=hub_id,
+            session_number=session_number,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc

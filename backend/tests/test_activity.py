@@ -80,9 +80,7 @@ async def test_list_recently_edited_excludes_just_born(db):
 async def test_list_recently_edited_includes_real_edit(db):
     note = await node_repo.create_permanent(db, PermanentCreate(title="old", content="x"))
     # Real edit — updated_at jumps forward; created_at unchanged
-    await _backdate(
-        db, note.id, created=_iso_days_ago(2), updated=_iso_days_ago(0)
-    )
+    await _backdate(db, note.id, created=_iso_days_ago(2), updated=_iso_days_ago(0))
     out = await node_repo.list_recently_edited(db, since_iso=_iso_days_ago(7))
     assert note.id in [n.id for n in out]
 
@@ -133,18 +131,14 @@ def test_activity_days_param_clamped(client):
 
 
 def test_activity_route_returns_fresh_capture(client):
-    fresh = client.post(
-        "/api/v1/nodes/fleeting", json={"title": "fresh", "content": "x"}
-    ).json()
+    fresh = client.post("/api/v1/nodes/fleeting", json={"title": "fresh", "content": "x"}).json()
     body = client.get("/api/v1/activity").json()
     assert fresh["id"] in [n["id"] for n in body["captured"]]
 
 
 def test_activity_route_does_not_count_birth_as_edit(client):
     """End-to-end check that embedding_service no longer bumps updated_at on creation."""
-    fresh = client.post(
-        "/api/v1/nodes/permanent", json={"title": "born", "content": "x"}
-    ).json()
+    fresh = client.post("/api/v1/nodes/permanent", json={"title": "born", "content": "x"}).json()
     body = client.get("/api/v1/activity").json()
     assert fresh["id"] not in [n["id"] for n in body["edited"]]
 
