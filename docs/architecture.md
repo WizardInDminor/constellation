@@ -108,13 +108,15 @@ CREATE TABLE nodes (
     source_id       TEXT REFERENCES sources(id), -- literature notes only
     embedding_model TEXT,                        -- model used for current vector
     processed_at    TEXT,                        -- NULL for unprocessed fleeting notes
+    is_project_hub  INTEGER NOT NULL DEFAULT 0,  -- ADR-063: structure-note-as-project-root flag
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
     deleted_at      TEXT                         -- soft delete
 );
 
-CREATE INDEX idx_nodes_type ON nodes(type) WHERE deleted_at IS NULL;
-CREATE INDEX idx_nodes_processed ON nodes(processed_at) WHERE deleted_at IS NULL;
+CREATE INDEX idx_nodes_type         ON nodes(type)           WHERE deleted_at IS NULL;
+CREATE INDEX idx_nodes_processed    ON nodes(processed_at)   WHERE deleted_at IS NULL;
+CREATE INDEX idx_nodes_project_hub  ON nodes(is_project_hub) WHERE is_project_hub = 1 AND deleted_at IS NULL;
 
 -- ================================================================
 -- VECTOR INDEX (sqlite-vec)
@@ -249,6 +251,93 @@ CREATE TABLE embedding_jobs (
 );
 
 CREATE INDEX idx_jobs_status ON embedding_jobs(status);
+
+-- ================================================================
+-- PROJECT WORKSPACE (Phase 9 Slice 0 — ADR-063)
+--
+-- A project is rooted in exactly one structure note (the "hub note");
+-- the `is_project_hub` flag above marks it. The tables below carry the
+-- persistent workspace configuration and the work-session lifecycle
+-- bound to each hub.
+-- ================================================================
+CREATE TABLE project_scopes (
+    hub_node_id     TEXT PRIMARY KEY REFERENCES nodes(id),
+    pinned_node_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array of node IDs
+    tag_ids         TEXT NOT NULL DEFAULT '[]',  -- JSON array of tag IDs
+    primary_tag_id  TEXT REFERENCES tags(id),    -- `con --project <name>` anchor (ADR-063)
+    briefing_prompt TEXT,                        -- saved Synthesize prompt
+    last_visited_at TEXT,
+    mode            TEXT NOT NULL DEFAULT 'research'
+                    CHECK(mode IN ('research', 'narrative', 'learning')),
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+-- Free-writing pad. One draft per project; the SQLite file is the source
+-- of truth for draft state (no localStorage). Cleared on full promotion.
+CREATE TABLE drafts (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES nodes(id),
+    content    TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    UNIQUE(project_id)
+);
+
+-- Intentional work sessions (philosophy doc §IIIb). Session mode is
+-- independent of project mode; `planning` is a fourth value beyond the
+-- project-mode enum.
+CREATE TABLE work_sessions (
+    id                         TEXT PRIMARY KEY,
+    project_id                 TEXT NOT NULL REFERENCES nodes(id),
+    mode                       TEXT NOT NULL CHECK(mode IN (
+                                   'research', 'narrative',
+                                   'learning', 'planning')),
+    intent                     TEXT NOT NULL,
+    status                     TEXT NOT NULL DEFAULT 'active'
+                               CHECK(status IN (
+                                   'active', 'completed', 'partial',
+                                   'blocked', 'abandoned')),
+    progress_notes             TEXT,
+    blockers                   TEXT,
+    closing_notes              TEXT,
+    next_session_intent        TEXT,
+    intent_assessment          TEXT,
+    estimated_duration_minutes INTEGER,
+    started_at                 TEXT NOT NULL,
+    closed_at                  TEXT,
+    duration_seconds           INTEGER,
+    created_at                 TEXT NOT NULL
+);
+
+CREATE INDEX idx_work_sessions_project ON work_sessions(project_id, started_at DESC);
+CREATE INDEX idx_work_sessions_active  ON work_sessions(project_id) WHERE status = 'active';
+
+-- Session attribution joins. `session_tagged` lets users opt a single
+-- capture out of attribution without losing the fact that it was created
+-- during the session (philosophy doc §IIIb.6).
+CREATE TABLE session_nodes (
+    session_id     TEXT NOT NULL REFERENCES work_sessions(id),
+    node_id        TEXT NOT NULL REFERENCES nodes(id),
+    created_at     TEXT NOT NULL,
+    session_tagged INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (session_id, node_id)
+);
+
+CREATE TABLE session_edges (
+    session_id     TEXT NOT NULL REFERENCES work_sessions(id),
+    edge_id        TEXT NOT NULL REFERENCES edges(id),
+    created_at     TEXT NOT NULL,
+    session_tagged INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (session_id, edge_id)
+);
+
+-- Per-project suppression for the corpus-match panel.
+CREATE TABLE dismissed_corpus_suggestions (
+    project_id   TEXT NOT NULL REFERENCES nodes(id),
+    node_id      TEXT NOT NULL REFERENCES nodes(id),
+    dismissed_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, node_id)
+);
 ```
 
 ---
@@ -430,6 +519,31 @@ GET    /config                      # current provider settings
 PATCH  /config                      # update; triggers re-embed if needed
 GET    /config/embedding-jobs       # job queue status
 ```
+
+### Projects (Phase 9 — ADR-063)
+
+```
+GET    /projects                              # list project hubs
+POST   /projects                              # promote a structure node (or create + promote)
+GET    /projects/{hub_id}                     # hub node + scope + active session
+GET    /projects/{hub_id}/scope               # scope config only
+PATCH  /projects/{hub_id}/scope               # update pinned nodes / tags / mode / briefing prompt
+GET    /projects/{hub_id}/draft               # current free-writing-pad content (empty when absent)
+PUT    /projects/{hub_id}/draft               # upsert draft content
+DELETE /projects/{hub_id}/draft               # clear draft (called after promotion)
+POST   /projects/{hub_id}/sessions            # start a work session (rejects if one is already active)
+GET    /projects/{hub_id}/sessions            # session history, newest first
+PATCH  /projects/{hub_id}/sessions/{id}       # progress notes, blockers, or close-session payload
+```
+
+`POST /projects` accepts either `{ hub_node_id, mode? }` (promote an existing
+structure note) or `{ title, content?, mode? }` (create a new structure note
+and promote it in one call). Promotion sets `nodes.is_project_hub = 1` and
+inserts a `project_scopes` row keyed by the hub node ID.
+
+A `PATCH /projects/{hub_id}/sessions/{id}` payload with `close: true` sets
+`closed_at` and computes `duration_seconds`; status defaults to
+`'completed'` on close if not otherwise specified.
 
 ---
 

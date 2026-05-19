@@ -3443,6 +3443,197 @@ suggestion).
 
 ---
 
+## ADR-063 — Project-as-structure-node with `project_scopes` sidecar
+
+**Status:** Accepted (Phase 9 Slice 0)
+
+**Context:** Phase 9 introduces the Project Workspace — a persistent,
+mode-aware working surface that remembers a user's scope, pinned notes,
+session history, and resume-briefing prompt across visits. The decision
+the build plan and design brief converged on is *where* a project lives
+in the data model. Two paths were considered:
+
+1. **Structure-note-as-root.** Reuse the existing `structure` node type
+   as the project hub. Add a boolean flag distinguishing project-hub
+   structure notes from ordinary maps of content. Persistent
+   workspace configuration (pinned nodes, tags, briefing prompt,
+   last-visited timestamp, mode) lives in a sidecar table keyed by the
+   hub node ID.
+2. **New `project` entity.** A new top-level table (or new `NodeType`
+   enum value) with its own endpoints, models, and nav entries.
+
+The design brief's §1 Decision 1 picks path (1) — structure note with
+sidecar — and this ADR is its formal commit. The build plan's Slice 0
+adds the sidecar plus several adjacent project-foundation tables
+(drafts, work_sessions, session_nodes, session_edges,
+dismissed_corpus_suggestions); those are tracked by their own
+foreign-key relationships to the hub node and are documented as
+implementation detail of this same decision.
+
+**Decision:**
+
+- **A project is rooted in exactly one structure note (the "hub note").**
+  Promotion is the act of setting `nodes.is_project_hub = 1` on an
+  existing structure node and creating a `project_scopes` row keyed by
+  the same node ID. The hub note keeps its identity in the rest of the
+  graph: it can receive QUESTIONS, SUPPORTS, ANALOGOUS_TO, COLLECTS,
+  or any other typed edges. Promoting a structure note adds a workspace
+  affordance to it; it does not change what the node is or how it
+  participates elsewhere.
+- **Schema additions** (migration `0007_project_workspace.sql`):
+  - `nodes.is_project_hub INTEGER NOT NULL DEFAULT 0` plus a partial
+    index `idx_nodes_project_hub` over the small "live project hubs"
+    set so `GET /projects` is one indexed scan with no join.
+  - `project_scopes` — primary key is `hub_node_id` referencing
+    `nodes(id)`. Columns: `pinned_node_ids TEXT NOT NULL DEFAULT '[]'`
+    (JSON array of node IDs), `tag_ids TEXT NOT NULL DEFAULT '[]'`
+    (JSON array of tag IDs), `primary_tag_id TEXT REFERENCES tags(id)`
+    (the tag used by `con --project <name>` to attach captures),
+    `briefing_prompt TEXT`, `last_visited_at TEXT`, `mode TEXT NOT
+    NULL DEFAULT 'research' CHECK(mode IN ('research', 'narrative',
+    'learning'))`, `created_at TEXT NOT NULL`, `updated_at TEXT NOT
+    NULL`.
+  - `drafts` — one row per project (UNIQUE on `project_id`), holding
+    the free-writing-pad content. Server-side storage per design brief
+    §1 Decision 2 (SQLite is the source of truth; localStorage is not
+    used).
+  - `work_sessions` — intentional work-session records (mode is
+    independent of project mode per philosophy doc §IIIb.2). Columns
+    cover declared intent, status, progress / closing / next-session
+    notes, blockers, estimated duration, started_at / closed_at /
+    duration_seconds.
+  - `session_nodes` and `session_edges` — join tables binding nodes
+    and edges to the session active when they were created. Both carry
+    a `session_tagged` flag so opt-out bypasses are queryable (philosophy
+    doc §IIIb.6) rather than silent omissions.
+  - `dismissed_corpus_suggestions` — per-project suppression list for
+    corpus-match panel rows the user has dismissed, so the same note
+    does not re-surface across sessions (philosophy doc §5.7).
+- **Promotion endpoint.** `POST /projects { hub_node_id, mode? }`
+  flips the flag and creates the sidecar row. Returns the project
+  detail. `POST /projects { title, mode? }` with no `hub_node_id`
+  creates a new structure note and promotes it in one call.
+- **Listing and detail.** `GET /projects` lists all project hubs
+  (`WHERE is_project_hub = 1 AND deleted_at IS NULL`). `GET
+  /projects/{hub_id}` returns the hub `NodeDetail` + scope + active
+  session (if any).
+- **One hub per project, many pinned notes.** A project's scope is the
+  hub plus everything in `pinned_node_ids` plus everything carrying any
+  tag in `tag_ids`. The hub is the *root*, not the *boundary*.
+
+**Rationale:**
+
+- **Projects are graph citizens.** A new entity type sitting alongside
+  nodes would either be invisible to the graph viz, search, and the
+  RAG pipeline (and need duplicate plumbing in all three) or would
+  re-introduce its own node-shaped identity. The structure-note path
+  avoids both: a project is a node, so it already participates in
+  everything that operates on nodes.
+- **ADR-006 holds.** The node-type vocabulary (fleeting / literature /
+  permanent / structure) stays at four entries. A project is a
+  *specialization of* `structure`, signaled by a flag, not a new type.
+  This matches the same flag-vs-type pattern Slice 4 will use for story
+  events (ADR-064).
+- **Sidecar over JSON-on-node.** Stashing pinned IDs, tags, briefing
+  prompt, mode, last-visited inside the structure note's `content` (as
+  JSON or YAML frontmatter) was considered and rejected. Two problems:
+  (a) the content field is user-authored prose, and silently merging
+  workspace metadata into it would corrupt notes if the user edited
+  them by hand; (b) every read of project scope would have to re-parse
+  prose, which is slow and brittle. A typed sidecar table is the
+  obvious schema for typed configuration.
+- **Mode column on the sidecar, not on the node.** Mode is workspace
+  configuration — what surfaces the workspace renders by default —
+  not an intrinsic property of the hub node. Storing it alongside the
+  rest of the workspace config keeps the structure-node abstraction
+  clean.
+- **Mode sets defaults, not gates** (per build plan philosophy). The
+  `mode` column on `project_scopes` chooses which panels are prominent
+  on first open. Nothing in the workspace UI or API should gate a
+  feature on this column. A research-mode project can open the
+  Timeline tab; a narrative-mode project can run a learning check.
+- **`primary_tag_id` is the cross-surface project anchor.**
+  `con --project eurorack "thought"` (Slice 1) and the workspace Ask
+  scope toggle (Slice 1) both resolve a project to its `primary_tag_id`
+  and use that tag as the filter / attach point. The CLI does this via
+  a new `GET /projects/resolve?name=<name>` endpoint (or, when the CLI
+  runs against the local DB directly, an inline repository query) that
+  matches `<name>` against `tags.name` where the tag appears as
+  `primary_tag_id` on any `project_scopes` row, returning the project
+  and its primary tag. Storing the anchor on the scope row keeps this
+  resolution one indexed lookup rather than a substring match against
+  the hub title and centralizes project identity in a single column.
+
+**Consequences:**
+
+- **Migration ceremony.** `0007_project_workspace.sql` does not require
+  the CHECK-constraint table-recreate dance — all additions are new
+  columns (with defaults) on `nodes` and new tables. The cost of this
+  slice is modest.
+- **`GET /projects` is one indexed query.** The partial index
+  `idx_nodes_project_hub` keeps the project list trivial to render even
+  if the broader corpus grows large; project hubs are inherently a
+  small subset.
+- **Soft-delete propagation.** Soft-deleting a hub node hides it from
+  `GET /projects` (the index is partial). The `project_scopes` row is
+  *not* deleted in the same operation; it sits orphaned until a future
+  cleanup pass. This matches the existing soft-delete convention (ADR
+  "do not hard-delete nodes") and avoids cascading semantics that would
+  surprise the user. Restoring the node via `deleted_at = NULL` brings
+  the project back with its scope intact.
+- **Synthesis history association.** ADR-067 will handle how the
+  workspace knows which synthesis outputs belong to it. This ADR is
+  agnostic: the hub note can receive CITES edges from synthesis
+  permanents like any other node, so option (a) ("CITES edges into the
+  project scope") is structurally available without further schema
+  work.
+- **Soft-delete of hub via `deleted_at` does not flip
+  `is_project_hub`.** A future "archive project" UI may choose to flip
+  the flag back to 0 explicitly; that is a Phase 10 polish concern, not
+  Slice 0.
+- **`work_sessions` mode includes `planning`** (a fourth value beyond
+  the project-mode enum). Session mode is independent of project mode
+  (philosophy doc §IIIb.2): a narrative project can have research
+  sessions, and any project can have a planning session focused on
+  roadmap / scope work. Project mode and session mode are different
+  enums with different domains.
+- **`pinned_node_ids` and `tag_ids` are JSON-encoded arrays, not
+  per-row tables.** This trades query-friendliness ("which projects
+  pin node X?") for write simplicity. The expected workload is
+  read-per-render and write-on-edit; reverse-lookup queries are not
+  on any current surface. If they become load-bearing, normalizing
+  into `project_pinned_nodes(project_id, node_id)` and
+  `project_tags(project_id, tag_id)` is a forward-compatible
+  migration.
+- **`primary_tag_id` is a soft contract, not a NOT NULL column.**
+  The column is nullable in `0007_project_workspace.sql` so a project
+  can be created and exist briefly without a tag assignment — this
+  matches the build plan's flow where Slice 0 promotes the hub note
+  without forcing tag wiring. **However, a project without a
+  `primary_tag_id` cannot be targeted by `con --project <name>` (no
+  tag to resolve) and the Ask scope toggle has no tag to filter on
+  (Project / Both modes silently degrade to Full-corpus behavior).**
+  This is a class of silent failure the UI must prevent: the project
+  creation flow (Slice 1) must enforce or strongly encourage setting
+  a primary tag — either by requiring tag selection in the "New
+  project" dialog, or by surfacing a prominent "Set primary tag"
+  prompt in the workspace until one is set. The list endpoint and
+  workspace shell should also reflect "needs primary tag" state on
+  any project missing the assignment. Without this UX guardrail, a
+  user can quietly end up with a project whose scope toggle does
+  nothing.
+- **The Ask scope toggle's "Both" state is frontend orchestration
+  over the existing `RagRequest`, not a new request shape.** Slice 1
+  will implement the three-state toggle (Project / Both / Full
+  corpus) by populating `tag_filter` on `/rag/query` for Project and
+  the first call of Both, then re-issuing without `tag_filter` if the
+  scoped response's confidence (per ADR-057 / B5) falls below
+  threshold, then merging and labeling out-of-scope results in
+  provenance. No `ScopedAskRequest` model is needed; the orchestration
+  shape will be formalized in ADR-068 when Slice 1 builds it.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
