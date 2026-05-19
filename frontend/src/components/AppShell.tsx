@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getAdminStatus } from "@/lib/api";
 import { usePollWhileVisible } from "@/lib/usePollWhileVisible";
 import { CaptureDialog } from "./CaptureDialog";
@@ -14,6 +15,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [intentionalOpen, setIntentionalOpen] = useState(false);
   const [failedJobs, setFailedJobs] = useState(0);
+  // Full-bleed routes (workspace) opt out of the centered max-w container.
+  const pathname = usePathname();
+  const fullBleed =
+    pathname?.startsWith("/projects/") && pathname !== "/projects";
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -60,6 +65,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/discover" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">
             Discover
           </Link>
+          <Link href="/projects" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">
+            Projects
+          </Link>
           <Link href="/search" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">
             Search
           </Link>
@@ -103,7 +111,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
       </header>
-      <main className="max-w-4xl mx-auto px-4 py-8">{children}</main>
+      <main className={fullBleed ? "w-full" : "max-w-4xl mx-auto px-4 py-8"}>
+        {children}
+      </main>
       <CaptureDialog open={captureOpen} onClose={() => setCaptureOpen(false)} />
       <IntentionalCaptureDialog open={intentionalOpen} onClose={() => setIntentionalOpen(false)} />
     </>

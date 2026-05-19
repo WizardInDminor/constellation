@@ -428,3 +428,436 @@ def test_patch_session_wrong_project_404(client):
         json={"progress_notes": "x"},
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# /projects/resolve — CLI / scope-toggle name resolution (ADR-063)
+# ---------------------------------------------------------------------------
+
+
+def _make_tag(client, name: str) -> str:
+    r = client.post("/api/v1/tags", json={"name": name})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_resolve_404_when_no_project_has_that_primary_tag(client):
+    r = client.get("/api/v1/projects/resolve?name=eurorack")
+    assert r.status_code == 404
+
+
+def test_resolve_returns_hub_and_tag(client):
+    hub_id = _create_structure(client, "Eurorack")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "eurorack")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    r = client.get("/api/v1/projects/resolve?name=eurorack")
+    assert r.status_code == 200
+    assert r.json() == {"hub_node_id": hub_id, "primary_tag_id": tag_id}
+
+
+def test_resolve_is_case_insensitive(client):
+    hub_id = _create_structure(client, "Eurorack")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "eurorack")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    assert client.get("/api/v1/projects/resolve?name=EUROrack").status_code == 200
+
+
+def test_resolve_ignores_unpromoted_or_deleted_hubs(client):
+    hub_id = _create_structure(client, "X")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "x")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    # Soft-delete the hub — resolve should now miss
+    client.delete(f"/api/v1/nodes/{hub_id}")
+    assert client.get("/api/v1/projects/resolve?name=x").status_code == 404
+
+
+def test_resolve_name_required(client):
+    r = client.get("/api/v1/projects/resolve?name=")
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Fleeting capture with tag_ids (the CLI's `con --project` plumbing)
+# ---------------------------------------------------------------------------
+
+
+def test_fleeting_accepts_tag_ids(client):
+    tag_id = _make_tag(client, "tagged")
+    r = client.post(
+        "/api/v1/nodes/fleeting",
+        json={"title": "T", "content": "C", "tag_ids": [tag_id]},
+    )
+    assert r.status_code == 201
+    tags = r.json()["tags"]
+    assert [t["id"] for t in tags] == [tag_id]
+
+
+def test_fleeting_tag_ids_optional(client):
+    r = client.post("/api/v1/nodes/fleeting", json={"title": "T", "content": "C"})
+    assert r.status_code == 201
+    assert r.json()["tags"] == []
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: scope updates with prior_knowledge
+# ---------------------------------------------------------------------------
+
+
+def test_create_project_with_prior_knowledge(client):
+    r = client.post(
+        "/api/v1/projects",
+        json={
+            "title": "Motor encoders",
+            "mode": "learning",
+            "prior_knowledge": "I know basic embedded C and have used SPI.",
+        },
+    )
+    assert r.status_code == 201
+    assert "I know basic embedded C" in r.json()["scope"]["prior_knowledge"]
+
+
+def test_patch_scope_prior_knowledge(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    r = client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"prior_knowledge": "Some C, no PID experience."},
+    )
+    assert r.status_code == 200
+    assert "Some C" in r.json()["prior_knowledge"]
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: project list note count includes tag-tagged notes
+# ---------------------------------------------------------------------------
+
+
+def test_list_projects_note_count_unions_pinned_and_tagged(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "tcount")
+    # Two tagged notes, one pinned (also tagged so dedup matters), one unrelated
+    a = client.post(
+        "/api/v1/nodes/permanent",
+        json={"title": "A", "content": "x", "tag_ids": [tag_id]},
+    ).json()["id"]
+    client.post(
+        "/api/v1/nodes/permanent",
+        json={"title": "B", "content": "x", "tag_ids": [tag_id]},
+    )
+    client.post("/api/v1/nodes/permanent", json={"title": "C", "content": "x"})
+
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"pinned_node_ids": [a], "tag_ids": [tag_id]},
+    )
+    summary = client.get("/api/v1/projects").json()[0]
+    # Set-union: {a (pinned + tagged), b (tagged)} = 2
+    assert summary["note_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: coverage endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_coverage_returns_per_tag_stats(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    dense = _make_tag(client, "dense")
+    thin = _make_tag(client, "thin")
+
+    # Dense tag: 2 notes, with edges
+    n1 = client.post(
+        "/api/v1/nodes/permanent",
+        json={"title": "N1", "content": "x", "tag_ids": [dense]},
+    ).json()["id"]
+    n2 = client.post(
+        "/api/v1/nodes/permanent",
+        json={"title": "N2", "content": "x", "tag_ids": [dense]},
+    ).json()["id"]
+    client.post(
+        "/api/v1/edges",
+        json={"from_id": n1, "to_id": n2, "type": "SUPPORTS"},
+    )
+    # Thin tag: 1 note, no edges
+    client.post(
+        "/api/v1/nodes/permanent",
+        json={"title": "N3", "content": "x", "tag_ids": [thin]},
+    )
+
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"tag_ids": [dense, thin]},
+    )
+    r = client.get(f"/api/v1/projects/{hub_id}/coverage")
+    assert r.status_code == 200
+    tags = r.json()["tags"]
+    assert len(tags) == 2
+    # Ordered thin-to-dense
+    assert tags[0]["tag_name"] == "thin"
+    assert tags[0]["avg_edges"] == 0.0
+    assert tags[1]["tag_name"] == "dense"
+    assert tags[1]["avg_edges"] > 0
+
+
+def test_coverage_empty_when_no_tags(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    r = client.get(f"/api/v1/projects/{hub_id}/coverage")
+    assert r.status_code == 200
+    assert r.json()["tags"] == []
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: session attach + wrap counts
+# ---------------------------------------------------------------------------
+
+
+def test_attach_node_to_session_and_wrap_counts(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "test"},
+    ).json()
+    sid = sess["id"]
+
+    fleeting = client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "x"}).json()[
+        "id"
+    ]
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "y"}).json()["id"]
+
+    r = client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sid}/attach-node",
+        json={"node_id": fleeting},
+    )
+    assert r.status_code == 201
+    r = client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sid}/attach-node",
+        json={"node_id": perm},
+    )
+    assert r.status_code == 201
+
+    wrap = client.get(f"/api/v1/projects/{hub_id}/sessions/{sid}/wrap").json()
+    assert wrap["nodes_created"] == 2
+    assert wrap["fleetings_created"] == 1
+    assert wrap["edges_created"] == 0
+
+
+def test_attach_node_idempotent(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    node_id = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "y"}).json()[
+        "id"
+    ]
+
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": node_id},
+    )
+    r = client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": node_id},
+    )
+    assert r.status_code == 201
+    wrap = client.get(f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/wrap").json()
+    assert wrap["nodes_created"] == 1
+
+
+def test_attach_node_opted_out_excluded_from_counts(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    a = client.post("/api/v1/nodes/permanent", json={"title": "A", "content": "x"}).json()["id"]
+    b = client.post("/api/v1/nodes/permanent", json={"title": "B", "content": "x"}).json()["id"]
+
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": a, "session_tagged": True},
+    )
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": b, "session_tagged": False},
+    )
+    wrap = client.get(f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/wrap").json()
+    assert wrap["nodes_created"] == 1  # b excluded
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: ScopedRagRequest include_session_fleetings (ADR-069)
+# ---------------------------------------------------------------------------
+
+
+def test_scoped_rag_includes_session_fleetings_when_flag_on(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    perm = client.post(
+        "/api/v1/nodes/permanent", json={"title": "P", "content": "perm-body"}
+    ).json()["id"]
+    fleeting = client.post(
+        "/api/v1/nodes/fleeting", json={"title": "F", "content": "fleet-body"}
+    ).json()["id"]
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": fleeting},
+    )
+
+    r = client.post(
+        "/api/v1/rag/scoped",
+        json={
+            "query": "Synthesize",
+            "node_ids": [perm],
+            "include_session_fleetings": True,
+            "session_id": sess["id"],
+        },
+    )
+    assert r.status_code == 200
+    prov_ids = [p["node_id"] for p in r.json()["provenance"]]
+    assert perm in prov_ids
+    assert fleeting in prov_ids
+
+
+def test_scoped_rag_ignores_flag_without_session_id(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "x"}).json()["id"]
+    fleeting = client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "y"}).json()[
+        "id"
+    ]
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": fleeting},
+    )
+
+    r = client.post(
+        "/api/v1/rag/scoped",
+        json={
+            "query": "Synthesize",
+            "node_ids": [perm],
+            "include_session_fleetings": True,
+            # no session_id
+        },
+    )
+    assert r.status_code == 200
+    prov_ids = [p["node_id"] for p in r.json()["provenance"]]
+    assert fleeting not in prov_ids
+
+
+def test_scoped_rag_excludes_opted_out_fleetings(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "x"}).json()["id"]
+    fleeting = client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "y"}).json()[
+        "id"
+    ]
+    # Opted out — should NOT appear in scope
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": fleeting, "session_tagged": False},
+    )
+
+    r = client.post(
+        "/api/v1/rag/scoped",
+        json={
+            "query": "Synthesize",
+            "node_ids": [perm],
+            "include_session_fleetings": True,
+            "session_id": sess["id"],
+        },
+    )
+    assert r.status_code == 200
+    prov_ids = [p["node_id"] for p in r.json()["provenance"]]
+    assert fleeting not in prov_ids
+
+
+def test_scoped_rag_excludes_processed_fleetings(client):
+    hub_id = _create_structure(client)
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    sess = client.post(
+        f"/api/v1/projects/{hub_id}/sessions",
+        json={"mode": "research", "intent": "x"},
+    ).json()
+    perm = client.post("/api/v1/nodes/permanent", json={"title": "P", "content": "x"}).json()["id"]
+    fleeting = client.post("/api/v1/nodes/fleeting", json={"title": "F", "content": "y"}).json()[
+        "id"
+    ]
+    client.post(
+        f"/api/v1/projects/{hub_id}/sessions/{sess['id']}/attach-node",
+        json={"node_id": fleeting},
+    )
+    # Mark processed → should drop out of the session-fleeting widening
+    client.post(f"/api/v1/nodes/{fleeting}/process")
+
+    r = client.post(
+        "/api/v1/rag/scoped",
+        json={
+            "query": "Synthesize",
+            "node_ids": [perm],
+            "include_session_fleetings": True,
+            "session_id": sess["id"],
+        },
+    )
+    prov_ids = [p["node_id"] for p in r.json()["provenance"]]
+    assert fleeting not in prov_ids
+
+
+# ---------------------------------------------------------------------------
+# Slice 2: source status column wired through (ADR-070)
+# ---------------------------------------------------------------------------
+
+
+def test_source_default_status_user_supplied(client):
+    r = client.post("/api/v1/sources", json={"title": "A", "type": "article"})
+    assert r.status_code == 201
+    assert r.json()["status"] == "user_supplied"
+
+
+def test_source_status_explicit_suggested(client):
+    r = client.post(
+        "/api/v1/sources",
+        json={"title": "B", "type": "article", "status": "suggested"},
+    )
+    assert r.status_code == 201
+    assert r.json()["status"] == "suggested"
+
+
+def test_source_status_patch(client):
+    src_id = client.post(
+        "/api/v1/sources",
+        json={"title": "C", "type": "article", "status": "suggested"},
+    ).json()["id"]
+    r = client.patch(f"/api/v1/sources/{src_id}", json={"status": "confirmed"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "confirmed"

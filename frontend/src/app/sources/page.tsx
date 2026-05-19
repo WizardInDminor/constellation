@@ -51,14 +51,13 @@ function NewSourceForm({
     setSaving(true);
     setError(null);
     try {
-      const data: Omit<SourceCreate, "id"> = {
+      const created = await createSource({
         title: title.trim(),
         type,
         url: url.trim() || undefined,
         author: author.trim() || undefined,
         published_at: publishedAt || undefined,
-      };
-      const created = await createSource(data);
+      });
       onCreated(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create source");

@@ -111,6 +111,11 @@ class ScopedRagRequest(BaseModel):
     query: str
     node_ids: list[str] = Field(min_length=1)
     custom_prompt: str | None = None
+    # ADR-069: opt-in widening to include unprocessed fleeting captures from
+    # the active work session. `session_id` is required for the flag to take
+    # effect; the route ignores either field alone (no implicit "all sessions").
+    include_session_fleetings: bool = False
+    session_id: str | None = None
 
 
 # ---------------------------------------------------------------------------

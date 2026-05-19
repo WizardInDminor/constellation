@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -15,13 +15,15 @@ async def _row_to_summary(row: aiosqlite.Row) -> SourceSummary:
         type=row["type"],
         url=row["url"],
         published_at=row["published_at"],
+        status=row["status"],
         created_at=row["created_at"],
     )
 
 
 async def get_by_id(db: aiosqlite.Connection, source_id: str) -> SourceDetail | None:
     cursor = await db.execute(
-        "SELECT id, title, author, url, type, published_at, created_at FROM sources WHERE id = ?",
+        "SELECT id, title, author, url, type, published_at, status, created_at "
+        "FROM sources WHERE id = ?",
         (source_id,),
     )
     row = await cursor.fetchone()
@@ -56,6 +58,7 @@ async def get_by_id(db: aiosqlite.Connection, source_id: str) -> SourceDetail | 
         type=row["type"],
         url=row["url"],
         published_at=row["published_at"],
+        status=row["status"],
         created_at=row["created_at"],
         literature_notes=literature_notes,
     )
@@ -63,11 +66,20 @@ async def get_by_id(db: aiosqlite.Connection, source_id: str) -> SourceDetail | 
 
 async def create(db: aiosqlite.Connection, data: SourceCreate) -> SourceDetail:
     source_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await db.execute(
-        "INSERT INTO sources(id, title, author, url, type, published_at, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (source_id, data.title, data.author, data.url, data.type, data.published_at, now),
+        "INSERT INTO sources(id, title, author, url, type, published_at, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            source_id,
+            data.title,
+            data.author,
+            data.url,
+            data.type,
+            data.published_at,
+            data.status,
+            now,
+        ),
     )
     await db.commit()
     result = await get_by_id(db, source_id)
@@ -77,7 +89,8 @@ async def create(db: aiosqlite.Connection, data: SourceCreate) -> SourceDetail:
 
 async def list_sources(db: aiosqlite.Connection) -> list[SourceSummary]:
     cursor = await db.execute(
-        "SELECT id, title, author, url, type, published_at, created_at FROM sources ORDER BY title"
+        "SELECT id, title, author, url, type, published_at, status, created_at "
+        "FROM sources ORDER BY title"
     )
     rows = await cursor.fetchall()
     return [await _row_to_summary(r) for r in rows]
@@ -93,7 +106,7 @@ async def update(
     db: aiosqlite.Connection, source_id: str, data: SourceUpdate
 ) -> SourceDetail | None:
     updates: dict[str, Any] = {}
-    for field in ("title", "author", "type", "url"):
+    for field in ("title", "author", "type", "url", "status"):
         val = getattr(data, field)
         if val is not None:
             updates[field] = val

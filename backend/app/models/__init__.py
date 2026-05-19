@@ -59,6 +59,16 @@ from app.models.project import (
     WorkSessionCreate,
     WorkSessionUpdate,
 )
+from app.models.timeline import (
+    ActSpan,
+    ActSpanCreate,
+    ProseStatus,
+    StoryEventCreate,
+    TimelineEvent,
+    TimelineLane,
+    TimelinePositionUpdate,
+    TimelineResponse,
+)
 from app.models.rag import (
     ClusterLinkProposal,
     ClusterSuggestRequest,
@@ -132,6 +142,14 @@ __all__ = [
     "WorkSession",
     "WorkSessionCreate",
     "WorkSessionUpdate",
+    "ActSpan",
+    "ActSpanCreate",
+    "ProseStatus",
+    "StoryEventCreate",
+    "TimelineEvent",
+    "TimelineLane",
+    "TimelinePositionUpdate",
+    "TimelineResponse",
     "EdgeCreate",
     "EdgeDetail",
     "EdgeResolveRequest",

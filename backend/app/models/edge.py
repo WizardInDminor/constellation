@@ -27,6 +27,8 @@ EdgeType = Literal[
     "SCOPED_TO",
     "REGIME_OF",
     "FOLLOWS_FROM",
+    # Narrative (ADR-052 Slice 4 addendum). Lore → character/location/event.
+    "EXPLAINS",
 ]
 
 # Edge types on which the "mark resolved" action is meaningful. ADR-059:

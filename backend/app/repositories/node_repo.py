@@ -22,7 +22,9 @@ from app.repositories import edge_repo, tag_repo
 async def _fetch_full(db: aiosqlite.Connection, node_id: str) -> NodeDetail | None:
     cursor = await db.execute(
         """SELECT id, type, title, content, summary, source_id,
-                  embedding_model, processed_at, created_at, updated_at
+                  embedding_model, processed_at,
+                  is_story_event, story_time, prose_status, manuscript_location,
+                  created_at, updated_at
            FROM nodes WHERE id = ? AND deleted_at IS NULL""",
         (node_id,),
     )
@@ -43,6 +45,10 @@ async def _fetch_full(db: aiosqlite.Connection, node_id: str) -> NodeDetail | No
         source_id=row["source_id"],
         embedding_model=row["embedding_model"],
         processed_at=row["processed_at"],
+        is_story_event=bool(row["is_story_event"]),
+        story_time=row["story_time"],
+        prose_status=row["prose_status"],
+        manuscript_location=row["manuscript_location"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         outgoing_edges=outgoing,
@@ -101,7 +107,13 @@ async def _create_node(
 
 
 async def create_fleeting(db: aiosqlite.Connection, data: FleetingCreate) -> NodeDetail:
-    return await _create_node(db, type_="fleeting", title=data.title, content=data.content)
+    return await _create_node(
+        db,
+        type_="fleeting",
+        title=data.title,
+        content=data.content,
+        tag_ids=data.tag_ids,
+    )
 
 
 async def create_permanent(db: aiosqlite.Connection, data: PermanentCreate) -> NodeDetail:
@@ -138,6 +150,80 @@ async def create_structure(db: aiosqlite.Connection, data: StructureCreate) -> N
     )
 
 
+async def create_story_event(
+    db: aiosqlite.Connection,
+    *,
+    title: str,
+    content: str,
+    story_time: str | None = None,
+    prose_status: str | None = None,
+    manuscript_location: str | None = None,
+) -> NodeDetail:
+    """Phase 9 Slice 4 (ADR-064): create a permanent node flagged as a story
+    event. The node lives in `nodes` like any other permanent and is
+    embeddable / searchable via existing pipelines; the `is_story_event = 1`
+    flag is what places it on the timeline canvas.
+    """
+    node_id = str(uuid.uuid4())
+    now = datetime.now(UTC).isoformat()
+    await db.execute(
+        """INSERT INTO nodes(
+                id, type, title, content,
+                is_story_event, story_time, prose_status, manuscript_location,
+                created_at, updated_at)
+           VALUES (?, 'permanent', ?, ?, 1, ?, ?, ?, ?, ?)""",
+        (
+            node_id,
+            title,
+            content,
+            story_time,
+            prose_status,
+            manuscript_location,
+            now,
+            now,
+        ),
+    )
+    await db.commit()
+    result = await _fetch_full(db, node_id)
+    assert result is not None
+    return result
+
+
+async def update_event_fields(
+    db: aiosqlite.Connection,
+    node_id: str,
+    *,
+    story_time: str | None = None,
+    prose_status: str | None = None,
+    manuscript_location: str | None = None,
+    set_story_time: bool = False,
+    set_prose_status: bool = False,
+    set_manuscript_location: bool = False,
+) -> NodeDetail | None:
+    """Patch event-only columns. Uses explicit `set_*` flags so the caller
+    can distinguish "leave as is" from "set to NULL".
+    """
+    updates: dict[str, object] = {}
+    if set_story_time:
+        updates["story_time"] = story_time
+    if set_prose_status:
+        updates["prose_status"] = prose_status
+    if set_manuscript_location:
+        updates["manuscript_location"] = manuscript_location
+
+    if not updates:
+        return await _fetch_full(db, node_id)
+
+    updates["updated_at"] = datetime.now(UTC).isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    await db.execute(
+        f"UPDATE nodes SET {set_clause} WHERE id = ?",  # noqa: S608
+        [*updates.values(), node_id],
+    )
+    await db.commit()
+    return await _fetch_full(db, node_id)
+
+
 async def get_by_id(db: aiosqlite.Connection, node_id: str) -> NodeDetail | None:
     return await _fetch_full(db, node_id)
 
@@ -152,6 +238,7 @@ async def list_nodes(
     no_outgoing: bool = False,
     no_edges: bool = False,
     summary_max_length: int | None = None,
+    hide_story_events: bool = False,
 ) -> tuple[list[NodeSummary], int]:
     """Paginated node list. ADR-055 — schema-level filters AND-compose.
 
@@ -160,6 +247,8 @@ async def list_nodes(
     - no_outgoing: id absent from `edges.from_id`.
     - no_edges: id absent from both edges.from_id and edges.to_id (stricter).
     - summary_max_length: non-null summaries shorter than the given length.
+    - hide_story_events: excludes nodes with is_story_event = 1 (ADR-064).
+      Default off — events are visible in Notes by default.
     """
     offset = (page - 1) * page_size
 
@@ -173,12 +262,12 @@ async def list_nodes(
     if no_outgoing:
         where_clauses.append("id NOT IN (SELECT from_id FROM edges)")
     if no_edges:
-        where_clauses.append(
-            "id NOT IN (SELECT from_id FROM edges UNION SELECT to_id FROM edges)"
-        )
+        where_clauses.append("id NOT IN (SELECT from_id FROM edges UNION SELECT to_id FROM edges)")
     if summary_max_length is not None:
         where_clauses.append("summary IS NOT NULL AND LENGTH(summary) < ?")
         params.append(summary_max_length)
+    if hide_story_events:
+        where_clauses.append("is_story_event = 0")
 
     where_sql = " AND ".join(where_clauses)
 
@@ -189,7 +278,8 @@ async def list_nodes(
     total: int = (await cursor.fetchone())[0]
 
     cursor = await db.execute(
-        f"""SELECT id, type, title, summary, created_at, updated_at, processed_at
+        f"""SELECT id, type, title, summary, created_at, updated_at,
+                   processed_at, is_story_event
             FROM nodes
             WHERE {where_sql}
             ORDER BY created_at DESC
@@ -208,6 +298,7 @@ async def list_nodes(
             created_at=r["created_at"],
             updated_at=r["updated_at"],
             processed_at=r["processed_at"],
+            is_story_event=bool(r["is_story_event"]),
             tags=tags_map.get(r["id"], []),
         )
         for r in rows

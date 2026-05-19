@@ -41,6 +41,7 @@ def _scope_from_row(row: aiosqlite.Row) -> ProjectScope:
         briefing_prompt=row["briefing_prompt"],
         last_visited_at=row["last_visited_at"],
         mode=row["mode"],
+        prior_knowledge=row["prior_knowledge"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -51,6 +52,7 @@ async def create_scope(
     *,
     hub_node_id: str,
     mode: str = "research",
+    prior_knowledge: str | None = None,
 ) -> ProjectScope:
     """Flip `is_project_hub` on the hub node and create the sidecar row.
 
@@ -64,10 +66,10 @@ async def create_scope(
     await db.execute(
         """INSERT INTO project_scopes(
               hub_node_id, pinned_node_ids, tag_ids, primary_tag_id,
-              briefing_prompt, last_visited_at, mode,
+              briefing_prompt, last_visited_at, mode, prior_knowledge,
               created_at, updated_at)
-           VALUES (?, '[]', '[]', NULL, NULL, NULL, ?, ?, ?)""",
-        (hub_node_id, mode, now, now),
+           VALUES (?, '[]', '[]', NULL, NULL, NULL, ?, ?, ?, ?)""",
+        (hub_node_id, mode, prior_knowledge, now, now),
     )
     await db.commit()
     result = await get_scope(db, hub_node_id)
@@ -78,7 +80,7 @@ async def create_scope(
 async def get_scope(db: aiosqlite.Connection, hub_node_id: str) -> ProjectScope | None:
     cursor = await db.execute(
         """SELECT hub_node_id, pinned_node_ids, tag_ids, primary_tag_id,
-                  briefing_prompt, last_visited_at, mode,
+                  briefing_prompt, last_visited_at, mode, prior_knowledge,
                   created_at, updated_at
            FROM project_scopes WHERE hub_node_id = ?""",
         (hub_node_id,),
@@ -112,6 +114,8 @@ async def update_scope(
         updates["briefing_prompt"] = data.briefing_prompt
     if "mode" in fields and data.mode is not None:
         updates["mode"] = data.mode
+    if "prior_knowledge" in fields:
+        updates["prior_knowledge"] = data.prior_knowledge
 
     if not updates:
         return await get_scope(db, hub_node_id)
@@ -144,14 +148,12 @@ async def list_projects(db: aiosqlite.Connection) -> list[ProjectSummary]:
     """All non-deleted project hubs with their mode, last-visited time, note
     count, and active-session indicator.
 
-    Note count is the pinned-node count plus the count of notes carrying any
-    of the project's tags (deduplicated). For Slice 0 we approximate with the
-    pinned count only — tag-based membership joins land alongside scope
-    editing in Slice 2.
+    Note count is the union of pinned node IDs and notes carrying any of the
+    project's tags, deduped and excluding soft-deleted nodes.
     """
     cursor = await db.execute(
         """SELECT n.id AS hub_id, n.title, n.type,
-                  s.mode, s.last_visited_at, s.pinned_node_ids,
+                  s.mode, s.last_visited_at, s.pinned_node_ids, s.tag_ids,
                   EXISTS (
                       SELECT 1 FROM work_sessions w
                       WHERE w.project_id = n.id AND w.status = 'active'
@@ -165,12 +167,25 @@ async def list_projects(db: aiosqlite.Connection) -> list[ProjectSummary]:
     out: list[ProjectSummary] = []
     for r in rows:
         pinned = json.loads(r["pinned_node_ids"] or "[]")
+        tag_ids = json.loads(r["tag_ids"] or "[]")
+        seen = set(pinned)
+        if tag_ids:
+            placeholders = ",".join("?" * len(tag_ids))
+            cursor2 = await db.execute(
+                f"""SELECT DISTINCT nt.node_id FROM node_tags nt
+                    JOIN nodes n2 ON n2.id = nt.node_id
+                    WHERE nt.tag_id IN ({placeholders})
+                      AND n2.deleted_at IS NULL""",  # noqa: S608
+                tag_ids,
+            )
+            for nr in await cursor2.fetchall():
+                seen.add(nr["node_id"])
         out.append(
             ProjectSummary(
                 hub=NodeRef(id=r["hub_id"], title=r["title"], type=r["type"]),
                 mode=r["mode"],
                 last_visited_at=r["last_visited_at"],
-                note_count=len(pinned),
+                note_count=len(seen),
                 has_active_session=bool(r["has_active"]),
             )
         )
@@ -184,6 +199,146 @@ async def is_project_hub(db: aiosqlite.Connection, hub_node_id: str) -> bool:
     )
     row = await cursor.fetchone()
     return bool(row and row["is_project_hub"])
+
+
+async def count_project_notes(db: aiosqlite.Connection, scope: ProjectScope) -> int:
+    """Total notes in scope: pinned + tag-membership, deduped, non-deleted.
+
+    Used by `GET /projects` for the per-card note count and by the workspace's
+    left-panel scope stats. Slice 0 approximated with the pinned count only;
+    Slice 2 unions in tag-tagged notes.
+    """
+    seen: set[str] = set(scope.pinned_node_ids)
+    if scope.tag_ids:
+        placeholders = ",".join("?" * len(scope.tag_ids))
+        cursor = await db.execute(
+            f"""SELECT DISTINCT nt.node_id FROM node_tags nt
+                JOIN nodes n ON n.id = nt.node_id
+                WHERE nt.tag_id IN ({placeholders})
+                  AND n.deleted_at IS NULL""",  # noqa: S608
+            scope.tag_ids,
+        )
+        rows = await cursor.fetchall()
+        for r in rows:
+            seen.add(r["node_id"])
+    return len(seen)
+
+
+async def coverage_per_tag(db: aiosqlite.Connection, tag_ids: list[str]) -> list[dict]:
+    """Per-tag coverage stats: note count and average outgoing edge count.
+
+    Used by the research-mode coverage panel. Returns a list of
+    `{tag_id, tag_name, note_count, avg_edges}` dicts ordered thin-to-dense
+    by avg_edges. Tags with zero notes are omitted (they wouldn't surface a
+    meaningful sub-topic).
+    """
+    if not tag_ids:
+        return []
+    placeholders = ",".join("?" * len(tag_ids))
+    cursor = await db.execute(
+        f"""SELECT t.id AS tag_id, t.name AS tag_name,
+                   COUNT(DISTINCT nt.node_id) AS note_count,
+                   COALESCE(AVG(
+                       (SELECT COUNT(*) FROM edges e WHERE e.from_id = n.id)
+                   ), 0) AS avg_edges
+            FROM tags t
+            JOIN node_tags nt ON nt.tag_id = t.id
+            JOIN nodes n ON n.id = nt.node_id
+            WHERE t.id IN ({placeholders})
+              AND n.deleted_at IS NULL
+            GROUP BY t.id, t.name
+            HAVING note_count > 0
+            ORDER BY avg_edges ASC, note_count ASC""",  # noqa: S608
+        tag_ids,
+    )
+    rows = await cursor.fetchall()
+    return [
+        {
+            "tag_id": r["tag_id"],
+            "tag_name": r["tag_name"],
+            "note_count": r["note_count"],
+            "avg_edges": float(r["avg_edges"]),
+        }
+        for r in rows
+    ]
+
+
+async def session_wrap_counts(db: aiosqlite.Connection, session_id: str) -> dict[str, int]:
+    """Counts for the session-close wrap summary.
+
+    Returns `{nodes_created, edges_created, fleetings_created}` where each
+    count is restricted to rows with `session_tagged = 1` (per-philosophy-doc
+    §IIIb.6 session bypass: opted-out captures aren't credited to the session).
+    """
+    cursor = await db.execute(
+        """SELECT
+              SUM(CASE WHEN n.type IS NOT NULL THEN 1 ELSE 0 END) AS nodes_created,
+              SUM(CASE WHEN n.type = 'fleeting' THEN 1 ELSE 0 END) AS fleetings_created
+           FROM session_nodes sn
+           JOIN nodes n ON n.id = sn.node_id
+           WHERE sn.session_id = ? AND sn.session_tagged = 1
+             AND n.deleted_at IS NULL""",
+        (session_id,),
+    )
+    n_row = await cursor.fetchone()
+    cursor = await db.execute(
+        """SELECT COUNT(*) AS edges_created
+           FROM session_edges se
+           WHERE se.session_id = ? AND se.session_tagged = 1""",
+        (session_id,),
+    )
+    e_row = await cursor.fetchone()
+    return {
+        "nodes_created": (n_row["nodes_created"] or 0) if n_row else 0,
+        "fleetings_created": (n_row["fleetings_created"] or 0) if n_row else 0,
+        "edges_created": (e_row["edges_created"] or 0) if e_row else 0,
+    }
+
+
+async def attach_node_to_session(
+    db: aiosqlite.Connection,
+    *,
+    session_id: str,
+    node_id: str,
+    session_tagged: bool = True,
+) -> None:
+    """Best-effort attribution row in `session_nodes`. Idempotent."""
+    now = datetime.now(UTC).isoformat()
+    await db.execute(
+        """INSERT OR IGNORE INTO session_nodes(
+                session_id, node_id, created_at, session_tagged)
+           VALUES (?, ?, ?, ?)""",
+        (session_id, node_id, now, 1 if session_tagged else 0),
+    )
+    await db.commit()
+
+
+async def resolve_by_name(db: aiosqlite.Connection, name: str) -> tuple[str, str] | None:
+    """Resolve a `--project <name>` value to (hub_node_id, primary_tag_id).
+
+    Match strategy (ADR-063): join `tags` against `project_scopes.primary_tag_id`
+    on `tags.name`. Tag names are UNIQUE so a name matches at most one tag,
+    which is associated with at most one project. Case-insensitive match for
+    CLI friendliness.
+
+    Returns None if no project has a primary tag whose name matches (either
+    no project has set a primary tag yet, or the name is wrong).
+    """
+    cursor = await db.execute(
+        """SELECT n.id AS hub_id, s.primary_tag_id
+           FROM project_scopes s
+           JOIN tags t ON t.id = s.primary_tag_id
+           JOIN nodes n ON n.id = s.hub_node_id
+           WHERE LOWER(t.name) = LOWER(?)
+             AND n.is_project_hub = 1
+             AND n.deleted_at IS NULL
+           LIMIT 1""",
+        (name,),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    return row["hub_id"], row["primary_tag_id"]
 
 
 # ---------------------------------------------------------------------------

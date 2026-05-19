@@ -36,6 +36,9 @@ class ProjectScope(BaseModel):
     briefing_prompt: str | None = None
     last_visited_at: datetime | None = None
     mode: ProjectMode = "research"
+    # Slice 2 (ADR-070): prior-knowledge entry captured at project-creation
+    # onboarding, used to derive the learning-mode quick-corrections panel.
+    prior_knowledge: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -50,6 +53,7 @@ class ProjectScopeUpdate(BaseModel):
     primary_tag_id: str | None = None
     briefing_prompt: str | None = None
     mode: ProjectMode | None = None
+    prior_knowledge: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +74,9 @@ class ProjectCreate(BaseModel):
     title: str | None = None
     content: str = ""
     mode: ProjectMode = "research"
+    # Slice 2: captured at onboarding for the learning-mode quick-corrections
+    # left-panel surface (Session 1 only).
+    prior_knowledge: str | None = None
 
 
 class ProjectSummary(BaseModel):

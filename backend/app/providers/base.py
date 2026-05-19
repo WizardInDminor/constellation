@@ -24,4 +24,15 @@ class GenerationProvider(Protocol):
         messages: list[dict],
         system: str,
         max_tokens: int = 1024,
-    ) -> str: ...
+        *,
+        enable_web_search: bool = False,
+    ) -> str:
+        """Run a single completion turn.
+
+        `enable_web_search` (ADR-070) opts into provider-side web research
+        for this call. Anthropic implements it via the server-side
+        web_search tool; Ollama (local) raises NotImplementedError. Callers
+        that want graceful degradation should catch the error and fall
+        back to a no-search prompt.
+        """
+        ...

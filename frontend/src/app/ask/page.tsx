@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
 import { listTags, ragQuery, saveAnswer } from "@/lib/api";
 import { resolveCitations } from "@/lib/citations";
 import type { RagResponse, NodeUsed, EdgeTraversed, RagMode, TagRef } from "@/lib/api";
@@ -436,7 +435,7 @@ export default function AskPage() {
       {resolvedAnswer && response && (
         <div className="mt-6">
           <div className="prose prose-sm max-w-none rounded-lg border border-gray-200 bg-white px-6 py-5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{resolvedAnswer}</ReactMarkdown>
+            <MarkdownWithMermaid>{resolvedAnswer}</MarkdownWithMermaid>
           </div>
 
           <div className="mt-3 flex justify-end">

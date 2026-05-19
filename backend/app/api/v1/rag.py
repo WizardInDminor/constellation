@@ -312,6 +312,8 @@ async def rag_scoped(body: ScopedRagRequest, db: DB, gen_provider: GenProvider) 
             body.query,
             body.node_ids,
             custom_prompt=body.custom_prompt,
+            include_session_fleetings=body.include_session_fleetings,
+            session_id=body.session_id,
         )
     except Exception as exc:
         import logging
