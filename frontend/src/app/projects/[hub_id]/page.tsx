@@ -28,11 +28,21 @@ import { LeftPanel } from "./LeftPanel";
 import { RightPanel } from "./RightPanel";
 import { ResumeBriefing } from "./ResumeBriefing";
 import { LearningMapPanel } from "./LearningMapPanel";
+import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
 
 const MODE_ACCENT: Record<ProjectMode, { dot: string; chip: string }> = {
-  research: { dot: "bg-blue-500", chip: "bg-blue-50 text-blue-700 border-blue-200" },
-  narrative: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 border-amber-200" },
-  learning: { dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  research: {
+    dot: "bg-blue-500",
+    chip: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  narrative: {
+    dot: "bg-amber-500",
+    chip: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  learning: {
+    dot: "bg-emerald-500",
+    chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
 };
 
 type CenterTab = "write" | "notes" | "synthesize" | "learning-map";
@@ -95,7 +105,9 @@ export default function WorkspacePage() {
           firstActivityRef.current = new Date();
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      );
   }, [hubId]);
 
   // ── Responsive ─────────────────────────────────────────────────────────
@@ -129,7 +141,10 @@ export default function WorkspacePage() {
   const refresh = useCallback(async () => {
     if (!hubId) return;
     try {
-      const [p, s] = await Promise.all([getProject(hubId), listSessions(hubId)]);
+      const [p, s] = await Promise.all([
+        getProject(hubId),
+        listSessions(hubId),
+      ]);
       setProject(p);
       setSessions(s);
     } catch (e) {
@@ -149,7 +164,10 @@ export default function WorkspacePage() {
     return (
       <div className="p-6">
         <p className="text-sm text-red-600">{error}</p>
-        <Link href="/projects" className="text-sm text-indigo-600 hover:underline mt-2 block">
+        <Link
+          href="/projects"
+          className="text-sm text-indigo-600 hover:underline mt-2 block"
+        >
           ← Back to projects
         </Link>
       </div>
@@ -200,7 +218,9 @@ export default function WorkspacePage() {
             title="Click to end session"
           >
             <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
-            <span className="truncate max-w-[260px]">{activeSession.intent}</span>
+            <span className="truncate max-w-[260px]">
+              {activeSession.intent}
+            </span>
             <span className="text-gray-400">·</span>
             <span className="text-gray-500">end</span>
           </button>
@@ -262,7 +282,10 @@ export default function WorkspacePage() {
               onClick={() => setLeftOpen((o) => !o)}
             />
             {leftOpen ? (
-              <LeftPanel project={project} onScopeChanged={handleScopeChanged} />
+              <LeftPanel
+                project={project}
+                onScopeChanged={handleScopeChanged}
+              />
             ) : null}
           </aside>
         )}
@@ -284,7 +307,9 @@ export default function WorkspacePage() {
             ))}
           </div>
           <div className="p-4">
-            {tab === "write" && <WriteTab hubId={hubId} activeSession={activeSession} />}
+            {tab === "write" && (
+              <WriteTab hubId={hubId} activeSession={activeSession} />
+            )}
             {tab === "notes" && (
               <NotesTabPlaceholder pinnedIds={project.scope.pinned_node_ids} />
             )}
@@ -437,9 +462,7 @@ function WriteTab({
       // Optimistically remove the promoted text from the draft if a selection
       // existed; if no selection, clear the whole pad.
       const remainder =
-        start === end
-          ? ""
-          : content.slice(0, start) + content.slice(end);
+        start === end ? "" : content.slice(0, start) + content.slice(end);
       setContent(remainder);
       // Force-write so autosave doesn't beat us
       await putDraft(hubId, remainder);
@@ -456,6 +479,10 @@ function WriteTab({
     }
   }
 
+  // Mermaid live preview (Slice 3) — show when the pad contains a fence;
+  // collapsible so it doesn't crowd writing when not needed.
+  const hasMermaidFence = /```mermaid\b/.test(content);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[10px] text-gray-400">
@@ -464,29 +491,37 @@ function WriteTab({
           {activeSession && " Captures credit the active session."}
         </span>
         <span>
-          {saving
-            ? "Saving…"
-            : error
-              ? <span className="text-red-500">{error}</span>
-              : savedAt
-                ? `Saved ${savedAt.toLocaleTimeString()}`
-                : draft
-                  ? "Synced"
-                  : ""}
+          {saving ? (
+            "Saving…"
+          ) : error ? (
+            <span className="text-red-500">{error}</span>
+          ) : savedAt ? (
+            `Saved ${savedAt.toLocaleTimeString()}`
+          ) : draft ? (
+            "Synced"
+          ) : (
+            ""
+          )}
         </span>
       </div>
-      <textarea
-        id="draft-pad"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        rows={18}
-        placeholder="Start writing… nothing here is committed to the graph until you promote it."
-        className="w-full rounded border border-gray-200 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
-      />
+      <div
+        className={`grid gap-3 ${hasMermaidFence ? "lg:grid-cols-2" : "grid-cols-1"}`}
+      >
+        <textarea
+          id="draft-pad"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={18}
+          placeholder="Start writing… nothing here is committed to the graph until you promote it."
+          className="w-full rounded border border-gray-200 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+        />
+        {hasMermaidFence && <DraftMermaidPreview content={content} />}
+      </div>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-gray-400">
           Select text and click → promotes to a fleeting note (auto-attaches to
-          the active session). If nothing is selected, the whole pad is promoted.
+          the active session). If nothing is selected, the whole pad is
+          promoted.
         </p>
         <button
           onClick={handlePromoteSelection}
@@ -501,6 +536,52 @@ function WriteTab({
 }
 
 // ---------------------------------------------------------------------------
+// Free-writing pad — mermaid live preview (debounced, collapsible)
+// ---------------------------------------------------------------------------
+
+function DraftMermaidPreview({ content }: { content: string }) {
+  const [debounced, setDebounced] = useState(content);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(content), 800);
+    return () => clearTimeout(t);
+  }, [content]);
+
+  if (collapsed) {
+    return (
+      <div className="flex items-start justify-end">
+        <button
+          onClick={() => setCollapsed(false)}
+          className="text-[11px] text-indigo-600 hover:text-indigo-700"
+        >
+          Show Mermaid preview ▾
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded border border-gray-200 bg-gray-50 p-3 overflow-x-auto">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-wider text-gray-400">
+          Mermaid preview
+        </p>
+        <button
+          onClick={() => setCollapsed(true)}
+          className="text-[11px] text-gray-400 hover:text-gray-600"
+        >
+          hide
+        </button>
+      </div>
+      <div className="prose prose-sm max-w-none">
+        <MarkdownWithMermaid>{debounced}</MarkdownWithMermaid>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Notes & Synthesize tabs
 // ---------------------------------------------------------------------------
 
@@ -508,10 +589,10 @@ function NotesTabPlaceholder({ pinnedIds }: { pinnedIds: string[] }) {
   return (
     <div className="text-xs text-gray-500 space-y-2">
       <p>
-        Project-scoped Notes view lands when the Notes filter UI gains a
-        project filter. For now: this tab will list the {pinnedIds.length}{" "}
-        pinned note{pinnedIds.length === 1 ? "" : "s"} plus everything
-        carrying a project tag.
+        Project-scoped Notes view lands when the Notes filter UI gains a project
+        filter. For now: this tab will list the {pinnedIds.length} pinned note
+        {pinnedIds.length === 1 ? "" : "s"} plus everything carrying a project
+        tag.
       </p>
       <Link href="/notes" className="text-indigo-600 hover:underline">
         Open Notes view →
@@ -563,7 +644,7 @@ function AskResultPanel({
         </button>
       </div>
       <div className="prose prose-sm max-w-none text-sm">
-        <p className="whitespace-pre-wrap">{response.answer}</p>
+        <MarkdownWithMermaid>{response.answer}</MarkdownWithMermaid>
       </div>
       {response.provenance.length > 0 && (
         <div className="text-xs">

@@ -38,7 +38,8 @@ Rules:
 - If the notes don't contain enough information to answer, say so rather than speculating.
 - Preserve the nuance of individual notes; do not blend them into vague generalities.
 - Be concise — this is a personal knowledge base, not a general-purpose encyclopedia.
-- Do not invent facts not present in the provided notes.\
+- Do not invent facts not present in the provided notes.
+- You may output diagrams using mermaid fenced code blocks (`flowchart`, `gantt`, `sequenceDiagram`, `timeline`) when a visual clarifies the answer — particularly for project phases, dependencies, or workflows. They render inline. Use them only when they earn their place.\
 """
 
 # ADR-053: advocacy-mode prompt. Swapped in when mode="brief". The user has

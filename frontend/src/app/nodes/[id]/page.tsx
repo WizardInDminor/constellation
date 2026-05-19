@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   getNode,
   updateNode,
@@ -19,6 +17,8 @@ import {
   openSource,
   ragQuery,
 } from "@/lib/api";
+import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
+import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
 import type {
   NodeDetail,
   TagRef,
@@ -28,9 +28,22 @@ import type {
   SourceSummary,
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
-import { EDGE_TYPES, EDGE_COLORS, EDGE_TYPE_META, directionGlyph } from "@/lib/edgeTypes";
+import {
+  EDGE_TYPES,
+  EDGE_COLORS,
+  EDGE_TYPE_META,
+  directionGlyph,
+} from "@/lib/edgeTypes";
 
-const SOURCE_TYPES = ["datasheet", "manual", "book", "article", "video", "podcast", "other"] as const;
+const SOURCE_TYPES = [
+  "datasheet",
+  "manual",
+  "book",
+  "article",
+  "video",
+  "podcast",
+  "other",
+] as const;
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -60,8 +73,12 @@ function EditableField({
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
 
-  useEffect(() => { setDraft(value); }, [value]);
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => {
+    if (editing) ref.current?.focus();
+  }, [editing]);
 
   async function handleBlur() {
     setEditing(false);
@@ -69,21 +86,32 @@ function EditableField({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (!multiline && e.key === "Enter") { e.preventDefault(); ref.current?.blur(); }
-    if (e.key === "Escape") { setDraft(value); setEditing(false); }
+    if (!multiline && e.key === "Enter") {
+      e.preventDefault();
+      ref.current?.blur();
+    }
+    if (e.key === "Escape") {
+      setDraft(value);
+      setEditing(false);
+    }
   }
 
   const sharedProps = {
     ref,
     value: draft,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setDraft(e.target.value),
     onBlur: handleBlur,
     onKeyDown: handleKeyDown,
     className: `w-full bg-white border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${className}`,
   };
 
   if (editing) {
-    return multiline ? <textarea {...sharedProps} rows={10} /> : <input {...sharedProps} />;
+    return multiline ? (
+      <textarea {...sharedProps} rows={10} />
+    ) : (
+      <input {...sharedProps} />
+    );
   }
 
   return (
@@ -95,7 +123,7 @@ function EditableField({
       {value ? (
         markdown ? (
           <div className="prose prose-sm max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+            <MarkdownWithMermaid>{value}</MarkdownWithMermaid>
           </div>
         ) : (
           value
@@ -122,7 +150,8 @@ function TagEditor({
   const [saving, setSaving] = useState(false);
   const current = new Set(currentTags.map((t) => t.id));
   const suggestions = allTags.filter(
-    (t) => !current.has(t.id) && t.name.toLowerCase().includes(input.toLowerCase()),
+    (t) =>
+      !current.has(t.id) && t.name.toLowerCase().includes(input.toLowerCase()),
   );
 
   async function addTag(tag: TagRef) {
@@ -143,7 +172,9 @@ function TagEditor({
     const name = input.trim();
     if (!name) return;
     setSaving(true);
-    const existing = allTags.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    const existing = allTags.find(
+      (t) => t.name.toLowerCase() === name.toLowerCase(),
+    );
     const tag = existing ?? (await createTag(name));
     await onUpdate([...currentTags.map((t) => t.id), tag.id]);
     setInput("");
@@ -173,7 +204,12 @@ function TagEditor({
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createAndAdd(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              createAndAdd();
+            }
+          }}
           placeholder="Add tag…"
           disabled={saving}
           className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
@@ -190,7 +226,9 @@ function TagEditor({
                 </button>
               </li>
             ))}
-            {!allTags.some((t) => t.name.toLowerCase() === input.trim().toLowerCase()) && (
+            {!allTags.some(
+              (t) => t.name.toLowerCase() === input.trim().toLowerCase(),
+            ) && (
               <li>
                 <button
                   onClick={createAndAdd}
@@ -238,8 +276,13 @@ function EdgePanel({
   const allEdges = [...node.outgoing_edges, ...node.incoming_edges];
 
   // Group outgoing by type for display
-  const byType = EDGE_TYPES.reduce<Record<EdgeType, typeof node.outgoing_edges>>(
-    (acc, t) => { acc[t] = []; return acc; },
+  const byType = EDGE_TYPES.reduce<
+    Record<EdgeType, typeof node.outgoing_edges>
+  >(
+    (acc, t) => {
+      acc[t] = [];
+      return acc;
+    },
     {} as Record<EdgeType, typeof node.outgoing_edges>,
   );
   for (const e of node.outgoing_edges) byType[e.type].push(e);
@@ -254,7 +297,12 @@ function EdgePanel({
     setSaving(true);
     setEdgeError(null);
     try {
-      await createEdge({ from_id: node.id, to_id: target.id, type: edgeType, note: note || undefined });
+      await createEdge({
+        from_id: node.id,
+        to_id: target.id,
+        type: edgeType,
+        note: note || undefined,
+      });
       setAddOpen(false);
       setTarget(null);
       setNote("");
@@ -276,7 +324,10 @@ function EdgePanel({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Connections</h3>
         <button
-          onClick={() => { setAddOpen((o) => !o); setEdgeError(null); }}
+          onClick={() => {
+            setAddOpen((o) => !o);
+            setEdgeError(null);
+          }}
           className="text-xs text-indigo-600 hover:text-indigo-800"
         >
           {addOpen ? "Cancel" : "+ Add"}
@@ -290,12 +341,18 @@ function EdgePanel({
             <>
               <div className="flex flex-col gap-1 text-xs text-gray-600 bg-white border border-gray-200 rounded p-2">
                 <div className="flex gap-2">
-                  <span className="uppercase tracking-wide text-gray-400 shrink-0">From</span>
+                  <span className="uppercase tracking-wide text-gray-400 shrink-0">
+                    From
+                  </span>
                   <span className="truncate text-gray-800">{node.title}</span>
                 </div>
-                <div className="text-center text-gray-400">{directionGlyph(edgeType)}</div>
+                <div className="text-center text-gray-400">
+                  {directionGlyph(edgeType)}
+                </div>
                 <div className="flex gap-2">
-                  <span className="uppercase tracking-wide text-gray-400 shrink-0">To</span>
+                  <span className="uppercase tracking-wide text-gray-400 shrink-0">
+                    To
+                  </span>
                   <span className="truncate text-gray-800">{target.title}</span>
                 </div>
               </div>
@@ -311,7 +368,9 @@ function EdgePanel({
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500">{EDGE_TYPE_META[edgeType].description}</p>
+                <p className="text-xs text-gray-500">
+                  {EDGE_TYPE_META[edgeType].description}
+                </p>
               </div>
               <textarea
                 value={note}
@@ -346,9 +405,14 @@ function EdgePanel({
             {EDGE_TYPE_META[t].label}
           </span>
           {byType[t].map((e) => (
-            <div key={e.id} className="flex items-center justify-between pl-2 group">
+            <div
+              key={e.id}
+              className="flex items-center justify-between pl-2 group"
+            >
               <div className="flex items-center gap-1 min-w-0">
-                <span className="text-xs text-gray-400 shrink-0">{directionGlyph(t)}</span>
+                <span className="text-xs text-gray-400 shrink-0">
+                  {directionGlyph(t)}
+                </span>
                 <Link
                   href={`/nodes/${e.neighbor.id}`}
                   className="text-sm text-indigo-700 hover:underline truncate"
@@ -376,9 +440,14 @@ function EdgePanel({
 
       {node.incoming_edges.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-gray-100 pt-3">
-          <span className="text-xs text-gray-400 font-medium">Referenced by</span>
+          <span className="text-xs text-gray-400 font-medium">
+            Referenced by
+          </span>
           {node.incoming_edges.map((e) => (
-            <div key={e.id} className="flex items-center justify-between pl-2 group">
+            <div
+              key={e.id}
+              className="flex items-center justify-between pl-2 group"
+            >
               <div className="flex items-center gap-1 min-w-0">
                 <span className="text-xs text-gray-400 shrink-0">
                   {EDGE_TYPE_META[e.type].directional ? "←" : "↔"}
@@ -419,11 +488,15 @@ function SourcePanel({
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [openMessage, setOpenMessage] = useState<{ kind: "error" | "warning"; text: string } | null>(null);
+  const [openMessage, setOpenMessage] = useState<{
+    kind: "error" | "warning";
+    text: string;
+  } | null>(null);
 
   // New-source form state
   const [newTitle, setNewTitle] = useState("");
-  const [newType, setNewType] = useState<(typeof SOURCE_TYPES)[number]>("other");
+  const [newType, setNewType] =
+    useState<(typeof SOURCE_TYPES)[number]>("other");
   const [newUrl, setNewUrl] = useState("");
   const [newError, setNewError] = useState<string | null>(null);
 
@@ -432,7 +505,9 @@ function SourcePanel({
 
   useEffect(() => {
     if (attaching || knownAttached) {
-      listSources().then(setSources).catch(() => {});
+      listSources()
+        .then(setSources)
+        .catch(() => {});
     }
   }, [attaching, knownAttached]);
 
@@ -488,7 +563,9 @@ function SourcePanel({
       setAttaching(false);
       onChange();
     } catch (err) {
-      setNewError(err instanceof Error ? err.message : "Failed to create source");
+      setNewError(
+        err instanceof Error ? err.message : "Failed to create source",
+      );
     } finally {
       setSaving(false);
     }
@@ -503,7 +580,10 @@ function SourcePanel({
         setOpenMessage({ kind: "warning", text: result.warning });
       }
     } catch (e) {
-      setOpenMessage({ kind: "error", text: e instanceof Error ? e.message : "Could not open source" });
+      setOpenMessage({
+        kind: "error",
+        text: e instanceof Error ? e.message : "Could not open source",
+      });
     }
   }
 
@@ -557,7 +637,9 @@ function SourcePanel({
               )}
             </>
           ) : (
-            <span className="text-xs text-gray-400 italic">Loading source…</span>
+            <span className="text-xs text-gray-400 italic">
+              Loading source…
+            </span>
           )}
         </div>
       ) : attaching ? (
@@ -570,7 +652,9 @@ function SourcePanel({
           />
           <ul className="max-h-40 overflow-y-auto border border-gray-100 rounded divide-y divide-gray-100">
             {filtered.length === 0 && (
-              <li className="text-xs text-gray-400 italic px-2 py-1.5">No sources match.</li>
+              <li className="text-xs text-gray-400 italic px-2 py-1.5">
+                No sources match.
+              </li>
             )}
             {filtered.map((s) => (
               <li key={s.id}>
@@ -579,8 +663,12 @@ function SourcePanel({
                   disabled={saving}
                   className="w-full text-left px-2 py-1.5 hover:bg-indigo-50 disabled:opacity-50"
                 >
-                  <span className="text-sm font-medium truncate block">{s.title}</span>
-                  <span className="text-xs text-gray-400 capitalize">{s.type}</span>
+                  <span className="text-sm font-medium truncate block">
+                    {s.title}
+                  </span>
+                  <span className="text-xs text-gray-400 capitalize">
+                    {s.type}
+                  </span>
                 </button>
               </li>
             ))}
@@ -609,10 +697,16 @@ function SourcePanel({
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={newType}
-                  onChange={(e) => setNewType(e.target.value as (typeof SOURCE_TYPES)[number])}
+                  onChange={(e) =>
+                    setNewType(e.target.value as (typeof SOURCE_TYPES)[number])
+                  }
                   className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
                 >
-                  {SOURCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {SOURCE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
                 </select>
                 <input
                   value={newUrl}
@@ -624,7 +718,10 @@ function SourcePanel({
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => { setShowNew(false); setNewError(null); }}
+                  onClick={() => {
+                    setShowNew(false);
+                    setNewError(null);
+                  }}
                   className="text-xs text-gray-500 hover:text-gray-800"
                 >
                   Cancel
@@ -641,7 +738,11 @@ function SourcePanel({
           )}
 
           <button
-            onClick={() => { setAttaching(false); setQuery(""); setShowNew(false); }}
+            onClick={() => {
+              setAttaching(false);
+              setQuery("");
+              setShowNew(false);
+            }}
             className="text-xs text-gray-400 hover:text-gray-700 self-start"
           >
             Cancel
@@ -691,13 +792,18 @@ function CriticPanel({ node }: { node: NodeDetail }) {
           disabled={loading}
           className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
         >
-          {loading ? "Asking…" : answer ? "Re-run" : "Generate reader questions"}
+          {loading
+            ? "Asking…"
+            : answer
+              ? "Re-run"
+              : "Generate reader questions"}
         </button>
       </div>
 
       {!answer && !loading && !error && (
         <p className="text-xs text-gray-400">
-          Ask Claude to enumerate the questions a careful reader would raise about this note.
+          Ask Claude to enumerate the questions a careful reader would raise
+          about this note.
         </p>
       )}
 
@@ -705,7 +811,7 @@ function CriticPanel({ node }: { node: NodeDetail }) {
 
       {answer && (
         <div className="prose prose-sm max-w-none text-sm text-gray-700">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+          <MarkdownWithMermaid>{answer}</MarkdownWithMermaid>
         </div>
       )}
     </div>
@@ -738,7 +844,9 @@ function SuggestLinksPanel({
       const res = await suggestLinks(nodeId);
       setSuggestions(res.suggestions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to get suggestions");
+      setError(
+        err instanceof Error ? err.message : "Failed to get suggestions",
+      );
     } finally {
       setLoading(false);
     }
@@ -758,7 +866,10 @@ function SuggestLinksPanel({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed";
       if (msg.includes("409") || msg.includes("already exists")) {
-        setAcceptErrors((prev) => ({ ...prev, [s.node_id]: "Already connected." }));
+        setAcceptErrors((prev) => ({
+          ...prev,
+          [s.node_id]: "Already connected.",
+        }));
         setDismissed((d) => new Set([...d, s.node_id]));
       } else {
         setAcceptErrors((prev) => ({ ...prev, [s.node_id]: msg }));
@@ -779,7 +890,11 @@ function SuggestLinksPanel({
           disabled={loading}
           className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
         >
-          {loading ? "Thinking…" : suggestions.length > 0 ? "Re-suggest" : "Suggest connections"}
+          {loading
+            ? "Thinking…"
+            : suggestions.length > 0
+              ? "Re-suggest"
+              : "Suggest connections"}
         </button>
       </div>
 
@@ -801,7 +916,9 @@ function SuggestLinksPanel({
             >
               {s.node_title}
             </Link>
-            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${EDGE_COLORS[s.edge_type]}`}>
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${EDGE_COLORS[s.edge_type]}`}
+            >
               {s.edge_type}
             </span>
           </div>
@@ -842,16 +959,22 @@ export default function NodePage() {
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Used by the Export menu (Slice 3) to find rendered mermaid SVGs.
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   const reload = useCallback(() => {
     getNode(nodeId)
       .then(setNode)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load"),
+      );
   }, [nodeId]);
 
   useEffect(() => {
     reload();
-    listTags().then(setAllTags).catch(() => {});
+    listTags()
+      .then(setAllTags)
+      .catch(() => {});
   }, [reload]);
 
   async function saveField(field: "title" | "content", value: string) {
@@ -862,7 +985,9 @@ export default function NodePage() {
   async function saveTags(tagIds: string[]) {
     const updated = await updateNode(nodeId, { tag_ids: tagIds });
     setNode(updated);
-    listTags().then(setAllTags).catch(() => {});
+    listTags()
+      .then(setAllTags)
+      .catch(() => {});
   }
 
   async function handleDelete() {
@@ -880,7 +1005,9 @@ export default function NodePage() {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-red-600 text-sm">{error}</p>
-        <Link href="/inbox" className="text-sm text-indigo-600 hover:underline">← Back to inbox</Link>
+        <Link href="/inbox" className="text-sm text-indigo-600 hover:underline">
+          ← Back to inbox
+        </Link>
       </div>
     );
   }
@@ -891,14 +1018,23 @@ export default function NodePage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/notes" className="text-sm text-gray-400 hover:text-gray-700">← Notes</Link>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+          <Link
+            href="/notes"
+            className="text-sm text-gray-400 hover:text-gray-700"
+          >
+            ← Notes
+          </Link>
+          <span
+            className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {node.type}
           </span>
         </div>
         {showDeleteConfirm ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">Delete this note? This cannot be undone.</span>
+            <span className="text-xs text-gray-500">
+              Delete this note? This cannot be undone.
+            </span>
             <button
               onClick={handleDelete}
               disabled={deleting}
@@ -916,6 +1052,7 @@ export default function NodePage() {
           </div>
         ) : (
           <div className="flex items-center gap-4">
+            <ExportMenu node={node} contentRef={contentRef} />
             {node.type === "fleeting" && (
               <Link
                 href={`/inbox/process/${nodeId}`}
@@ -937,7 +1074,10 @@ export default function NodePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col gap-4">
+          <div
+            ref={contentRef}
+            className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col gap-4"
+          >
             <EditableField
               value={node.title}
               onSave={(v) => saveField("title", v)}
@@ -953,7 +1093,9 @@ export default function NodePage() {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Tags</h3>
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+              Tags
+            </h3>
             <TagEditor
               currentTags={node.tags}
               allTags={allTags}
@@ -989,6 +1131,91 @@ export default function NodePage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Export menu (Slice 3) ────────────────────────────────────────────────────
+
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "note"
+  );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function ExportMenu({
+  node,
+  contentRef,
+}: {
+  node: NodeDetail;
+  contentRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const slug = slugify(node.title);
+
+  async function handlePng() {
+    setStatus(null);
+    setOpen(false);
+    const container = contentRef.current;
+    if (!container) return;
+    try {
+      const ok = await exportMermaidPngFromContainer(container, `${slug}.png`);
+      if (!ok) setStatus("No mermaid diagram found in this note.");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "PNG export failed");
+    }
+  }
+
+  function handleMarkdown() {
+    setStatus(null);
+    setOpen(false);
+    downloadBlob(
+      new Blob([node.content], { type: "text/markdown" }),
+      `${slug}.md`,
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-sm text-gray-400 hover:text-gray-700"
+      >
+        Export ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 z-10 w-44 rounded border border-gray-200 bg-white shadow-md text-sm">
+          <button
+            onClick={handlePng}
+            className="block w-full px-3 py-1.5 text-left hover:bg-gray-50"
+          >
+            PNG (Mermaid chart)
+          </button>
+          <button
+            onClick={handleMarkdown}
+            className="block w-full px-3 py-1.5 text-left hover:bg-gray-50"
+          >
+            Markdown (.md)
+          </button>
+        </div>
+      )}
+      {status && <span className="ml-2 text-xs text-amber-600">{status}</span>}
     </div>
   );
 }
