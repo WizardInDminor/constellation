@@ -582,7 +582,8 @@ POST   /projects/{hub_id}/timelines           # Slice 5: create parallel timelin
 POST   /projects/{hub_id}/act-spans           # ADR-072: act span on a timeline
 GET    /projects/{hub_id}/scene-context/{id}  # Slice 5 — live graph assembly (no cache)
 POST   /nodes/story-event                     # ADR-064/065: event + COLLECTS + auto-FOLLOWS_FROM
-PATCH  /nodes/{id}/timeline-position          # ADR-065: reorder + FOLLOWS_FROM rewire
+PATCH  /nodes/{id}/timeline-position          # ADR-065: intra-lane reorder + FOLLOWS_FROM rewire
+POST   /nodes/{id}/timeline-placement         # Slice 5: cross-lane move/crossover (ADR-065)
 POST   /rag/narrative-dump                    # Slice 5: extract candidate nodes from prose
 ```
 

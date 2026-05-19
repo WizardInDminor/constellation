@@ -419,3 +419,177 @@ def test_explains_edge_type_accepted(client):
     )
     assert r.status_code == 201
     assert r.json()["type"] == "EXPLAINS"
+
+
+# ---------------------------------------------------------------------------
+# Slice 5: POST /nodes/{id}/timeline-placement — cross-lane drag-and-drop
+# ---------------------------------------------------------------------------
+
+
+def _two_lanes(client):
+    """Helper: a project with two lanes, returns (hub, t1, t2)."""
+    hub = _create_project(client, "Cross", mode="narrative")
+    t1 = client.get(
+        f"/api/v1/projects/{hub}/timeline"
+    ).json()["lanes"][0]["timeline"]["id"]
+    t2 = client.post(
+        f"/api/v1/projects/{hub}/timelines",
+        json={"title": "Lane B"},
+    ).json()["id"]
+    return hub, t1, t2
+
+
+def _make_event(client, timeline_id, title, position):
+    r = client.post(
+        "/api/v1/nodes/story-event",
+        json={
+            "title": title,
+            "timeline_node_id": timeline_id,
+            "discourse_position": position,
+        },
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_placement_crossover_keeps_source(client):
+    """Crossover (no remove): event lands on target AND stays on source."""
+    hub, t1, t2 = _two_lanes(client)
+    eid = _make_event(client, t1, "X", 100)
+
+    r = client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={"timeline_node_id": t2, "discourse_position": 500},
+    )
+    assert r.status_code == 200
+
+    timeline = client.get(f"/api/v1/projects/{hub}/timeline").json()
+    by_lane = {ln["timeline"]["id"]: ln for ln in timeline["lanes"]}
+    assert any(e["node"]["id"] == eid for e in by_lane[t1]["events"])
+    assert any(e["node"]["id"] == eid for e in by_lane[t2]["events"])
+    # timeline_count reflects the crossover
+    target_event = next(
+        e for e in by_lane[t2]["events"] if e["node"]["id"] == eid
+    )
+    assert target_event["timeline_count"] == 2
+    assert target_event["discourse_position"] == 500
+
+
+def test_placement_crossover_idempotent(client):
+    """Calling placement on the same target twice doesn't duplicate."""
+    hub, t1, t2 = _two_lanes(client)
+    eid = _make_event(client, t1, "X", 100)
+    client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={"timeline_node_id": t2, "discourse_position": 500},
+    )
+    # Second call updates the position
+    client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={"timeline_node_id": t2, "discourse_position": 600},
+    )
+    timeline = client.get(f"/api/v1/projects/{hub}/timeline").json()
+    by_lane = {ln["timeline"]["id"]: ln for ln in timeline["lanes"]}
+    on_t2 = [e for e in by_lane[t2]["events"] if e["node"]["id"] == eid]
+    assert len(on_t2) == 1
+    assert on_t2[0]["discourse_position"] == 600
+
+
+def test_placement_move_removes_from_source(client):
+    """MOVE (remove_from set): event disappears from source, appears on target."""
+    hub, t1, t2 = _two_lanes(client)
+    eid = _make_event(client, t1, "X", 100)
+
+    r = client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={
+            "timeline_node_id": t2,
+            "discourse_position": 500,
+            "remove_from_timeline_node_id": t1,
+        },
+    )
+    assert r.status_code == 200
+
+    timeline = client.get(f"/api/v1/projects/{hub}/timeline").json()
+    by_lane = {ln["timeline"]["id"]: ln for ln in timeline["lanes"]}
+    assert not any(e["node"]["id"] == eid for e in by_lane[t1]["events"])
+    assert any(e["node"]["id"] == eid for e in by_lane[t2]["events"])
+
+    # The source-lane COLLECTS edge should be gone
+    detail = client.get(f"/api/v1/nodes/{eid}").json()
+    source_collects = [
+        e
+        for e in detail["incoming_edges"]
+        if e["type"] == "COLLECTS" and e["neighbor"]["id"] == t1
+    ]
+    assert source_collects == []
+    # Target-lane COLLECTS edge present
+    target_collects = [
+        e
+        for e in detail["incoming_edges"]
+        if e["type"] == "COLLECTS" and e["neighbor"]["id"] == t2
+    ]
+    assert len(target_collects) == 1
+
+
+def test_placement_move_rewires_follows_from(client):
+    """MOVE: outgoing FOLLOWS_FROM is rewired to the new lane's predecessor."""
+    hub, t1, t2 = _two_lanes(client)
+    # t2 has a predecessor (A) before the move target position
+    _make_event(client, t2, "A", 100)
+    eid = _make_event(client, t1, "X", 200)
+
+    client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={
+            "timeline_node_id": t2,
+            "discourse_position": 200,
+            "remove_from_timeline_node_id": t1,
+        },
+    )
+    detail = client.get(f"/api/v1/nodes/{eid}").json()
+    follows = [e for e in detail["outgoing_edges"] if e["type"] == "FOLLOWS_FROM"]
+    # The moved event's FOLLOWS_FROM now points at A (the t2 predecessor)
+    assert len(follows) == 1
+    assert follows[0]["neighbor"]["title"] == "A"
+
+
+def test_placement_404_when_event_not_on_source(client):
+    """MOVE: source lane must actually contain the event."""
+    hub, t1, t2 = _two_lanes(client)
+    # Event only on t1, never on t2
+    eid = _make_event(client, t1, "X", 100)
+    r = client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={
+            "timeline_node_id": t1,
+            "discourse_position": 999,
+            "remove_from_timeline_node_id": t2,  # event was never on t2
+        },
+    )
+    assert r.status_code == 404
+
+
+def test_placement_422_when_target_not_structure(client):
+    hub, t1, _ = _two_lanes(client)
+    eid = _make_event(client, t1, "X", 100)
+    perm = client.post(
+        "/api/v1/nodes/permanent", json={"title": "P", "content": "y"}
+    ).json()["id"]
+    r = client.post(
+        f"/api/v1/nodes/{eid}/timeline-placement",
+        json={"timeline_node_id": perm, "discourse_position": 100},
+    )
+    assert r.status_code == 422
+
+
+def test_placement_422_on_non_story_event(client):
+    hub, t1, t2 = _two_lanes(client)
+    perm = client.post(
+        "/api/v1/nodes/permanent", json={"title": "P", "content": "x"}
+    ).json()["id"]
+    r = client.post(
+        f"/api/v1/nodes/{perm}/timeline-placement",
+        json={"timeline_node_id": t2, "discourse_position": 100},
+    )
+    assert r.status_code == 422
