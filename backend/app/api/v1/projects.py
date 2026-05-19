@@ -17,8 +17,10 @@ See ADR-063 for the data model and design rationale.
 """
 
 from sqlite3 import IntegrityError
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.deps import DB, EmbedProvider
 from app.models import (
@@ -40,14 +42,45 @@ from app.services import embedding_service
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
+class ProjectResolveResponse(BaseModel):
+    """Result of `GET /projects/resolve?name=<name>`.
+
+    Returned when a project's `primary_tag_id` matches a tag whose name equals
+    the given value (case-insensitive). The CLI's `con --project <name>`
+    consumes this to attach the right tag at capture time. See ADR-063.
+    """
+
+    hub_node_id: str
+    primary_tag_id: str
+
+
 # ---------------------------------------------------------------------------
-# List + create
+# List + create + resolve
 # ---------------------------------------------------------------------------
 
 
 @router.get("")
 async def list_projects(db: DB) -> list[ProjectSummary]:
     return await project_repo.list_projects(db)
+
+
+# NOTE: registered before `/{hub_id}` parameterised routes so FastAPI matches
+# the literal path first. Resolution is the cross-surface project anchor used
+# by the CLI (`con --project <name>`) and the workspace Ask scope toggle.
+@router.get("/resolve")
+async def resolve_project(
+    db: DB,
+    name: Annotated[str, Query(min_length=1, description="Project name (tag name)")],
+) -> ProjectResolveResponse:
+    result = await project_repo.resolve_by_name(db, name)
+    if result is None:
+        raise HTTPException(
+            404,
+            f"No project found whose primary tag is named '{name}'. "
+            "Either the project doesn't exist or it hasn't been given a primary tag yet.",
+        )
+    hub_id, tag_id = result
+    return ProjectResolveResponse(hub_node_id=hub_id, primary_tag_id=tag_id)
 
 
 @router.post("", status_code=201)

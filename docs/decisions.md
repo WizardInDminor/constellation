@@ -3634,6 +3634,109 @@ implementation detail of this same decision.
 
 ---
 
+## ADR-068 — Workspace Ask scope toggle (Project / Both / Full corpus)
+
+**Status:** Accepted (Phase 9 Slice 1)
+
+**Context:** Philosophy doc §5.6 open problem 3 ("Full-corpus vs.
+project-scoped Ask toggle") names the need for an explicit three-state
+toggle in narrative-mode early sessions: project-only is too narrow when
+the project is still small ("what in my full corpus touches on X?" is
+genuinely more useful), but full-corpus is too noisy once a project has
+real depth. The workspace Ask bar is the first place in the app where
+this trade-off is explicit. Phase 8.4 / ADR-061 shipped the underlying
+`tag_filter` / `since` fields on `RagRequest`; this ADR formalizes how
+the workspace UI composes the toggle around them.
+
+**Decision:**
+
+- **Three states, frontend-only orchestration.** The Ask bar offers
+  three buttons: `Project` (default), `Both`, `Full corpus`. State is
+  local to the workspace; no new backend request shape is introduced.
+- **Project state** issues one `POST /rag/query` with `tag_filter =
+  [scope.primary_tag_id]`. The provenance returned is by construction
+  scoped to that tag.
+- **Full corpus state** issues one `POST /rag/query` with no
+  `tag_filter`. Behavior matches `/ask` outside the workspace.
+- **Both state** is a two-call orchestration:
+  1. First call: with `tag_filter = [scope.primary_tag_id]`. If the
+     scoped response has acceptable retrieval confidence (provenance
+     is non-empty and the answer doesn't fall into the B5 / ADR-057
+     low-confidence framing), return it. Done.
+  2. Otherwise: re-issue with no `tag_filter`. Merge results: dedupe by
+     `node_id`, in-scope items first, out-of-scope items labeled
+     visibly in the provenance panel ("Out of scope" badge / amber
+     tint).
+  The frontend decides whether to fall through by inspecting the
+  response, not by a new server flag. The B5 confidence check is the
+  same low-confidence detection used by `/ask` outside the workspace.
+- **Disabled when no primary tag is set.** If the project's
+  `primary_tag_id` is null, the toggle is rendered with `Project` and
+  `Both` disabled (and a tooltip explaining "Set a primary tag in
+  scope to enable project-scoped Ask"). The default state silently
+  flips to `Full corpus`. This is the UX guardrail named in ADR-063's
+  consequences: the workspace must never silently degrade Project to
+  Full-corpus behavior; it must explicitly tell the user the toggle
+  is unavailable until the tag is set.
+- **No new ADR for B5 thresholding.** The confidence check reuses
+  ADR-057's threshold (the low-confidence framing logic on `/ask`).
+  This ADR documents the orchestration; ADR-057 owns the threshold.
+
+**Rationale:**
+
+- **Frontend orchestration over backend complexity.** A
+  `BothScopedRagRequest` model that runs both calls server-side and
+  merges would add a new endpoint, new tests, and a new orchestration
+  pathway in `rag_service`. The frontend already has all the
+  ingredients: it can call `POST /rag/query` twice, dedupe by
+  `node_id`, and label the merged list. Two HTTP calls cost ~latency,
+  not ~complexity. Keep it client-side.
+- **Project is the default because most workspace Ask use is
+  project-relevant.** The user is in the workspace because they're
+  working on this project. The default should be tight scope; the
+  toggle lets them widen.
+- **Both, not Auto.** "Both" is honest about cost: it makes two
+  calls, surfaces both perspectives, and labels which is which. An
+  "Auto" mode that silently picks between Project and Full corpus
+  would obscure what's happening at the moment the user most needs
+  transparency about scope.
+- **Disabled-not-hidden when primary_tag_id is missing.** Hiding the
+  toggle would let the silent-failure mode named in ADR-063 happen
+  by another route ("oh, the toggle just isn't there, must be a
+  Full-corpus-only feature"). Showing the toggle as disabled with an
+  explanatory tooltip makes the missing tag a visible state, not an
+  absence.
+
+**Consequences:**
+
+- **No backend changes.** `POST /rag/query` already accepts
+  `tag_filter`. The route, models, and tests from ADR-061 are reused
+  verbatim.
+- **Two HTTP calls on the Both path.** Worst-case latency is roughly
+  doubled when the scoped call is insufficient. The B5 confidence
+  check happens client-side after the first response, so the second
+  call is conditional. The expected hit rate (scoped sufficient) for
+  mature projects should keep average latency closer to single-call.
+- **Out-of-scope labeling on provenance.** The provenance panel needs
+  to distinguish in-scope from out-of-scope items in the Both state.
+  Implementation: tag each `NodeUsed` entry in component state with
+  an `out_of_scope: boolean` derived from the second call's results
+  minus the first call's, then render an amber "Out of scope" pill
+  next to those rows in the existing provenance UI.
+- **Per-session state.** The toggle does not persist to
+  `project_scopes` — it's per-visit. Users who want a stable default
+  are choosing the Slice 1 default (Project). If a future need
+  surfaces ("always start Fire Stoker in Both mode"), add a
+  `default_ask_scope` column to `project_scopes`; not in Phase 9.
+- **Future "Auto" lives elsewhere.** If the dual-call cost becomes a
+  problem (large corpora, slow embedding, etc.), the next move is an
+  Auto mode that uses a single scoped call and only re-issues when
+  the response's confidence falls below threshold — exactly the
+  Both-state behavior, just without the always-merge step. Auto is
+  intentionally deferred until real usage shows whether it's wanted.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

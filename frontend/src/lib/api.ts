@@ -26,6 +26,22 @@ export type RagResponse = components["schemas"]["RagResponse"];
 export type RagMode = NonNullable<components["schemas"]["RagRequest"]["mode"]>;
 export type ActivityFeed = components["schemas"]["ActivityFeed"];
 export type RecentEdge = components["schemas"]["RecentEdge"];
+// Phase 9 (ADR-063)
+export type ProjectSummary = components["schemas"]["ProjectSummary"];
+export type ProjectDetail = components["schemas"]["ProjectDetail"];
+export type ProjectScope = components["schemas"]["ProjectScope"];
+export type ProjectScopeUpdate = components["schemas"]["ProjectScopeUpdate"];
+export type ProjectCreate = components["schemas"]["ProjectCreate"];
+export type ProjectResolveResponse = components["schemas"]["ProjectResolveResponse"];
+export type Draft = components["schemas"]["Draft"];
+export type WorkSession = components["schemas"]["WorkSession"];
+export type WorkSessionCreate = components["schemas"]["WorkSessionCreate"];
+export type WorkSessionUpdate = components["schemas"]["WorkSessionUpdate"];
+// Literal aliases are inlined by openapi-typescript, so we extract them from
+// the parent models rather than naming them directly.
+export type ProjectMode = ProjectScope["mode"];
+export type SessionMode = WorkSession["mode"];
+export type SessionStatus = WorkSession["status"];
 export type ClusterSuggestResponse = components["schemas"]["ClusterSuggestResponse"];
 export type ClusterLinkProposal = components["schemas"]["ClusterLinkProposal"];
 export type TriangleCandidate = components["schemas"]["TriangleCandidate"];
@@ -472,4 +488,86 @@ export function getStats(): Promise<CorpusStats> {
 
 export function getActivity(days = 7): Promise<ActivityFeed> {
   return request(`/api/v1/activity?days=${days}`);
+}
+
+// ---------------------------------------------------------------------------
+// Projects (Phase 9 — ADR-063, ADR-068)
+// ---------------------------------------------------------------------------
+
+export function listProjects(): Promise<ProjectSummary[]> {
+  return request("/api/v1/projects");
+}
+
+export function createProject(data: ProjectCreate): Promise<ProjectDetail> {
+  return request("/api/v1/projects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getProject(hubId: string): Promise<ProjectDetail> {
+  return request(`/api/v1/projects/${hubId}`);
+}
+
+export function getProjectScope(hubId: string): Promise<ProjectScope> {
+  return request(`/api/v1/projects/${hubId}/scope`);
+}
+
+export function patchProjectScope(
+  hubId: string,
+  patch: ProjectScopeUpdate,
+): Promise<ProjectScope> {
+  return request(`/api/v1/projects/${hubId}/scope`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function resolveProjectByName(
+  name: string,
+): Promise<ProjectResolveResponse> {
+  const qs = new URLSearchParams({ name }).toString();
+  return request(`/api/v1/projects/resolve?${qs}`);
+}
+
+// Drafts
+export function getDraft(hubId: string): Promise<Draft> {
+  return request(`/api/v1/projects/${hubId}/draft`);
+}
+
+export function putDraft(hubId: string, content: string): Promise<Draft> {
+  return request(`/api/v1/projects/${hubId}/draft`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function deleteDraft(hubId: string): Promise<void> {
+  return request(`/api/v1/projects/${hubId}/draft`, { method: "DELETE" });
+}
+
+// Sessions
+export function startSession(
+  hubId: string,
+  data: WorkSessionCreate,
+): Promise<WorkSession> {
+  return request(`/api/v1/projects/${hubId}/sessions`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function listSessions(hubId: string): Promise<WorkSession[]> {
+  return request(`/api/v1/projects/${hubId}/sessions`);
+}
+
+export function patchSession(
+  hubId: string,
+  sessionId: string,
+  patch: WorkSessionUpdate,
+): Promise<WorkSession> {
+  return request(`/api/v1/projects/${hubId}/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }

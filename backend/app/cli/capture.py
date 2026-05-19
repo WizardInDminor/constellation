@@ -7,6 +7,7 @@ Subcommands:
 Capture usage:
   con "quick thought"                        # first arg = title
   con -t "SPI timing" -c "CS must go low before SCLK"
+  con --project eurorack "VCO drift idea"    # attach project's primary tag
   con                                        # interactive
 """
 
@@ -16,7 +17,6 @@ import subprocess
 import sys
 
 import httpx
-
 
 API_BASE = os.environ.get("CONSTELLATION_API_URL", "http://localhost:8000")
 FRONTEND_BASE = os.environ.get("CONSTELLATION_FRONTEND_URL", "http://localhost:3000")
@@ -50,11 +50,43 @@ def _timeout_error(url: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _post_fleeting(title: str, content: str) -> None:
-    url = f"{API_BASE}/api/v1/nodes/fleeting"
+def _resolve_project_tag(name: str) -> str:
+    """Hit `GET /projects/resolve?name=<name>` and return the primary_tag_id.
+
+    Exits the process with a clear message if the project doesn't exist or
+    has no primary tag set (ADR-063: silent-failure prevention — the CLI
+    must surface this loudly rather than create an untagged note).
+    """
+    url = f"{API_BASE}/api/v1/projects/resolve"
     try:
         with httpx.Client(timeout=10.0) as client:
-            resp = client.post(url, json={"title": title, "content": content})
+            resp = client.get(url, params={"name": name})
+    except httpx.ConnectError:
+        _connect_error(API_BASE)
+        raise SystemExit(1)
+    except httpx.TimeoutException:
+        _timeout_error(API_BASE)
+        raise SystemExit(1)
+
+    if resp.status_code == 404:
+        print(
+            f"error: no project named '{name}' (or it has no primary tag set). "
+            "Set the primary tag in the workspace before using --project.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    _handle_response_error(resp)
+    return resp.json()["primary_tag_id"]
+
+
+def _post_fleeting(title: str, content: str, *, tag_ids: list[str] | None = None) -> None:
+    url = f"{API_BASE}/api/v1/nodes/fleeting"
+    body: dict = {"title": title, "content": content}
+    if tag_ids:
+        body["tag_ids"] = tag_ids
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(url, json=body)
     except httpx.ConnectError:
         _connect_error(API_BASE)
         return
@@ -75,6 +107,15 @@ def _capture_main() -> None:
     )
     parser.add_argument("-t", "--title", help="Note title")
     parser.add_argument("-c", "--content", help="Note content", default="")
+    parser.add_argument(
+        "--project",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Attach the named project's primary tag to this capture. "
+            "Resolves NAME against project_scopes.primary_tag_id via /projects/resolve."
+        ),
+    )
     parser.add_argument("text", nargs="?", help="Quick capture: first line becomes title")
 
     args = parser.parse_args()
@@ -107,7 +148,11 @@ def _capture_main() -> None:
         print("error: title cannot be empty", file=sys.stderr)
         sys.exit(1)
 
-    _post_fleeting(title, content)
+    tag_ids: list[str] | None = None
+    if args.project:
+        tag_ids = [_resolve_project_tag(args.project)]
+
+    _post_fleeting(title, content, tag_ids=tag_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +268,7 @@ def _import_main() -> None:
         f"Processed {chunks} chunk{'s' if chunks != 1 else ''}. Generated {candidates} candidate{'s' if candidates != 1 else ''}."
     )
     print(f"Source: {source_id}")
-    print(f"Opening review page…")
+    print("Opening review page…")
     _open_review_url(source_id)
 
 

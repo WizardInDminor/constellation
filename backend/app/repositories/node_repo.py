@@ -101,7 +101,13 @@ async def _create_node(
 
 
 async def create_fleeting(db: aiosqlite.Connection, data: FleetingCreate) -> NodeDetail:
-    return await _create_node(db, type_="fleeting", title=data.title, content=data.content)
+    return await _create_node(
+        db,
+        type_="fleeting",
+        title=data.title,
+        content=data.content,
+        tag_ids=data.tag_ids,
+    )
 
 
 async def create_permanent(db: aiosqlite.Connection, data: PermanentCreate) -> NodeDetail:
@@ -173,9 +179,7 @@ async def list_nodes(
     if no_outgoing:
         where_clauses.append("id NOT IN (SELECT from_id FROM edges)")
     if no_edges:
-        where_clauses.append(
-            "id NOT IN (SELECT from_id FROM edges UNION SELECT to_id FROM edges)"
-        )
+        where_clauses.append("id NOT IN (SELECT from_id FROM edges UNION SELECT to_id FROM edges)")
     if summary_max_length is not None:
         where_clauses.append("summary IS NOT NULL AND LENGTH(summary) < ?")
         params.append(summary_max_length)

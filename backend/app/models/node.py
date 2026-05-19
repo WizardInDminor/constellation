@@ -49,6 +49,7 @@ class NodeDetail(BaseModel):
 class FleetingCreate(BaseModel):
     title: str
     content: str
+    tag_ids: list[str] = []
 
 
 class PermanentCreate(BaseModel):

@@ -525,6 +525,7 @@ GET    /config/embedding-jobs       # job queue status
 ```
 GET    /projects                              # list project hubs
 POST   /projects                              # promote a structure node (or create + promote)
+GET    /projects/resolve?name=<name>          # resolve project name → (hub_node_id, primary_tag_id)
 GET    /projects/{hub_id}                     # hub node + scope + active session
 GET    /projects/{hub_id}/scope               # scope config only
 PATCH  /projects/{hub_id}/scope               # update pinned nodes / tags / mode / briefing prompt
@@ -535,6 +536,12 @@ POST   /projects/{hub_id}/sessions            # start a work session (rejects if
 GET    /projects/{hub_id}/sessions            # session history, newest first
 PATCH  /projects/{hub_id}/sessions/{id}       # progress notes, blockers, or close-session payload
 ```
+
+`GET /projects/resolve` is the cross-surface project anchor: it joins
+`project_scopes.primary_tag_id` against `tags.name` (case-insensitive) and
+returns the matching hub + tag. Consumed by `con --project <name>` and the
+workspace Ask scope toggle (ADR-068). Returns 404 when no project has a
+primary tag of that name.
 
 `POST /projects` accepts either `{ hub_node_id, mode? }` (promote an existing
 structure note) or `{ title, content?, mode? }` (create a new structure note

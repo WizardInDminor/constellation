@@ -428,3 +428,83 @@ def test_patch_session_wrong_project_404(client):
         json={"progress_notes": "x"},
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# /projects/resolve — CLI / scope-toggle name resolution (ADR-063)
+# ---------------------------------------------------------------------------
+
+
+def _make_tag(client, name: str) -> str:
+    r = client.post("/api/v1/tags", json={"name": name})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_resolve_404_when_no_project_has_that_primary_tag(client):
+    r = client.get("/api/v1/projects/resolve?name=eurorack")
+    assert r.status_code == 404
+
+
+def test_resolve_returns_hub_and_tag(client):
+    hub_id = _create_structure(client, "Eurorack")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "eurorack")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    r = client.get("/api/v1/projects/resolve?name=eurorack")
+    assert r.status_code == 200
+    assert r.json() == {"hub_node_id": hub_id, "primary_tag_id": tag_id}
+
+
+def test_resolve_is_case_insensitive(client):
+    hub_id = _create_structure(client, "Eurorack")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "eurorack")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    assert client.get("/api/v1/projects/resolve?name=EUROrack").status_code == 200
+
+
+def test_resolve_ignores_unpromoted_or_deleted_hubs(client):
+    hub_id = _create_structure(client, "X")
+    client.post("/api/v1/projects", json={"hub_node_id": hub_id})
+    tag_id = _make_tag(client, "x")
+    client.patch(
+        f"/api/v1/projects/{hub_id}/scope",
+        json={"primary_tag_id": tag_id},
+    )
+    # Soft-delete the hub — resolve should now miss
+    client.delete(f"/api/v1/nodes/{hub_id}")
+    assert client.get("/api/v1/projects/resolve?name=x").status_code == 404
+
+
+def test_resolve_name_required(client):
+    r = client.get("/api/v1/projects/resolve?name=")
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Fleeting capture with tag_ids (the CLI's `con --project` plumbing)
+# ---------------------------------------------------------------------------
+
+
+def test_fleeting_accepts_tag_ids(client):
+    tag_id = _make_tag(client, "tagged")
+    r = client.post(
+        "/api/v1/nodes/fleeting",
+        json={"title": "T", "content": "C", "tag_ids": [tag_id]},
+    )
+    assert r.status_code == 201
+    tags = r.json()["tags"]
+    assert [t["id"] for t in tags] == [tag_id]
+
+
+def test_fleeting_tag_ids_optional(client):
+    r = client.post("/api/v1/nodes/fleeting", json={"title": "T", "content": "C"})
+    assert r.status_code == 201
+    assert r.json()["tags"] == []

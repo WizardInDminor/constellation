@@ -186,6 +186,34 @@ async def is_project_hub(db: aiosqlite.Connection, hub_node_id: str) -> bool:
     return bool(row and row["is_project_hub"])
 
 
+async def resolve_by_name(db: aiosqlite.Connection, name: str) -> tuple[str, str] | None:
+    """Resolve a `--project <name>` value to (hub_node_id, primary_tag_id).
+
+    Match strategy (ADR-063): join `tags` against `project_scopes.primary_tag_id`
+    on `tags.name`. Tag names are UNIQUE so a name matches at most one tag,
+    which is associated with at most one project. Case-insensitive match for
+    CLI friendliness.
+
+    Returns None if no project has a primary tag whose name matches (either
+    no project has set a primary tag yet, or the name is wrong).
+    """
+    cursor = await db.execute(
+        """SELECT n.id AS hub_id, s.primary_tag_id
+           FROM project_scopes s
+           JOIN tags t ON t.id = s.primary_tag_id
+           JOIN nodes n ON n.id = s.hub_node_id
+           WHERE LOWER(t.name) = LOWER(?)
+             AND n.is_project_hub = 1
+             AND n.deleted_at IS NULL
+           LIMIT 1""",
+        (name,),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    return row["hub_id"], row["primary_tag_id"]
+
+
 # ---------------------------------------------------------------------------
 # Drafts
 # ---------------------------------------------------------------------------
