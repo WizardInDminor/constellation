@@ -85,7 +85,9 @@ function UploadForm({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listSources().then(setSources).catch(() => {});
+    listSources()
+      .then(setSources)
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,22 +130,23 @@ function UploadForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Import document</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="page-title mb-1.5">Import document</h1>
+        <p className="text-sm text-gray-500">
           Paste document content to extract literature notes.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Content */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="ingest-content" className="label">
             Document content
           </label>
           <textarea
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            id="ingest-content"
+            className="textarea font-mono"
             rows={16}
             placeholder="Paste markdown or plain text here…"
             value={content}
@@ -154,22 +157,25 @@ function UploadForm({
 
         {/* Source mode toggle */}
         <div>
-          <div className="flex gap-4 mb-3">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <p className="section-label mb-2">Source</p>
+          <div className="mb-3 flex gap-4">
+            <label className="flex cursor-pointer items-center gap-2">
               <input
                 type="radio"
                 checked={sourceMode === "new"}
                 onChange={() => setSourceMode("new")}
                 disabled={loading}
+                className="text-indigo-600"
               />
               <span className="text-sm text-gray-700">New source</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-2">
               <input
                 type="radio"
                 checked={sourceMode === "existing"}
                 onChange={() => setSourceMode("existing")}
                 disabled={loading || sources.length === 0}
+                className="text-indigo-600"
               />
               <span className="text-sm text-gray-700">
                 Existing source
@@ -183,12 +189,13 @@ function UploadForm({
           {sourceMode === "new" ? (
             <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="col-span-2">
-                <label className="block text-xs text-gray-600 mb-1">
+                <label htmlFor="ingest-title" className="label">
                   Title *
                 </label>
                 <input
+                  id="ingest-title"
                   type="text"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="input"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="MCP4922 Datasheet"
@@ -196,11 +203,12 @@ function UploadForm({
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label htmlFor="ingest-type" className="label">
                   Type *
                 </label>
                 <select
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  id="ingest-type"
+                  className="input"
                   value={type}
                   onChange={(e) => setType(e.target.value as SourceType)}
                   disabled={loading}
@@ -213,12 +221,13 @@ function UploadForm({
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label htmlFor="ingest-author" className="label">
                   Author
                 </label>
                 <input
+                  id="ingest-author"
                   type="text"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  className="input"
                   value={author}
                   onChange={(e) => setAuthor(e.target.value)}
                   placeholder="Optional"
@@ -226,10 +235,13 @@ function UploadForm({
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs text-gray-600 mb-1">URL</label>
+                <label htmlFor="ingest-url" className="label">
+                  URL
+                </label>
                 <input
+                  id="ingest-url"
                   type="text"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  className="input"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="file:/// or https://…"
@@ -239,7 +251,8 @@ function UploadForm({
             </div>
           ) : (
             <select
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Select an existing source"
+              className="input"
               value={selectedSourceId}
               onChange={(e) => setSelectedSourceId(e.target.value)}
               disabled={loading}
@@ -254,14 +267,22 @@ function UploadForm({
           )}
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <div className="alert-error">{error}</div>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="btn btn-primary w-full py-2.5"
         >
-          {loading ? "Processing sections… this may take up to a minute for large documents." : "Process document"}
+          {loading && (
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+            />
+          )}
+          {loading
+            ? "Processing sections… this may take up to a minute for large documents."
+            : "Process document"}
         </button>
       </form>
     </div>
@@ -283,10 +304,12 @@ function ReviewPage({
 }) {
   const router = useRouter();
   const [chunks, setChunks] = useState<ChunkState[]>(() =>
-    toChunkState(initialChunks)
+    toChunkState(initialChunks),
   );
   const [accepting, setAccepting] = useState(false);
-  const [progress, setProgress] = useState<Record<string, "pending" | "done" | "error">>({});
+  const [progress, setProgress] = useState<
+    Record<string, "pending" | "done" | "error">
+  >({});
   const [error, setError] = useState<string | null>(null);
 
   // Import options state
@@ -308,7 +331,7 @@ function ReviewPage({
 
   const totalChecked = chunks.reduce(
     (sum, c) => sum + c.candidates.filter((cand) => cand.checked).length,
-    0
+    0,
   );
 
   const toggleCandidate = (ci: number, candi: number) => {
@@ -319,10 +342,10 @@ function ReviewPage({
           : {
               ...c,
               candidates: c.candidates.map((cand, j) =>
-                j !== candi ? cand : { ...cand, checked: !cand.checked }
+                j !== candi ? cand : { ...cand, checked: !cand.checked },
               ),
-            }
-      )
+            },
+      ),
     );
   };
 
@@ -334,10 +357,10 @@ function ReviewPage({
           : {
               ...c,
               candidates: c.candidates.map((cand, j) =>
-                j !== candi ? cand : { ...cand, editTitle: val }
+                j !== candi ? cand : { ...cand, editTitle: val },
               ),
-            }
-      )
+            },
+      ),
     );
   };
 
@@ -349,10 +372,10 @@ function ReviewPage({
           : {
               ...c,
               candidates: c.candidates.map((cand, j) =>
-                j !== candi ? cand : { ...cand, editContent: val }
+                j !== candi ? cand : { ...cand, editContent: val },
               ),
-            }
-      )
+            },
+      ),
     );
   };
 
@@ -367,7 +390,7 @@ function ReviewPage({
       try {
         const allTags = await listTags();
         const existing = allTags.find(
-          (t) => t.name.toLowerCase() === tagName.toLowerCase()
+          (t) => t.name.toLowerCase() === tagName.toLowerCase(),
         );
         autoTagId = existing ? existing.id : (await createTag(tagName)).id;
       } catch {
@@ -376,7 +399,12 @@ function ReviewPage({
     }
 
     // 2. Build the accept list and create literature notes
-    const toAccept: { key: string; title: string; content: string; summary: string }[] = [];
+    const toAccept: {
+      key: string;
+      title: string;
+      content: string;
+      summary: string;
+    }[] = [];
     for (const chunk of chunks) {
       for (const cand of chunk.candidates) {
         if (cand.checked) {
@@ -412,7 +440,9 @@ function ReviewPage({
     }
 
     if (anyError) {
-      setError("Some notes failed to save. Check the errors above and try again.");
+      setError(
+        "Some notes failed to save. Check the errors above and try again.",
+      );
       setAccepting(false);
       return;
     }
@@ -441,42 +471,46 @@ function ReviewPage({
   };
 
   const totalCandidates = chunks.reduce((s, c) => s + c.candidates.length, 0);
-  const chunksWithCandidates = chunks.filter((c) => c.candidates.length > 0).length;
+  const chunksWithCandidates = chunks.filter(
+    (c) => c.candidates.length > 0,
+  ).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Review candidates</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="page-title mb-1.5">Review candidates</h1>
+          <p className="text-sm text-gray-500">
             {totalCandidates} candidate{totalCandidates !== 1 ? "s" : ""} across{" "}
-            {chunksWithCandidates} section{chunksWithCandidates !== 1 ? "s" : ""}
+            {chunksWithCandidates} section
+            {chunksWithCandidates !== 1 ? "s" : ""}
           </p>
         </div>
         <button
+          type="button"
           onClick={onStartOver}
-          className="text-sm text-gray-500 hover:text-gray-900"
+          className="btn btn-ghost btn-sm shrink-0"
         >
           ← Start over
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {chunks.map((chunk, ci) => (
-          <div key={chunk.chunk_index} className="rounded-lg border border-gray-200 overflow-hidden">
-            <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <div key={chunk.chunk_index} className="card overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2">
+              <span className="section-label">
                 Section {chunk.chunk_index + 1}
               </span>
               {chunk.heading && (
-                <span className="ml-2 text-sm font-medium text-gray-800">
+                <span className="text-sm font-medium text-gray-800">
                   {chunk.heading}
                 </span>
               )}
             </div>
 
             {chunk.error ? (
-              <div className="px-4 py-3 text-sm text-amber-700 bg-amber-50">
+              <div className="bg-amber-50 px-4 py-3 text-sm text-amber-700">
                 AI could not process this section: {chunk.error}
               </div>
             ) : chunk.candidates.length === 0 ? (
@@ -495,10 +529,10 @@ function ReviewPage({
                         prog === "done"
                           ? "bg-green-50 opacity-60"
                           : prog === "error"
-                          ? "bg-red-50"
-                          : cand.checked
-                          ? ""
-                          : "opacity-50"
+                            ? "bg-red-50"
+                            : cand.checked
+                              ? ""
+                              : "opacity-50"
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -513,23 +547,33 @@ function ReviewPage({
                           <input
                             type="text"
                             value={cand.editTitle}
-                            onChange={(e) => updateTitle(ci, candi, e.target.value)}
+                            onChange={(e) =>
+                              updateTitle(ci, candi, e.target.value)
+                            }
                             disabled={accepting || !cand.checked}
                             className="w-full rounded border-0 bg-transparent p-0 text-sm font-medium text-gray-900 focus:ring-0 focus:outline-none border-b border-transparent focus:border-gray-300"
                           />
                           <textarea
                             value={cand.editContent}
-                            onChange={(e) => updateContent(ci, candi, e.target.value)}
+                            onChange={(e) =>
+                              updateContent(ci, candi, e.target.value)
+                            }
                             disabled={accepting || !cand.checked}
                             rows={3}
                             className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 resize-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
                           />
-                          <p className="text-xs text-gray-400 italic">{cand.summary}</p>
+                          <p className="text-xs text-gray-400 italic">
+                            {cand.summary}
+                          </p>
                           {prog === "done" && (
-                            <span className="text-xs text-green-600 font-medium">Saved</span>
+                            <span className="text-xs text-green-600 font-medium">
+                              Saved
+                            </span>
                           )}
                           {prog === "error" && (
-                            <span className="text-xs text-red-600 font-medium">Failed to save</span>
+                            <span className="text-xs text-red-600 font-medium">
+                              Failed to save
+                            </span>
                           )}
                         </div>
                       </div>
@@ -543,37 +587,44 @@ function ReviewPage({
       </div>
 
       {/* Import options */}
-      <div className="rounded-lg border border-gray-200 overflow-hidden">
+      <div className="card overflow-hidden">
         <button
           type="button"
           onClick={() => setOptionsOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          aria-expanded={optionsOpen}
+          className="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100"
           disabled={accepting}
         >
           <span>Import options</span>
-          <span className="text-gray-400">{optionsOpen ? "▲" : "▼"}</span>
+          <span aria-hidden="true" className="text-gray-400">
+            {optionsOpen ? "▲" : "▼"}
+          </span>
         </button>
 
         {optionsOpen && (
-          <div className="px-4 py-4 space-y-4 bg-white border-t border-gray-200">
+          <div className="space-y-4 border-t border-gray-200 bg-white px-4 py-4">
             {/* Auto-tag */}
             <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-700 whitespace-nowrap shrink-0">
+              <label
+                htmlFor="ingest-autotag"
+                className="shrink-0 whitespace-nowrap text-sm text-gray-700"
+              >
                 Tag all accepted notes with:
               </label>
               <input
+                id="ingest-autotag"
                 type="text"
                 value={autoTag}
                 onChange={(e) => setAutoTag(e.target.value)}
                 disabled={accepting}
                 placeholder="e.g. mcp4922"
-                className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="input flex-1"
               />
             </div>
 
             {/* Hub note */}
             <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
                   checked={createHub}
@@ -581,16 +632,19 @@ function ReviewPage({
                   disabled={accepting}
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600"
                 />
-                <span className="text-sm text-gray-700">Create a hub note for this import</span>
+                <span className="text-sm text-gray-700">
+                  Create a hub note for this import
+                </span>
               </label>
               {createHub && (
                 <input
                   type="text"
+                  aria-label="Hub note title"
                   value={hubTitle}
                   onChange={(e) => setHubTitle(e.target.value)}
                   disabled={accepting}
                   placeholder="Hub note title"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="input"
                 />
               )}
             </div>
@@ -598,17 +652,24 @@ function ReviewPage({
         )}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <div className="alert-error">{error}</div>}
 
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 py-3 flex items-center justify-between">
+      <div className="sticky bottom-0 -mx-4 flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-4 py-3">
         <span className="text-sm text-gray-500">
           {totalChecked} note{totalChecked !== 1 ? "s" : ""} selected
         </span>
         <button
+          type="button"
           onClick={handleAccept}
           disabled={accepting || totalChecked === 0}
-          className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="btn btn-primary px-5 py-2"
         >
+          {accepting && (
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+            />
+          )}
           {accepting
             ? "Saving…"
             : `Accept ${totalChecked} selected note${totalChecked !== 1 ? "s" : ""}`}
@@ -624,7 +685,13 @@ function ReviewPage({
 
 export default function IngestPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-gray-500">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-2xl px-4 py-8 text-sm text-gray-500">
+          Loading…
+        </div>
+      }
+    >
       <IngestPageInner />
     </Suspense>
   );
@@ -652,7 +719,7 @@ function IngestPageInner() {
           chunks_processed: pending.chunks.length,
           total_candidates: pending.chunks.reduce(
             (s, c) => s + c.candidates.length,
-            0
+            0,
           ),
           chunks: pending.chunks,
         });
@@ -660,21 +727,22 @@ function IngestPageInner() {
       })
       .catch(() => {
         setLoadError(
-          "No pending import found for this source. It may have expired (7-day TTL) or already been accepted."
+          "No pending import found for this source. It may have expired (7-day TTL) or already been accepted.",
         );
       });
   }, [urlSourceId]);
 
   if (loadError) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-red-600">{loadError}</p>
+      <div className="mx-auto max-w-2xl space-y-4 px-4 py-8">
+        <div className="alert-error">{loadError}</div>
         <button
+          type="button"
           onClick={() => {
             setLoadError(null);
             setStep("upload");
           }}
-          className="text-sm text-indigo-600 hover:underline"
+          className="btn btn-secondary"
         >
           Start a new import
         </button>
