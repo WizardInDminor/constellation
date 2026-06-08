@@ -460,7 +460,7 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
                   setSourceQuery("");
                   setShowNewSource(false);
                 }}
-                className="text-blue-400 hover:text-blue-700 shrink-0"
+                className="shrink-0 text-gray-400 hover:text-gray-600"
                 aria-label="Clear selected source"
               >
                 ×

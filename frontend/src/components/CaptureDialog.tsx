@@ -79,17 +79,10 @@ export function CaptureDialog({ open, onClose }: Props) {
             <kbd className="font-mono">Esc</kbd> to close
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900 transition-colors"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-md shadow-sm hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
-            >
+            <button type="submit" className="btn btn-primary">
               Capture
             </button>
           </div>

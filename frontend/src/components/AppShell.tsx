@@ -101,6 +101,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* Keyboard/screen-reader users can jump past the nav to content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-indigo-600 focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-md"
+      >
+        Skip to content
+      </a>
       <header className="border-b border-gray-200 bg-white/95 backdrop-blur sticky top-0 z-10">
         <nav className="w-full px-4 sm:px-6 h-12 flex items-center gap-4">
           <Link
@@ -159,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setCaptureOpen(true)}
               title="Capture (Ctrl+K)"
-              className="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+              className="btn btn-primary"
             >
               Capture
               <span className="hidden lg:inline opacity-60 text-xs font-mono">
@@ -170,6 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
       <main
+        id="main-content"
         className={fullBleed ? "w-full" : "max-w-4xl mx-auto px-4 sm:px-6 py-8"}
       >
         {children}
