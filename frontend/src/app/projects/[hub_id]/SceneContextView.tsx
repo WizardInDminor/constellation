@@ -39,6 +39,7 @@ import type {
   SceneContextResponse,
 } from "@/lib/api";
 import { NodeInteractionPopup } from "@/components/NodeInteractionPopup";
+import { NoteContent } from "@/components/NoteContent";
 
 interface Props {
   hubId: string;
@@ -389,9 +390,10 @@ function FocusedNodeView({
       {node.summary && (
         <p className="text-xs text-gray-500 italic">{node.summary}</p>
       )}
-      <div className="prose prose-sm max-w-none text-sm whitespace-pre-wrap">
-        {node.content}
-      </div>
+      <NoteContent
+        content={node.content}
+        className="prose prose-sm max-w-none text-sm"
+      />
       <Link
         href={`/nodes/${node.id}`}
         className="block text-xs text-indigo-600 hover:underline"

@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import type { EdgeType, NodeDetail, NodeRef, TagRef } from "@/lib/api";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 interface Props {
   nodeId: string;
@@ -229,8 +230,9 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
               <label htmlFor="nip-content" className="label">
                 Content
               </label>
-              <textarea
+              <MarkdownTextarea
                 id="nip-content"
+                previewValue={content}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={6}

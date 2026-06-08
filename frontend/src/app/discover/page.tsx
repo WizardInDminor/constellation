@@ -24,6 +24,7 @@ import type {
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
 import { NotePreviewPopover } from "@/components/NotePreviewPopover";
+import { NoteContent } from "@/components/NoteContent";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
 type Tab = "orphans" | "stale" | "bridges" | "triangles";
@@ -341,11 +342,14 @@ function BridgeNoteSection({
       )}
 
       {detail ? (
-        <div className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin pr-1 whitespace-pre-wrap break-words">
-          {detail.content || detail.summary || (
-            <span className="italic text-gray-400">No content</span>
-          )}
-        </div>
+        detail.content || detail.summary ? (
+          <NoteContent
+            content={detail.content || detail.summary || ""}
+            className="prose prose-sm max-w-none text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin break-words pr-1"
+          />
+        ) : (
+          <span className="text-xs italic text-gray-400">No content</span>
+        )
       ) : (
         <div className="text-xs text-gray-400 italic">
           Could not load note content.
@@ -1179,9 +1183,12 @@ export default function DiscoverPage() {
                 <div className="skeleton h-2.5 w-3/4" />
               </div>
             ) : selectedNodeDetail?.content || selectedNodeDetail?.summary ? (
-              <p className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-words pr-1">
-                {selectedNodeDetail.content || selectedNodeDetail.summary}
-              </p>
+              <NoteContent
+                content={
+                  selectedNodeDetail.content || selectedNodeDetail.summary || ""
+                }
+                className="prose prose-sm max-w-none text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin break-words pr-1"
+              />
             ) : selectedNode.summary ? (
               <p className="text-xs text-gray-500 leading-relaxed break-words">
                 {selectedNode.summary}

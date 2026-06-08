@@ -31,7 +31,7 @@ import { LearningMapPanel } from "./LearningMapPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { StoryDumpPanel } from "./StoryDumpPanel";
 import { NarrativeRoleList } from "./NarrativeRoleList";
-import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
+import { NoteContent } from "@/components/NoteContent";
 import { NARRATIVE_TAGS } from "@/lib/api";
 
 const MODE_ACCENT: Record<ProjectMode, { dot: string; chip: string }> = {
@@ -659,7 +659,7 @@ function DraftMermaidPreview({ content }: { content: string }) {
         </button>
       </div>
       <div className="prose prose-sm max-w-none">
-        <MarkdownWithMermaid>{debounced}</MarkdownWithMermaid>
+        <NoteContent content={debounced} />
       </div>
     </div>
   );
@@ -725,7 +725,7 @@ function AskResultPanel({
         </button>
       </div>
       <div className="prose prose-sm max-w-none text-sm">
-        <MarkdownWithMermaid>{response.answer}</MarkdownWithMermaid>
+        <NoteContent content={response.answer} />
       </div>
       {response.provenance.length > 0 && (
         <div className="text-xs">

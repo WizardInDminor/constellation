@@ -1123,7 +1123,7 @@ Two candidates were considered:
 
 ## ADR-037 — Markdown rendering on the node detail view, raw textarea on edit
 
-**Status:** Accepted
+**Status:** Superseded by ADR-073
 
 **Context:** Saved syntheses (and any user-authored note) often contain markdown:
 headings, lists, bold, code blocks, links. Until now `/nodes/[id]` rendered
@@ -4505,7 +4505,7 @@ the axis affects both consistently.
 
 ---
 
-## ADR-073 — Frontend visual foundation: single accent, global focus ring, scrolling nav
+## ADR-074 — Frontend visual foundation: single accent, global focus ring, scrolling nav
 
 **Status:** Accepted
 
@@ -4559,11 +4559,11 @@ adopt a component library:
 
 ---
 
-## ADR-074 — Shared UI primitives via a Tailwind `@layer components` layer
+## ADR-075 — Shared UI primitives via a Tailwind `@layer components` layer
 
 **Status:** Accepted
 
-**Context:** ADR-073 unified the global chrome, but each page still styled
+**Context:** ADR-074 unified the global chrome, but each page still styled
 buttons, inputs, cards, badges, and empty/loading/error states with bespoke
 inline Tailwind strings. The same button appeared as `px-3 py-1 rounded
 bg-indigo-600 …` on one page and `px-3 py-1.5 rounded-md bg-indigo-600 …` on
@@ -4607,6 +4607,69 @@ own only the visual identity. No React component library was introduced.
 - Because layout stays at the call site, the classes never fight the page —
   but callers must still supply `w-full`, `ml-auto`, etc. where needed.
 - Purely presentational: no routes, data, or component APIs changed.
+
+---
+
+## ADR-073 — Markdown-first note content with KaTeX math rendering
+
+> Numbering note: the prompt that scoped this work referred to it as
+> "ADR-034", but that number (and several others) was already taken by the
+> time this was implemented. Per the append-only convention, this ADR takes
+> the next free number, ADR-073. Cross-references in `architecture.md` § 7
+> and `docs-site/architecture/stack.md` point here. Supersedes ADR-037.
+
+**Status:** Accepted
+
+**Context:** Note content was stored as plain text and rendered inconsistently
+across surfaces — some used `react-markdown` + `remark-gfm`, others rendered
+raw text. There was no support for mathematical or engineering notation, which
+is needed for embedded systems and technical notes (register values, formulas,
+signal timing expressions). A consistent rendering contract was needed.
+
+**Decision:** All note content is treated as markdown by default, both at entry
+time (textarea input) and display time (all rendering surfaces). LaTeX math
+syntax is supported via `remark-math` + `rehype-katex` + KaTeX CSS. A single
+shared `<NoteContent>` component is the canonical renderer used by every surface
+that displays note body text. Note entry textareas gain a Write/Preview toggle
+for inline verification of formatting and math.
+
+**Rationale:**
+
+- Plain text stored in a markdown-aware system has no downside: it renders as
+  plain text with no data loss, no FTS5 interference, and no schema changes.
+- KaTeX is significantly faster than MathJax and covers the full LaTeX math
+  vocabulary needed for engineering and embedded systems notation.
+- A single shared `NoteContent` component ensures rendering consistency across
+  all surfaces (note detail, inbox, process page, RAG answers, graph panel,
+  narrative surfaces) without per-surface maintenance.
+- The Write/Preview toggle on textareas provides lightweight verification without
+  the complexity of a full split-pane editor.
+- No backend changes are needed: markdown syntax and LaTeX delimiters are plain
+  characters at the storage layer, fully compatible with FTS5 and the RAG context
+  assembly pipeline (ADR-022). The minor token overhead of markdown syntax in
+  RAG context is negligible at personal tool scale.
+
+**Consequences:**
+
+- All new and existing note content is now interpreted as markdown. A note with
+  an accidental asterisk will italicize rather than render literally — acceptable
+  and expected for a markdown-first system.
+- KaTeX math syntax: inline math with `$...$`, display math with `$$...$$`.
+- `NoteContent` absorbs the existing fenced-`mermaid` code-block handling that
+  previously lived in `MarkdownWithMermaid` (now removed), so diagram rendering
+  is preserved alongside math. All other fenced code blocks keep their default
+  monospace treatment.
+- Narrative surfaces (Story Dump, Timeline → Scene Context, etc.) render note
+  content through `NoteContent` — this is correct behavior, not a special case.
+- The RAG context sent to Claude contains raw markdown and LaTeX delimiters.
+  Claude handles these naturally; the token overhead is negligible.
+- Compact one-line list labels that show a truncated `summary` (e.g. search
+  results, the Notes list) remain plain text: markdown block rendering is
+  incompatible with `line-clamp` truncation, and these are navigational labels,
+  not content surfaces. `NoteContent` is used for every full-content and
+  multi-line excerpt display.
+- Adding a new surface that displays note content requires using `NoteContent` —
+  this is now the established convention, documented here.
 
 ---
 

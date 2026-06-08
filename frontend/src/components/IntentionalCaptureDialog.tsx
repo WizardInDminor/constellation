@@ -20,6 +20,7 @@ import type {
   TagRef,
 } from "@/lib/api";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 const SOURCE_TYPES = [
   "datasheet",
@@ -336,7 +337,7 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
           <label htmlFor="ic-content" className="label">
             Content
           </label>
-          <textarea
+          <MarkdownTextarea
             id="ic-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}

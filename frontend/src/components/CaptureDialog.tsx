@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createFleetingNode } from "@/lib/api";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 interface Props {
   open: boolean;
@@ -65,7 +66,7 @@ export function CaptureDialog({ open, onClose }: Props) {
         aria-label="Capture a thought"
         className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 flex flex-col gap-3"
       >
-        <textarea
+        <MarkdownTextarea
           ref={textareaRef}
           onKeyDown={handleKeyDown}
           placeholder="What are you thinking?"

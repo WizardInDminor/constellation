@@ -11,6 +11,8 @@ import {
 } from "@/lib/api";
 import type { NodeDetail } from "@/lib/api";
 import Link from "next/link";
+import { NoteContent } from "@/components/NoteContent";
+import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 
 type CandidateField = {
   title: string;
@@ -226,9 +228,10 @@ export default function ProcessPage() {
         <div className="card flex flex-col gap-2 p-4">
           <span className="badge bg-amber-100 text-amber-700">Fleeting</span>
           <h2 className="font-semibold text-gray-900">{fleeting?.title}</h2>
-          <p className="whitespace-pre-wrap break-words text-sm text-gray-600">
-            {fleeting?.content}
-          </p>
+          <NoteContent
+            content={fleeting?.content ?? ""}
+            className="prose prose-sm max-w-none break-words text-sm text-gray-600"
+          />
         </div>
 
         {/* Candidate cards */}
@@ -276,9 +279,10 @@ export default function ProcessPage() {
                   >
                     Content
                   </label>
-                  <textarea
+                  <MarkdownTextarea
                     id={`candidate-${index}-content`}
                     {...register(`candidates.${index}.content`)}
+                    previewValue={watchedCandidates[index]?.content ?? ""}
                     disabled={!isAccepted}
                     rows={4}
                     placeholder="Content"

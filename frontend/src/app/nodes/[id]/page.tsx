@@ -17,7 +17,8 @@ import {
   openSource,
   ragQuery,
 } from "@/lib/api";
-import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
+import { NoteContent } from "@/components/NoteContent";
+import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
 import type {
   NodeDetail,
@@ -109,10 +110,16 @@ function EditableField({
 
   if (editing) {
     return multiline ? (
-      <textarea
-        {...sharedProps}
-        className={`textarea ${className}`}
+      <MarkdownTextarea
+        ref={ref as React.Ref<HTMLTextAreaElement>}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        previewValue={draft}
+        aria-label="Edit content"
         rows={10}
+        className={`textarea ${className}`}
       />
     ) : (
       <input {...sharedProps} className={`input ${className}`} />
@@ -127,9 +134,7 @@ function EditableField({
     >
       {value ? (
         markdown ? (
-          <div className="prose prose-sm max-w-none">
-            <MarkdownWithMermaid>{value}</MarkdownWithMermaid>
-          </div>
+          <NoteContent content={value} className="prose prose-sm max-w-none" />
         ) : (
           value
         )
@@ -822,7 +827,7 @@ function CriticPanel({ node }: { node: NodeDetail }) {
 
       {answer && (
         <div className="prose prose-sm max-w-none text-sm text-gray-700">
-          <MarkdownWithMermaid>{answer}</MarkdownWithMermaid>
+          <NoteContent content={answer} />
         </div>
       )}
     </div>

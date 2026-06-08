@@ -22,6 +22,7 @@ import type {
   NarrativeDumpResponse,
   ProjectScope,
 } from "@/lib/api";
+import { NoteContent } from "@/components/NoteContent";
 
 const DUMP_TYPES: {
   value: "story-arc" | "character" | "themes";
@@ -262,9 +263,10 @@ export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
                       {c.story_time && ` · ${c.story_time}`}
                       {c.archetype && ` · ${c.archetype}`}
                     </p>
-                    <p className="text-xs text-gray-600 mt-1.5">
-                      {c.description}
-                    </p>
+                    <NoteContent
+                      content={c.description}
+                      className="prose prose-sm max-w-none text-xs text-gray-600 mt-1.5"
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5 shrink-0">
                     <button

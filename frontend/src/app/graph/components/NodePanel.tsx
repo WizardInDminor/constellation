@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { GraphNodeRef, NodeDetail } from "@/lib/api";
 import { nodeColor } from "../colors";
+import { NoteContent } from "@/components/NoteContent";
 
 interface Props {
   node: GraphNodeRef;
@@ -164,9 +165,10 @@ function NotePanel({
               <div className="skeleton h-3 w-5/6 bg-gray-700" />
             </div>
           ) : detail?.content || detail?.summary ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">
-              {detail.content || detail.summary}
-            </p>
+            <NoteContent
+              content={detail.content || detail.summary}
+              className="prose prose-sm prose-invert max-w-none text-sm text-gray-300 leading-relaxed"
+            />
           ) : (
             <p className="text-xs italic text-gray-500">No content yet.</p>
           )}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getNode } from "@/lib/api";
 import type { NodeDetail, TagRef } from "@/lib/api";
+import { NoteContent } from "./NoteContent";
 
 const TYPE_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
@@ -123,17 +124,19 @@ export function NodeDetailDrawer({ nodeId, onClose }: NodeDetailDrawerProps) {
               {detail.summary && (
                 <div>
                   <div className="section-label mb-1">Summary</div>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-                    {detail.summary}
-                  </p>
+                  <NoteContent
+                    content={detail.summary}
+                    className="prose prose-sm max-w-none text-sm text-gray-700 leading-relaxed"
+                  />
                 </div>
               )}
               {detail.content && (
                 <div>
                   <div className="section-label mb-1">Content</div>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                    {detail.content}
-                  </p>
+                  <NoteContent
+                    content={detail.content}
+                    className="prose prose-sm max-w-none text-sm text-gray-800 leading-relaxed"
+                  />
                 </div>
               )}
               {!detail.content && !detail.summary && (

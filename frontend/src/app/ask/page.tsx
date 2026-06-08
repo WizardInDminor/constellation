@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { MarkdownWithMermaid } from "@/components/MarkdownWithMermaid";
+import { NoteContent } from "@/components/NoteContent";
 import { listTags, ragQuery, saveAnswer } from "@/lib/api";
 import { resolveCitations } from "@/lib/citations";
 import type {
@@ -478,7 +478,7 @@ export default function AskPage() {
       {resolvedAnswer && response && (
         <div className="mt-6">
           <div className="card prose prose-sm max-w-none break-words px-6 py-5">
-            <MarkdownWithMermaid>{resolvedAnswer}</MarkdownWithMermaid>
+            <NoteContent content={resolvedAnswer} />
           </div>
 
           <div className="mt-3 flex justify-end">
