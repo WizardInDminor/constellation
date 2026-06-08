@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getNode } from "@/lib/api";
 import type { NodeSummary, TagRef } from "@/lib/api";
+import { NoteContent } from "./NoteContent";
 
 const TYPE_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
@@ -92,9 +93,10 @@ export function NotePreviewPopover({ node, anchorRef, visible }: NotePreviewPopo
           <div className="h-2.5 bg-gray-100 rounded animate-pulse w-3/4" />
         </div>
       ) : displayContent ? (
-        <p className="text-xs text-gray-600 leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap pr-1">
-          {displayContent}
-        </p>
+        <NoteContent
+          content={displayContent}
+          className="prose prose-sm max-w-none text-xs text-gray-600 leading-relaxed max-h-64 overflow-y-auto pr-1"
+        />
       ) : (
         <p className="text-xs text-gray-300 italic">No content</p>
       )}

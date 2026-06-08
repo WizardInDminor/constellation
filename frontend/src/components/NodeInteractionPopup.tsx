@@ -37,6 +37,7 @@ import type {
   TagRef,
 } from "@/lib/api";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 interface Props {
   nodeId: string;
@@ -235,7 +236,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
               <label className="block text-[11px] font-medium text-gray-600 mb-1">
                 Content
               </label>
-              <textarea
+              <MarkdownTextarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={6}

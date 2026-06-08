@@ -32,6 +32,8 @@ The response includes:
 
 Inline citations like `[Note 3]` are rendered as links. Click them to open the source note in a new tab and read the original text in context.
 
+The answer is rendered with full **markdown and math** support (`$...$` inline, `$$...$$` display) — if your notes contain mathematical or engineering notation, Claude may reproduce it in the synthesized answer and it will render correctly formatted rather than as raw LaTeX.
+
 The provenance panel is always populated, even for notes the model didn't explicitly cite — it reflects every note that entered the context window, not just the ones Claude mentioned.
 
 ---

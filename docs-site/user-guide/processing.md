@@ -28,6 +28,8 @@ Navigate to **Inbox** (`/inbox`) to see all unprocessed fleeting notes, sorted o
    - Reject to discard that candidate
 6. Navigate back to the inbox when done
 
+The original fleeting note and each candidate permanent note are displayed with full **markdown and math rendering** (`$...$` inline, `$$...$$` display). The candidate edit textareas carry a **Write / Preview** toggle, so you can switch from editing the raw text to seeing exactly how it will render before you accept.
+
 !!! info "Draft state persists"
     Your edits to candidates are saved to `sessionStorage` as you type. If you navigate away accidentally, the draft is restored when you return to the same process page. Accepting or discarding a note clears its draft.
 

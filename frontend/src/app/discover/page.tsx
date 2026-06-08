@@ -24,6 +24,7 @@ import type {
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
 import { NotePreviewPopover } from "@/components/NotePreviewPopover";
+import { NoteContent } from "@/components/NoteContent";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
 type Tab = "orphans" | "stale" | "bridges" | "triangles";
@@ -303,9 +304,14 @@ function BridgeNoteSection({
       )}
 
       {detail ? (
-        <div className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto pr-1 whitespace-pre-wrap">
-          {detail.content || detail.summary || <span className="italic text-gray-400">No content</span>}
-        </div>
+        detail.content || detail.summary ? (
+          <NoteContent
+            content={detail.content || detail.summary || ""}
+            className="prose prose-sm max-w-none text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto pr-1"
+          />
+        ) : (
+          <span className="text-xs italic text-gray-400">No content</span>
+        )
       ) : (
         <div className="text-xs text-gray-400 italic">Could not load note content.</div>
       )}
@@ -961,9 +967,10 @@ export default function DiscoverPage() {
                 <div className="h-2.5 bg-gray-100 rounded animate-pulse w-3/4" />
               </div>
             ) : (selectedNodeDetail?.content || selectedNodeDetail?.summary) ? (
-              <p className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap pr-1">
-                {selectedNodeDetail.content || selectedNodeDetail.summary}
-              </p>
+              <NoteContent
+                content={selectedNodeDetail.content || selectedNodeDetail.summary || ""}
+                className="prose prose-sm max-w-none text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto pr-1"
+              />
             ) : selectedNode.summary ? (
               <p className="text-xs text-gray-500 leading-relaxed">{selectedNode.summary}</p>
             ) : null}

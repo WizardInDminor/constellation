@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createStructureNode } from "@/lib/api";
 import Link from "next/link";
+import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 
 export default function NewStructurePage() {
   const router = useRouter();
@@ -52,7 +53,7 @@ export default function NewStructurePage() {
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Content
           </label>
-          <textarea
+          <MarkdownTextarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Curated overview of this domain…"

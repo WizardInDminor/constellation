@@ -16,6 +16,14 @@ Press **`Ctrl+K`** anywhere in the web app to open the quick capture dialog. Typ
 
 Quick capture is intentionally minimal. The goal is zero friction — capture the thought before it disappears, process it later. Don't try to write a perfect permanent note here; that's what the processing workflow is for.
 
+Note content is **markdown** — headings, lists, bold, code, and links all render. You can also write **math** using LaTeX: `$...$` for inline and `$$...$$` for display. For example:
+
+```
+$V_{out} = V_{ref}\left(1 + \frac{R_1}{R_2}\right)$
+```
+
+Use the **Write / Preview** toggle above the textarea to check that formatting and math render the way you expect before capturing.
+
 ---
 
 ## Intentional capture — `Shift+Ctrl+K`
@@ -27,6 +35,8 @@ Press **`Shift+Ctrl+K`** to open the full intentional capture dialog. This mode 
 - **Structure** — a Map of Content that collects other notes
 
 The intentional capture dialog supports tag assignment and, for literature notes, inline source creation so you never have to navigate away mid-capture.
+
+As with quick capture, the content field is **markdown** with **math** support (`$...$` inline, `$$...$$` display, e.g. `$V_{out} = V_{ref}\left(1 + \frac{R_1}{R_2}\right)$`). A **Write / Preview** toggle above the content field renders the current text through the same renderer used everywhere else in the app.
 
 ---
 
@@ -49,6 +59,8 @@ con
 The interactive mode (no args) makes `con` useful from a keyboard launcher (rofi, dmenu, etc.) where you can't easily type flags before the command.
 
 `con` requires the backend to be running. If the server is unreachable, it prints a clear error to stderr and exits non-zero — no silent failures.
+
+Note content captured from the terminal is **markdown** with **math** support too — write `$...$` for inline and `$$...$$` for display math (e.g. `$V_{out} = V_{ref}\left(1 + \frac{R_1}{R_2}\right)$`). It's stored as plain text and renders with full formatting and math wherever it's displayed in the web app.
 
 ---
 
