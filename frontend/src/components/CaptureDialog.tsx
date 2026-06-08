@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createFleetingNode } from "@/lib/api";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 interface Props {
   open: boolean;
@@ -64,7 +65,7 @@ export function CaptureDialog({ open, onClose }: Props) {
         <p className="text-xs text-gray-400">
           First line becomes the title · Ctrl+Enter to capture · Esc to close
         </p>
-        <textarea
+        <MarkdownTextarea
           ref={textareaRef}
           onKeyDown={handleKeyDown}
           placeholder="What are you thinking?"

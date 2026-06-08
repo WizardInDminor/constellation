@@ -35,7 +35,7 @@ All embedding and generation calls go through `EmbeddingProvider` / `GenerationP
 | **Language** | TypeScript | Types generated from FastAPI's OpenAPI spec via `pnpm types` — never hand-written |
 | **Styling** | Tailwind CSS | Utility-first, co-located with components, no CSS file management |
 | **Graph viz** | react-force-graph-2d | Canvas-based, force-directed, React-native API; purpose-built for this use case |
-| **Markdown** | react-markdown + remark-gfm | Note content and RAG answers rendered with GFM support |
+| **Markdown** | react-markdown + remark-gfm + remark-math + rehype-katex (KaTeX) | Note content rendered markdown-first across all surfaces; math via `$...$` / `$$...$$` LaTeX syntax. See ADR-073. |
 | **Forms** | react-hook-form + zod | For non-trivial forms (capture dialogs, edge creation) |
 
 ## Tooling

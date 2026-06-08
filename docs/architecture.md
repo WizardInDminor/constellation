@@ -692,8 +692,13 @@ to the answer, and the UI links back to them.
   Imported via `dynamic(..., { ssr: false })` due to canvas browser-only APIs.
   `cooldownTime={1500}` overrides the default 15 s physics timeout so `onEngineStop`
   / `zoomToFit` fires within ~2 s.
-- **Markdown rendering**: `react-markdown` + `remark-gfm`. Used on `/ask`,
-  `/synthesize`, and the note detail view (`EditableField` with `markdown` prop).
+- **Markdown rendering**: All note content is markdown-first. The canonical
+  renderer is `<NoteContent>` (`components/NoteContent.tsx`), which wraps
+  `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex` (KaTeX) and
+  also handles fenced `mermaid` diagram blocks. Every surface that displays note
+  body text must use this component. Inline math: `$...$`. Display math:
+  `$$...$$`. Note entry textareas use `<MarkdownTextarea>`, which adds a
+  Write/Preview toggle. See ADR-073.
 - **Shared components** (lives in `frontend/src/components/`):
   - `NodePicker` — debounced FTS search input for selecting a note. `exclude` prop
     accepts `string | string[]`. Used on note detail, Discover slide-out,

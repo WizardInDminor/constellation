@@ -20,6 +20,7 @@ import type {
   TagRef,
 } from "@/lib/api";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
+import { MarkdownTextarea } from "./MarkdownTextarea";
 
 const SOURCE_TYPES = ["datasheet", "manual", "book", "article", "video", "podcast", "other"] as const;
 
@@ -293,7 +294,7 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
           className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
 
-        <textarea
+        <MarkdownTextarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder="Content"
