@@ -1,7 +1,11 @@
 "use client";
 
 import { NODE_COLORS, EDGE_COLORS } from "../colors";
-import { ALL_EDGE_TYPES, ALL_NODE_TYPES, type FilterState } from "../filterGraph";
+import {
+  ALL_EDGE_TYPES,
+  ALL_NODE_TYPES,
+  type FilterState,
+} from "../filterGraph";
 
 interface Props {
   state: FilterState;
@@ -21,18 +25,21 @@ function toggle<T>(set: Set<T>, value: T): Set<T> {
 
 export function FilterBar({ state, allTags, onChange }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-3 px-3 py-2 bg-gray-900 border-b border-gray-700 text-xs select-none">
+    <div className="flex select-none flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-700 bg-gray-900 px-4 py-2 text-xs">
       {/* Node types */}
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         {ALL_NODE_TYPES.map((type) => {
           const active = state.nodeTypes.has(type);
           const color = NODE_COLORS[type];
           return (
             <button
               key={type}
-              onClick={() => onChange({ ...state, nodeTypes: toggle(state.nodeTypes, type) })}
-              className={`flex items-center gap-1 rounded px-2 py-0.5 border transition-opacity ${
-                active ? "opacity-100" : "opacity-40"
+              onClick={() =>
+                onChange({ ...state, nodeTypes: toggle(state.nodeTypes, type) })
+              }
+              aria-pressed={active}
+              className={`flex items-center gap-1 rounded border px-2 py-0.5 font-medium transition-opacity ${
+                active ? "opacity-100" : "opacity-40 hover:opacity-70"
               }`}
               style={{
                 borderColor: color + "66",
@@ -42,7 +49,7 @@ export function FilterBar({ state, allTags, onChange }: Props) {
               title={`Toggle ${type} nodes`}
             >
               <span
-                className="inline-block w-2 h-2 rounded-full"
+                className="inline-block h-2 w-2 rounded-full"
                 style={{ backgroundColor: color }}
               />
               {type}
@@ -51,19 +58,22 @@ export function FilterBar({ state, allTags, onChange }: Props) {
         })}
       </div>
 
-      <div className="w-px h-4 bg-gray-600" />
+      <div className="h-4 w-px bg-gray-600" />
 
       {/* Edge types */}
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className="flex flex-wrap items-center gap-1">
         {ALL_EDGE_TYPES.map((type) => {
           const active = state.edgeTypes.has(type);
           const color = EDGE_COLORS[type];
           return (
             <button
               key={type}
-              onClick={() => onChange({ ...state, edgeTypes: toggle(state.edgeTypes, type) })}
-              className={`rounded px-1.5 py-0.5 border font-mono transition-opacity ${
-                active ? "opacity-100" : "opacity-35"
+              onClick={() =>
+                onChange({ ...state, edgeTypes: toggle(state.edgeTypes, type) })
+              }
+              aria-pressed={active}
+              className={`rounded border px-1.5 py-0.5 font-mono transition-opacity ${
+                active ? "opacity-100" : "opacity-35 hover:opacity-60"
               }`}
               style={{
                 borderColor: color + "55",
@@ -78,7 +88,7 @@ export function FilterBar({ state, allTags, onChange }: Props) {
         })}
       </div>
 
-      <div className="w-px h-4 bg-gray-600" />
+      <div className="h-4 w-px bg-gray-600" />
 
       {/* Tag filter */}
       {allTags.length > 0 && (
@@ -87,7 +97,8 @@ export function FilterBar({ state, allTags, onChange }: Props) {
           onChange={(e) =>
             onChange({ ...state, selectedTag: e.target.value || null })
           }
-          className="bg-gray-800 border border-gray-600 text-gray-300 rounded px-2 py-0.5 text-xs"
+          aria-label="Filter by tag"
+          className="rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-300 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
           <option value="">All tags</option>
           {allTags.map((tag) => (
@@ -99,17 +110,19 @@ export function FilterBar({ state, allTags, onChange }: Props) {
       )}
 
       {/* Hide isolated */}
-      <label className="flex items-center gap-1.5 cursor-pointer text-gray-400 hover:text-gray-200">
+      <label className="flex cursor-pointer items-center gap-1.5 text-gray-400 transition-colors hover:text-gray-200">
         <input
           type="checkbox"
           checked={state.hideIsolated}
-          onChange={(e) => onChange({ ...state, hideIsolated: e.target.checked })}
-          className="rounded border-gray-600 bg-gray-800 text-indigo-500"
+          onChange={(e) =>
+            onChange({ ...state, hideIsolated: e.target.checked })
+          }
+          className="rounded border-gray-600 bg-gray-800 text-indigo-500 focus:ring-indigo-500"
         />
         Hide isolated
       </label>
 
-      <div className="w-px h-4 bg-gray-600" />
+      <div className="h-4 w-px bg-gray-600" />
 
       {/* Search */}
       <input
@@ -117,18 +130,20 @@ export function FilterBar({ state, allTags, onChange }: Props) {
         placeholder="Highlight nodes…"
         value={state.searchQuery}
         onChange={(e) => onChange({ ...state, searchQuery: e.target.value })}
-        className="bg-gray-800 border border-gray-600 text-gray-200 placeholder-gray-500 rounded px-2 py-0.5 text-xs w-40"
+        aria-label="Highlight nodes by title"
+        className="w-40 rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-200 placeholder-gray-500 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
 
       {/* Focus chip (driven by ?ids= URL param) */}
       {state.focusIds && state.focusIds.size > 0 && (
-        <div className="flex items-center gap-1.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 px-2 py-0.5">
+        <div className="ml-auto flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2.5 py-0.5 text-indigo-200">
           <span>
-            Focused on {state.focusIds.size} node{state.focusIds.size === 1 ? "" : "s"} + neighbors
+            Focused on {state.focusIds.size} node
+            {state.focusIds.size === 1 ? "" : "s"} + neighbors
           </span>
           <button
             onClick={() => onChange({ ...state, focusIds: null })}
-            className="text-indigo-200 hover:text-white"
+            className="leading-none text-indigo-200 transition-colors hover:text-white"
             aria-label="Clear focus"
             title="Clear focus"
           >

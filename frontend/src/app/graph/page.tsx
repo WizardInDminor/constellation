@@ -4,9 +4,26 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
-import { createEdge, getGraphData, getNode, listTags, updateNode } from "@/lib/api";
-import type { EdgeType, GraphData, GraphEdgeRef, GraphNodeRef, NodeDetail, TagRef } from "@/lib/api";
-import { applyFilters, initialFilterState, type FilterState } from "./filterGraph";
+import {
+  createEdge,
+  getGraphData,
+  getNode,
+  listTags,
+  updateNode,
+} from "@/lib/api";
+import type {
+  EdgeType,
+  GraphData,
+  GraphEdgeRef,
+  GraphNodeRef,
+  NodeDetail,
+  TagRef,
+} from "@/lib/api";
+import {
+  applyFilters,
+  initialFilterState,
+  type FilterState,
+} from "./filterGraph";
 import { FilterBar } from "./components/FilterBar";
 import { NodePanel } from "./components/NodePanel";
 import { EdgePanel } from "./components/EdgePanel";
@@ -29,7 +46,10 @@ export default function GraphPage() {
 
 function GraphPageInner() {
   const searchParams = useSearchParams();
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
+  const [graphData, setGraphData] = useState<GraphData>({
+    nodes: [],
+    edges: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +57,10 @@ function GraphPageInner() {
     const initial = initialFilterState();
     const ids = searchParams.get("ids");
     if (ids) {
-      const parsed = ids.split(",").map((s) => s.trim()).filter(Boolean);
+      const parsed = ids
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (parsed.length > 0) initial.focusIds = new Set(parsed);
     }
     return initial;
@@ -49,7 +72,9 @@ function GraphPageInner() {
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Connecting mode state
-  const [connectingFrom, setConnectingFrom] = useState<GraphNodeRef | null>(null);
+  const [connectingFrom, setConnectingFrom] = useState<GraphNodeRef | null>(
+    null,
+  );
   const [connectTarget, setConnectTarget] = useState<GraphNodeRef | null>(null);
 
   // Multi-select state
@@ -67,7 +92,9 @@ function GraphPageInner() {
         setError(String(err));
         setLoading(false);
       });
-    listTags().then(setAllTagRefs).catch(() => {});
+    listTags()
+      .then(setAllTagRefs)
+      .catch(() => {});
   }, []);
 
   // Escape key: cancel connecting mode and clear multi-select
@@ -190,15 +217,17 @@ function GraphPageInner() {
   }
 
   const fromTitle = selectedEdge
-    ? (graphData.nodes.find((n) => n.id === selectedEdge.from_id)?.title ?? selectedEdge.from_id)
+    ? (graphData.nodes.find((n) => n.id === selectedEdge.from_id)?.title ??
+      selectedEdge.from_id)
     : "";
   const toTitle = selectedEdge
-    ? (graphData.nodes.find((n) => n.id === selectedEdge.to_id)?.title ?? selectedEdge.to_id)
+    ? (graphData.nodes.find((n) => n.id === selectedEdge.to_id)?.title ??
+      selectedEdge.to_id)
     : "";
-  const resolverTitle =
-    selectedEdge?.resolved_by_node_id
-      ? (graphData.nodes.find((n) => n.id === selectedEdge.resolved_by_node_id)?.title ?? null)
-      : null;
+  const resolverTitle = selectedEdge?.resolved_by_node_id
+    ? (graphData.nodes.find((n) => n.id === selectedEdge.resolved_by_node_id)
+        ?.title ?? null)
+    : null;
 
   async function refreshGraphAfterEdgeUpdate() {
     const data = await getGraphData(true);
@@ -219,19 +248,33 @@ function GraphPageInner() {
   return (
     // Break out of AppShell's max-w-4xl / px-4 / py-8 with fixed positioning below the header
     <div className="fixed inset-x-0 top-12 bottom-0 flex flex-col overflow-hidden bg-gray-950 z-0">
-      <FilterBar state={filterState} allTags={allTags} onChange={setFilterState} />
+      <FilterBar
+        state={filterState}
+        allTags={allTags}
+        onChange={setFilterState}
+      />
 
       <div className="flex flex-1 min-h-0">
         {/* Canvas area */}
         <div className="flex-1 relative min-w-0">
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
-              Loading graph…
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-sm text-gray-400"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="h-8 w-8 animate-pulse rounded-full bg-gray-700" />
+              <span>Loading graph…</span>
             </div>
           )}
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center text-red-400 text-sm">
-              {error}
+            <div className="absolute inset-0 flex items-center justify-center p-6">
+              <div
+                className="max-w-sm rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                role="alert"
+              >
+                {error}
+              </div>
             </div>
           )}
           {!loading && !error && (
@@ -247,16 +290,24 @@ function GraphPageInner() {
             />
           )}
           {!loading && !error && visibleData.nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm pointer-events-none">
-              No nodes visible — adjust filters above.
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+              <div className="flex max-w-sm flex-col items-center gap-2 rounded-lg border border-dashed border-gray-700 bg-gray-900/40 px-6 py-10 text-center">
+                <p className="text-sm font-medium text-gray-300">
+                  No nodes visible
+                </p>
+                <p className="text-xs leading-relaxed text-gray-500">
+                  Adjust the filters above to show more of your graph.
+                </p>
+              </div>
             </div>
           )}
         </div>
 
         {/* Side panel */}
-        <div
-          className={`flex flex-col shrink-0 bg-gray-900 border-l border-gray-700 overflow-hidden transition-all duration-200 ${
-            showPanel ? "w-72" : "w-0"
+        <aside
+          aria-label="Selection details"
+          className={`flex shrink-0 flex-col overflow-hidden border-l border-gray-700 bg-gray-900 shadow-xl transition-all duration-200 ${
+            showPanel ? "w-80 max-w-[85vw]" : "w-0"
           }`}
         >
           {/* Priority: BatchPanel > ConnectPanel > connecting NodePanel > normal NodePanel > EdgePanel */}
@@ -308,7 +359,7 @@ function GraphPageInner() {
               onEdgeUpdated={refreshGraphAfterEdgeUpdate}
             />
           )}
-        </div>
+        </aside>
       </div>
     </div>
   );
