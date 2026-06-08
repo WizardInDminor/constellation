@@ -7,10 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import {
-  getActivity,
-  listBridges,
-} from "@/lib/api";
+import { getActivity, listBridges } from "@/lib/api";
 import type {
   ActivityFeed,
   BridgeCandidate,
@@ -75,7 +72,10 @@ function BridgesPanel({
   if (bridges === null) {
     return (
       <Section label="Bridges in scope">
-        <p className="text-gray-400">Loading…</p>
+        <div className="space-y-1.5" aria-busy="true">
+          <div className="skeleton h-3 w-full" />
+          <div className="skeleton h-3 w-2/3" />
+        </div>
       </Section>
     );
   }
@@ -140,7 +140,11 @@ function ActivityPanel() {
   return (
     <Section label="Recent activity (corpus, 7d)">
       {activity === null ? (
-        <p className="text-gray-400">Loading…</p>
+        <div className="space-y-1.5" aria-busy="true">
+          <div className="skeleton h-3 w-full" />
+          <div className="skeleton h-3 w-full" />
+          <div className="skeleton h-3 w-2/3" />
+        </div>
       ) : (
         <ul className="space-y-1 text-gray-500">
           <Row label="Captured" value={String(activity.captured.length)} />
@@ -185,9 +189,10 @@ function SessionHistoryPanel({ sessions }: { sessions: WorkSession[] }) {
             </div>
             <div className="text-[10px] text-gray-400 mt-0.5">
               {s.mode} · {s.status}
-              {s.duration_seconds !== null && s.duration_seconds !== undefined && (
-                <> · {Math.round(s.duration_seconds / 60)}m</>
-              )}
+              {s.duration_seconds !== null &&
+                s.duration_seconds !== undefined && (
+                  <> · {Math.round(s.duration_seconds / 60)}m</>
+                )}
             </div>
             {s.next_session_intent && s.status !== "active" && (
               <div className="text-[10px] text-gray-500 mt-0.5 italic truncate">
@@ -209,8 +214,8 @@ function OpenQuestionsPlaceholder() {
   return (
     <Section label="Open questions">
       <p className="text-gray-400 italic">
-        One-line append input lands when QUESTIONS-edge-tracking ships
-        (Phase 10).
+        One-line append input lands when QUESTIONS-edge-tracking ships (Phase
+        10).
       </p>
     </Section>
   );
@@ -229,9 +234,7 @@ function Section({
 }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-        {label}
-      </p>
+      <p className="section-label mb-1.5">{label}</p>
       {children}
     </div>
   );

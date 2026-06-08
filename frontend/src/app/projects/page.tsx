@@ -3,16 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  createProject,
-  listProjects,
-  listNodes,
-} from "@/lib/api";
-import type {
-  NodeSummary,
-  ProjectMode,
-  ProjectSummary,
-} from "@/lib/api";
+import { createProject, listProjects, listNodes } from "@/lib/api";
+import type { NodeSummary, ProjectMode, ProjectSummary } from "@/lib/api";
 
 const MODE_BADGE: Record<ProjectMode, string> = {
   research: "bg-blue-100 text-blue-800 border-blue-200",
@@ -21,8 +13,16 @@ const MODE_BADGE: Record<ProjectMode, string> = {
 };
 
 const MODE_OPTIONS: { value: ProjectMode; label: string; hint: string }[] = [
-  { value: "research", label: "Research", hint: "Reading, synthesis, literature notes" },
-  { value: "narrative", label: "Narrative", hint: "Story, characters, timeline" },
+  {
+    value: "research",
+    label: "Research",
+    hint: "Reading, synthesis, literature notes",
+  },
+  {
+    value: "narrative",
+    label: "Narrative",
+    hint: "Story, characters, timeline",
+  },
   { value: "learning", label: "Learning", hint: "Curriculum, sources, checks" },
 ];
 
@@ -48,7 +48,9 @@ export default function ProjectsPage() {
   useEffect(() => {
     listProjects()
       .then(setProjects)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      );
   }, []);
 
   async function refresh() {
@@ -61,44 +63,53 @@ export default function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Projects</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+        <div className="min-w-0">
+          <h1 className="page-title">Projects</h1>
           <p className="text-sm text-gray-500 mt-1">
             Workspace-aware structure notes. Each project carries its own scope,
             session history, and briefing prompt.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button
             onClick={() => setDialog("promote")}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="btn btn-secondary"
           >
             Promote existing
           </button>
-          <button
-            onClick={() => setDialog("new")}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
+          <button onClick={() => setDialog("new")} className="btn btn-primary">
             New project
           </button>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error mb-4">{error}</div>}
 
       {projects === null ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <li key={i} className="card p-4">
+              <div className="skeleton h-4 w-2/3" />
+              <div className="skeleton mt-3 h-3 w-1/2" />
+            </li>
+          ))}
+        </ul>
       ) : projects.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 px-6 py-12 text-center text-gray-500">
-          <p className="text-sm">No projects yet.</p>
-          <p className="text-xs mt-1 text-gray-400">
-            Create one with “New project,” or promote an existing structure note.
+        <div className="empty-state">
+          <p className="text-base font-semibold text-gray-700">
+            No projects yet
           </p>
+          <p className="max-w-sm text-sm text-gray-500">
+            Create one with “New project,” or promote an existing structure
+            note.
+          </p>
+          <button
+            onClick={() => setDialog("new")}
+            className="btn btn-primary btn-sm mt-2"
+          >
+            New project
+          </button>
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -106,25 +117,25 @@ export default function ProjectsPage() {
             <li key={p.hub.id}>
               <Link
                 href={`/projects/${p.hub.id}`}
-                className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-indigo-300 hover:shadow-sm transition"
+                className="card-interactive block p-4"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h2 className="text-sm font-semibold text-gray-900 truncate">
+                  <h2 className="text-sm font-semibold text-gray-900 truncate min-w-0">
                     {p.hub.title}
                   </h2>
                   <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide border ${MODE_BADGE[p.mode]}`}
+                    className={`badge shrink-0 border uppercase tracking-wide ${MODE_BADGE[p.mode]}`}
                   >
                     {p.mode}
                   </span>
                 </div>
-                <div className="mt-3 flex items-center gap-3 text-xs text-gray-500">
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                   <span>{p.note_count} pinned</span>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span>{formatRelative(p.last_visited_at ?? null)}</span>
                   {p.has_active_session && (
                     <>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <span className="inline-flex items-center gap-1 text-emerald-600">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         Active session
@@ -198,62 +209,63 @@ function NewProjectDialog({
     <DialogShell onClose={onClose} title="New project">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label htmlFor="new-project-title" className="label">
             Title
           </label>
           <input
+            id="new-project-title"
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Fire Stoker, Eurorack, Motor encoders"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="input"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label htmlFor="new-project-content" className="label">
             Hub note content (optional)
           </label>
           <textarea
+            id="new-project-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={3}
             placeholder="Overview, goals, anything you'd put in a project README."
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            className="textarea"
           />
         </div>
         <ModeSelect mode={mode} setMode={setMode} />
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label htmlFor="new-project-prior" className="label">
             Prior knowledge (optional)
           </label>
-          <p className="text-[10px] text-gray-400 mb-1.5">
-            What you already know about this topic. Surfaces as the
-            Session 1 Prior-knowledge panel and (in learning mode) primes
-            the learning-map generator. Available in every mode.
+          <p className="field-hint mb-1.5 mt-0">
+            What you already know about this topic. Surfaces as the Session 1
+            Prior-knowledge panel and (in learning mode) primes the learning-map
+            generator. Available in every mode.
           </p>
           <textarea
+            id="new-project-prior"
             value={priorKnowledge}
             onChange={(e) => setPriorKnowledge(e.target.value)}
             rows={3}
             placeholder="e.g. I know basic embedded C. I've used SPI but never quadrature decoding."
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            className="textarea"
           />
         </div>
-        {error && (
-          <p className="text-xs text-red-600">{error}</p>
-        )}
+        {error && <div className="alert-error">{error}</div>}
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+            className="btn btn-ghost btn-sm"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving || !title.trim()}
-            className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="btn btn-primary btn-sm"
           >
             {saving ? "Creating…" : "Create"}
           </button>
@@ -283,7 +295,9 @@ function PromoteDialog({
   useEffect(() => {
     listNodes("structure", 1, 100)
       .then((p) => setCandidates(p.items))
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      );
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -311,11 +325,15 @@ function PromoteDialog({
           Pick any existing structure note to make it a project hub. Its scope
           starts empty; you can pin notes and tags after opening.
         </p>
-        <div className="max-h-64 overflow-y-auto rounded border border-gray-200 divide-y divide-gray-100">
+        <div className="max-h-64 overflow-y-auto scrollbar-thin rounded-md border border-gray-200 divide-y divide-gray-100">
           {candidates === null ? (
-            <p className="px-3 py-2 text-xs text-gray-400">Loading…</p>
+            <div className="space-y-1 p-2">
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-4 w-5/6" />
+              <div className="skeleton h-4 w-2/3" />
+            </div>
           ) : candidates.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400">
+            <p className="px-3 py-3 text-xs text-gray-400">
               No structure notes yet. Create one from the Notes view, or use
               “New project.”
             </p>
@@ -340,21 +358,19 @@ function PromoteDialog({
           )}
         </div>
         <ModeSelect mode={mode} setMode={setMode} />
-        {error && (
-          <p className="text-xs text-red-600">{error}</p>
-        )}
+        {error && <div className="alert-error">{error}</div>}
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+            className="btn btn-ghost btn-sm"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving || !selected}
-            className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="btn btn-primary btn-sm"
           >
             {saving ? "Promoting…" : "Promote"}
           </button>
@@ -383,15 +399,15 @@ function DialogShell({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+        className="card w-full max-w-md p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">{title}</h2>
+          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            aria-label="Close"
+            className="btn btn-ghost btn-sm text-xl leading-none px-2"
+            aria-label="Close dialog"
           >
             ×
           </button>
@@ -411,10 +427,8 @@ function ModeSelect({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-700 mb-1.5">
-        Default mode
-      </label>
-      <p className="text-[11px] text-gray-400 mb-2">
+      <p className="label mb-1">Default mode</p>
+      <p className="field-hint mb-2 mt-0">
         Mode chooses which panels are prominent on first open. Every feature is
         available in every mode.
       </p>
@@ -424,10 +438,11 @@ function ModeSelect({
             key={m.value}
             type="button"
             onClick={() => setMode(m.value)}
-            className={`rounded border px-2 py-1.5 text-xs text-left ${
+            aria-pressed={mode === m.value}
+            className={`rounded-md border px-2 py-1.5 text-xs text-left transition-colors ${
               mode === m.value
                 ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                : "border-gray-200 hover:border-gray-300"
+                : "border-gray-200 text-gray-700 hover:border-gray-300"
             }`}
             title={m.hint}
           >
