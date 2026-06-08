@@ -6,7 +6,13 @@ import { deleteNode } from "@/lib/api";
 import type { NodeSummary } from "@/lib/api";
 import { timeAgo, formatAbsolute } from "./timeFormat";
 
-function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => void }) {
+function InboxCard({
+  node,
+  onDiscard,
+}: {
+  node: NodeSummary;
+  onDiscard: () => void;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [discarding, setDiscarding] = useState(false);
 
@@ -22,32 +28,36 @@ function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => vo
   }
 
   return (
-    <li className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3">
-      <div className="flex flex-col">
-        <span className="font-medium text-sm">{node.title}</span>
+    <li className="card flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-medium text-gray-900">
+          {node.title}
+        </span>
         <time
           dateTime={node.created_at}
           title={formatAbsolute(node.created_at)}
-          className="text-xs text-gray-400 cursor-help w-fit"
+          className="w-fit cursor-help text-xs text-gray-400"
         >
           {timeAgo(node.created_at)}
         </time>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         {confirming ? (
           <>
             <span className="text-xs text-gray-500">Discard this note?</span>
             <button
+              type="button"
               onClick={handleDiscard}
               disabled={discarding}
-              className="text-sm text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+              className="btn btn-danger btn-sm"
             >
               {discarding ? "Discarding…" : "Yes, discard"}
             </button>
             <button
+              type="button"
               onClick={() => setConfirming(false)}
               disabled={discarding}
-              className="text-sm text-gray-400 hover:text-gray-700"
+              className="btn btn-ghost btn-sm"
             >
               Cancel
             </button>
@@ -55,20 +65,18 @@ function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => vo
         ) : (
           <>
             <button
+              type="button"
               onClick={() => setConfirming(true)}
-              className="text-sm text-gray-400 hover:text-red-500"
+              className="btn btn-ghost btn-sm"
             >
               Discard
             </button>
-            <Link
-              href={`/nodes/${node.id}`}
-              className="text-sm text-gray-400 hover:text-gray-700"
-            >
+            <Link href={`/nodes/${node.id}`} className="btn btn-ghost btn-sm">
               Edit
             </Link>
             <Link
               href={`/inbox/process/${node.id}`}
-              className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              className="btn btn-primary btn-sm"
             >
               Process →
             </Link>
@@ -79,7 +87,11 @@ function InboxCard({ node, onDiscard }: { node: NodeSummary; onDiscard: () => vo
   );
 }
 
-export default function InboxList({ initialNodes }: { initialNodes: NodeSummary[] }) {
+export default function InboxList({
+  initialNodes,
+}: {
+  initialNodes: NodeSummary[];
+}) {
   const [nodes, setNodes] = useState(initialNodes);
 
   function handleDiscard(id: string) {
@@ -88,8 +100,8 @@ export default function InboxList({ initialNodes }: { initialNodes: NodeSummary[
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Inbox</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="page-title">Inbox</h1>
         {nodes.length > 0 && (
           <span className="text-sm text-gray-500">
             {nodes.length} note{nodes.length !== 1 ? "s" : ""} to process
@@ -98,7 +110,13 @@ export default function InboxList({ initialNodes }: { initialNodes: NodeSummary[
       </div>
 
       {nodes.length === 0 ? (
-        <p className="text-gray-400 text-sm">Nothing to process.</p>
+        <div className="empty-state">
+          <p className="text-sm font-medium text-gray-700">Inbox zero</p>
+          <p className="max-w-sm text-sm text-gray-500">
+            No fleeting notes waiting to be processed. Capture a thought and it
+            will land here, ready to be turned into a permanent note.
+          </p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {nodes.map((node) => (

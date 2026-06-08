@@ -71,12 +71,12 @@ export function MermaidBlock({ code }: Props) {
   if (error) {
     return (
       <div
-        className="my-3 rounded border border-rose-200 bg-rose-50 p-3 text-xs"
+        className="my-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs"
         data-mermaid-error="true"
       >
         <p className="font-medium text-rose-700 mb-1">Mermaid parse error</p>
         <p className="text-rose-600 mb-2">{error}</p>
-        <pre className="bg-white border border-rose-100 rounded p-2 overflow-x-auto text-rose-900 font-mono">
+        <pre className="scrollbar-thin overflow-x-auto rounded-md border border-rose-100 bg-white p-2 font-mono text-rose-900">
           <code>{code}</code>
         </pre>
       </div>

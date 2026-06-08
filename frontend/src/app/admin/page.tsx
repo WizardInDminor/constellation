@@ -85,7 +85,12 @@ export default function AdminPage() {
     if (!confirm(`Retry all ${failed.length} failed jobs?`)) return;
     setRetryingAll(true);
     setFailed((prev) =>
-      prev.map((j) => ({ ...j, status: "pending", error: null, completed_at: null })),
+      prev.map((j) => ({
+        ...j,
+        status: "pending",
+        error: null,
+        completed_at: null,
+      })),
     );
     try {
       await retryAllFailedEmbeddingJobs();
@@ -98,7 +103,14 @@ export default function AdminPage() {
   }
 
   if (error && !status) {
-    return <div className="text-red-600 text-sm">{error}</div>;
+    return (
+      <div className="flex flex-col gap-8">
+        <h2 className="page-title">Admin</h2>
+        <div className="alert-error" role="alert">
+          {error}
+        </div>
+      </div>
+    );
   }
 
   const failedCount = status?.failed_jobs ?? failed.length;
@@ -106,8 +118,8 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Admin</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="page-title">Admin</h2>
         <span className="text-xs text-gray-400">
           Auto-refreshes every {POLL_INTERVAL_MS / 1000}s while visible
         </span>
@@ -121,19 +133,29 @@ export default function AdminPage() {
       />
 
       {error && status && (
-        <p className="text-xs text-amber-600">Refresh failed: {error}</p>
+        <div
+          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          role="status"
+          aria-live="polite"
+        >
+          Refresh failed: {error}
+        </div>
       )}
 
       {failedCount > 0 && (
         <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-red-700">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-red-700">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                aria-hidden="true"
+              />
               Failed ({failedCount})
             </h3>
             <button
               onClick={handleRetryAll}
               disabled={retryingAll || failed.length === 0}
-              className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="btn btn-sm btn-danger"
             >
               {retryingAll ? "Retrying…" : "Retry all failed"}
             </button>
@@ -151,13 +173,15 @@ export default function AdminPage() {
                 <button
                   onClick={() => handleRetry(job.id)}
                   disabled={retryingIds.has(job.id) || job.status !== "failed"}
-                  className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="btn btn-sm btn-secondary"
                 >
-                  {retryingIds.has(job.id) || job.status !== "failed" ? "Queued" : "Retry"}
+                  {retryingIds.has(job.id) || job.status !== "failed"
+                    ? "Queued"
+                    : "Retry"}
                 </button>
                 <button
                   onClick={() => setOpenNodeId(job.node_id)}
-                  className="text-xs text-indigo-600 hover:text-indigo-800"
+                  className="btn btn-sm btn-ghost text-indigo-600 hover:text-indigo-800"
                 >
                   Open note
                 </button>
@@ -183,7 +207,7 @@ export default function AdminPage() {
           rowAction={(job) => (
             <button
               onClick={() => setOpenNodeId(job.node_id)}
-              className="text-xs text-indigo-600 hover:text-indigo-800"
+              className="btn btn-sm btn-ghost text-indigo-600 hover:text-indigo-800"
             >
               Open note
             </button>
@@ -196,9 +220,11 @@ export default function AdminPage() {
       <section className="flex flex-col gap-2">
         <button
           onClick={() => setShowCompletions((v) => !v)}
-          className="self-start text-sm font-semibold text-gray-600 hover:text-gray-900"
+          className="self-start inline-flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900"
+          aria-expanded={showCompletions}
         >
-          {showCompletions ? "▾" : "▸"} Recent completions ({completeCount})
+          <span aria-hidden="true">{showCompletions ? "▾" : "▸"}</span> Recent
+          completions ({completeCount})
         </button>
         {showCompletions && (
           <JobsTable
@@ -211,7 +237,7 @@ export default function AdminPage() {
             rowAction={(job) => (
               <button
                 onClick={() => setOpenNodeId(job.node_id)}
-                className="text-xs text-indigo-600 hover:text-indigo-800"
+                className="btn btn-sm btn-ghost text-indigo-600 hover:text-indigo-800"
               >
                 Open note
               </button>
@@ -222,7 +248,10 @@ export default function AdminPage() {
         )}
       </section>
 
-      <NodeDetailDrawer nodeId={openNodeId} onClose={() => setOpenNodeId(null)} />
+      <NodeDetailDrawer
+        nodeId={openNodeId}
+        onClose={() => setOpenNodeId(null)}
+      />
     </div>
   );
 }
@@ -240,8 +269,11 @@ function StatusBar({
 }) {
   if (loading && !status) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
-        Loading…
+      <div className="card px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="skeleton h-5 w-20" />
+        <div className="skeleton h-5 w-20" />
+        <div className="skeleton h-5 w-24" />
+        <div className="skeleton h-5 w-40 ml-auto" />
       </div>
     );
   }
@@ -249,7 +281,7 @@ function StatusBar({
   const cooldownSecs = secondsUntil(status.cooldown_until, now);
   return (
     <div className="flex flex-col gap-2">
-      <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+      <div className="card px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <StatusPill label="Pending" value={status.pending_jobs} tone="amber" />
         <StatusPill label="Failed" value={status.failed_jobs} tone="red" />
         <StatusPill label="Complete" value={completeCount} tone="green" />
@@ -324,54 +356,81 @@ function JobsTable({
   emptyText: string;
 }) {
   if (jobs.length === 0) {
-    return <p className="text-xs text-gray-400 italic">{emptyText}</p>;
+    return (
+      <div className="empty-state py-8">
+        <p className="text-sm text-gray-500">{emptyText}</p>
+      </div>
+    );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden bg-white">
-        <thead>
-          <tr className="text-xs text-gray-500 bg-gray-50">
-            {columns.map((c) => (
-              <th key={c.key} className="text-left font-medium px-3 py-2">
-                {c.label}
-              </th>
-            ))}
-            <th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {jobs.map((job) => (
-            <tr key={job.id} className="border-t border-gray-100 align-top">
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto scrollbar-thin">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="section-label bg-gray-50">
               {columns.map((c) => (
-                <td key={c.key} className="px-3 py-2 text-gray-700">
-                  {renderCell(job, c.key, now)}
-                </td>
+                <th key={c.key} scope="col" className="text-left px-3 py-2">
+                  {c.label}
+                </th>
               ))}
-              <td className="px-3 py-2 text-right">{rowAction(job)}</td>
+              <th scope="col" className="px-3 py-2">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {jobs.map((job) => (
+              <tr key={job.id} className="border-t border-gray-100 align-top">
+                {columns.map((c) => (
+                  <td key={c.key} className="px-3 py-2 text-gray-700">
+                    {renderCell(job, c.key, now)}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  {rowAction(job)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-function renderCell(job: EmbeddingJob, key: ColumnKey, now: number): React.ReactNode {
+function renderCell(
+  job: EmbeddingJob,
+  key: ColumnKey,
+  now: number,
+): React.ReactNode {
   switch (key) {
     case "title":
-      return <span className="font-medium text-gray-900">{job.node_title}</span>;
+      return (
+        <span className="font-medium text-gray-900">{job.node_title}</span>
+      );
     case "error":
       return (
-        <span className="text-xs text-red-700 line-clamp-2" title={job.error ?? ""}>
+        <span
+          className="text-xs text-red-700 line-clamp-2"
+          title={job.error ?? ""}
+        >
           {job.error ?? "—"}
         </span>
       );
     case "attempt_count":
       return <span className="tabular-nums">{job.attempt_count}</span>;
     case "target_model":
-      return <span className="text-xs text-gray-500 font-mono">{job.target_model}</span>;
+      return (
+        <span className="text-xs text-gray-500 font-mono">
+          {job.target_model}
+        </span>
+      );
     case "queued_at":
-      return <span className="text-xs text-gray-500">{relativeTime(job.created_at, now)}</span>;
+      return (
+        <span className="text-xs text-gray-500">
+          {relativeTime(job.created_at, now)}
+        </span>
+      );
     case "failed_at":
       return (
         <span className="text-xs text-gray-500">
@@ -379,6 +438,10 @@ function renderCell(job: EmbeddingJob, key: ColumnKey, now: number): React.React
         </span>
       );
     case "completed_at":
-      return <span className="text-xs text-gray-500">{relativeTime(job.completed_at, now)}</span>;
+      return (
+        <span className="text-xs text-gray-500">
+          {relativeTime(job.completed_at, now)}
+        </span>
+      );
   }
 }

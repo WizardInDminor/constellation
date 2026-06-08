@@ -51,8 +51,13 @@ export function MarkdownWithMermaid({ children }: Props) {
                   : "";
             return <MermaidBlock code={raw.replace(/\n$/, "")} />;
           }
+          // Inline code (no language- class) gets a subtle chip; fenced
+          // blocks keep their language class so block styling can target it.
+          const inlineClass = match
+            ? className
+            : `${className ?? ""} rounded bg-gray-100 px-1 py-0.5 text-[0.85em] font-mono text-gray-800`.trim();
           return (
-            <code className={className} {...rest}>
+            <code className={inlineClass} {...rest}>
               {children}
             </code>
           );

@@ -78,16 +78,18 @@ export function NewMenu({ onCreateNote }: Props) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap flex items-center gap-1"
+        className="btn btn-ghost btn-sm whitespace-nowrap"
       >
         + New
-        <span aria-hidden className="text-xs">▾</span>
+        <span aria-hidden className="text-xs">
+          ▾
+        </span>
       </button>
       {open && (
         <ul
           role="menu"
           onKeyDown={handleMenuKeyDown}
-          className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded shadow-md z-20 py-1"
+          className="card absolute right-0 z-20 mt-1 w-56 py-1 shadow-lg"
         >
           <li role="none">
             <button
@@ -97,10 +99,12 @@ export function NewMenu({ onCreateNote }: Props) {
               role="menuitem"
               type="button"
               onClick={activateNote}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none"
             >
               <span>Note</span>
-              <kbd className="text-xs font-mono opacity-50">Ctrl+⇧+Space</kbd>
+              <kbd className="font-mono text-xs text-gray-400">
+                Ctrl+⇧+Space
+              </kbd>
             </button>
           </li>
           <li role="none">
@@ -111,7 +115,7 @@ export function NewMenu({ onCreateNote }: Props) {
               role="menuitem"
               href="/nodes/new/structure"
               onClick={() => setOpen(false)}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none"
             >
               <span>Structure note</span>
             </Link>

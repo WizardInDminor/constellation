@@ -36,8 +36,10 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 const TAB_DESCRIPTIONS: Record<Tab, string> = {
-  orphans: "Notes with zero edges. Linking even one of these to an existing note pulls them into the graph.",
-  stale: "Notes you haven't touched in a while. Worth a re-read or a fresh link.",
+  orphans:
+    "Notes with zero edges. Linking even one of these to an existing note pulls them into the graph.",
+  stale:
+    "Notes you haven't touched in a while. Worth a re-read or a fresh link.",
   bridges:
     "Pairs of notes that look semantically related but aren't linked. Decide whether each pair belongs together.",
   triangles:
@@ -54,8 +56,12 @@ const TYPE_COLORS: Record<string, string> = {
 function TagChip({ tag }: { tag: TagRef }) {
   return (
     <span
-      className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500"
-      style={tag.color ? { backgroundColor: tag.color + "33", color: tag.color } : undefined}
+      className="badge bg-gray-100 text-gray-500"
+      style={
+        tag.color
+          ? { backgroundColor: tag.color + "33", color: tag.color }
+          : undefined
+      }
     >
       {tag.name}
     </span>
@@ -127,7 +133,12 @@ function EdgeForm({
     } catch (e: unknown) {
       if (e instanceof Response && e.status === 409) {
         setEdgeError("Already connected with this edge type.");
-      } else if (e && typeof e === "object" && "status" in e && (e as { status: number }).status === 409) {
+      } else if (
+        e &&
+        typeof e === "object" &&
+        "status" in e &&
+        (e as { status: number }).status === 409
+      ) {
         setEdgeError("Already connected with this edge type.");
       } else {
         setEdgeError("Failed to create connection.");
@@ -137,55 +148,71 @@ function EdgeForm({
     }
   }
 
+  const typeId = `edge-type-${fromId}`;
+  const noteId = `edge-note-${fromId}`;
   return (
     <div className="flex flex-col gap-3">
       {onPickTarget && (
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Connect to</label>
-          <NodePicker onSelect={onPickTarget} exclude={excludeIds} placeholder="Search for a note to link…" previewOnHover />
+          <span className="label">Connect to</span>
+          <NodePicker
+            onSelect={onPickTarget}
+            exclude={excludeIds}
+            placeholder="Search for a note to link…"
+            previewOnHover
+          />
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 block mb-1">Connection type</label>
+        <label htmlFor={typeId} className="label">
+          Connection type
+        </label>
         <select
+          id={typeId}
           value={edgeType}
           onChange={(e) => setEdgeType(e.target.value as EdgeType)}
-          className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+          className="input"
         >
           {EDGE_TYPES.map((t) => (
-            <option key={t} value={t}>{EDGE_TYPE_META[t].label}</option>
+            <option key={t} value={t}>
+              {EDGE_TYPE_META[t].label}
+            </option>
           ))}
         </select>
-        <p className="text-xs text-gray-500 mt-1">{EDGE_TYPE_META[edgeType].description}</p>
+        <p className="field-hint">{EDGE_TYPE_META[edgeType].description}</p>
       </div>
       {classifierRationale && (
-        <div className="border-l-2 border-indigo-300 bg-indigo-50/40 px-2 py-1.5 rounded-r">
-          <div className="text-xs uppercase tracking-wide text-indigo-600/80 font-medium">
+        <div className="border-l-2 border-indigo-300 bg-indigo-50/40 px-3 py-2 rounded-r">
+          <div className="section-label text-indigo-600/80">
             Classifier rationale
           </div>
-          <p className="text-xs text-gray-700 leading-relaxed italic mt-0.5">
+          <p className="text-xs text-gray-700 leading-relaxed italic mt-1">
             {classifierRationale}
           </p>
           <p className="text-[10px] text-gray-400 mt-1">
-            Saved with the edge as Claude&apos;s justification — separate from your note below.
+            Saved with the edge as Claude&apos;s justification — separate from
+            your note below.
           </p>
         </div>
       )}
       <div>
-        <label className="text-xs text-gray-500 block mb-1">Note (optional)</label>
+        <label htmlFor={noteId} className="label">
+          Note (optional)
+        </label>
         <textarea
+          id={noteId}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Why does this connection exist?"
           rows={2}
-          className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300 resize-none"
+          className="textarea resize-none"
         />
       </div>
-      {edgeError && <p className="text-xs text-red-600">{edgeError}</p>}
+      {edgeError && <p className="alert-error">{edgeError}</p>}
       <button
         onClick={submit}
         disabled={saving || !toId}
-        className="w-full text-sm bg-indigo-600 text-white rounded px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-40"
+        className="btn btn-primary w-full"
       >
         {saving ? "Creating…" : "Create connection"}
       </button>
@@ -215,22 +242,27 @@ function SlideOutPanel({
   return createPortal(
     <>
       {/* backdrop */}
-      <div
-        className="fixed inset-0 bg-black/20 z-20"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/20 z-20" onClick={onClose} />
       {/* drawer */}
-      <div className="fixed right-0 top-12 bottom-0 w-80 bg-white border-l border-gray-200 shadow-lg z-30 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
-          <span className="font-medium text-sm">{title}</span>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="fixed right-0 top-12 bottom-0 w-full max-w-sm bg-white border-l border-gray-200 shadow-lg z-30 flex flex-col overflow-hidden"
+      >
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+          <span className="font-medium text-sm text-gray-900 truncate">
+            {title}
+          </span>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            aria-label="Close panel"
+            className="btn btn-ghost btn-sm shrink-0 text-lg leading-none px-1.5"
           >
             ×
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex flex-col gap-5">
           {children}
         </div>
       </div>
@@ -241,12 +273,20 @@ function SlideOutPanel({
 
 // ── Node mini-card (used inside slide-out) ────────────────────────────────────
 
-function NodeMiniCard({ node }: { node: { id: string; title: string; type: string } }) {
+function NodeMiniCard({
+  node,
+}: {
+  node: { id: string; title: string; type: string };
+}) {
   return (
     <div className="flex items-start justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-      <span className="text-sm font-medium">{node.title}</span>
+      <span className="text-sm font-medium break-words min-w-0">
+        {node.title}
+      </span>
       <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-xs px-1.5 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+        <span
+          className={`badge ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+        >
           {node.type}
         </span>
         <Link
@@ -273,9 +313,13 @@ function BridgeNoteSection({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium text-sm leading-snug">{node.title}</span>
+        <span className="font-medium text-sm leading-snug break-words min-w-0">
+          {node.title}
+        </span>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-xs px-1.5 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+          <span
+            className={`badge ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {node.type}
           </span>
           <Link
@@ -291,23 +335,21 @@ function BridgeNoteSection({
       {detail?.tags && detail.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {detail.tags.map((t) => (
-            <span
-              key={t.id}
-              className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500"
-              style={t.color ? { backgroundColor: t.color + "33", color: t.color } : undefined}
-            >
-              {t.name}
-            </span>
+            <TagChip key={t.id} tag={t} />
           ))}
         </div>
       )}
 
       {detail ? (
-        <div className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto pr-1 whitespace-pre-wrap">
-          {detail.content || detail.summary || <span className="italic text-gray-400">No content</span>}
+        <div className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin pr-1 whitespace-pre-wrap break-words">
+          {detail.content || detail.summary || (
+            <span className="italic text-gray-400">No content</span>
+          )}
         </div>
       ) : (
-        <div className="text-xs text-gray-400 italic">Could not load note content.</div>
+        <div className="text-xs text-gray-400 italic">
+          Could not load note content.
+        </div>
       )}
     </div>
   );
@@ -358,7 +400,7 @@ function ClassifyBridgePanel({
   if (error) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-xs text-red-600">{error}</p>
+        <p className="alert-error">{error}</p>
         <button
           onClick={run}
           className="self-start text-xs text-indigo-600 hover:text-indigo-800"
@@ -373,7 +415,7 @@ function ClassifyBridgePanel({
     return (
       <button
         onClick={run}
-        className="w-full text-sm border border-indigo-200 bg-indigo-50/50 text-indigo-700 rounded px-3 py-2 hover:bg-indigo-100 transition-colors"
+        className="btn btn-secondary w-full border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100"
       >
         ✨ Ask Claude to classify this pair
       </button>
@@ -382,11 +424,13 @@ function ClassifyBridgePanel({
 
   if (result.no_connection) {
     return (
-      <div className="border border-amber-200 bg-amber-50 rounded px-3 py-2 flex flex-col gap-1.5">
+      <div className="border border-amber-200 bg-amber-50 rounded-md px-3 py-2 flex flex-col gap-1.5">
         <span className="text-xs font-medium text-amber-700">
           Claude doesn&apos;t see a meaningful link
         </span>
-        <p className="text-xs text-amber-800/80 leading-relaxed">{result.rationale}</p>
+        <p className="text-xs text-amber-800/80 leading-relaxed break-words">
+          {result.rationale}
+        </p>
         <button
           onClick={run}
           className="self-start text-xs text-amber-700 hover:text-amber-900"
@@ -398,11 +442,12 @@ function ClassifyBridgePanel({
   }
 
   // Direction display: which node is from, which is to
-  const fromNode = result.from_id === pair.node_a.id ? pair.node_a : pair.node_b;
+  const fromNode =
+    result.from_id === pair.node_a.id ? pair.node_a : pair.node_b;
   const toNode = result.to_id === pair.node_a.id ? pair.node_a : pair.node_b;
 
   return (
-    <div className="border border-indigo-200 bg-indigo-50/50 rounded px-3 py-2 flex flex-col gap-2">
+    <div className="border border-indigo-200 bg-indigo-50/50 rounded-md px-3 py-2 flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap text-xs">
         <span className="font-medium truncate max-w-32" title={fromNode.title}>
           {fromNode.title}
@@ -411,24 +456,21 @@ function ClassifyBridgePanel({
         <span className="font-medium truncate max-w-32" title={toNode.title}>
           {toNode.title}
         </span>
-        <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono">
+        <span className="badge bg-indigo-600 text-white font-mono">
           {result.edge_type}
         </span>
       </div>
-      <p className="text-xs text-gray-600 leading-relaxed italic">
+      <p className="text-xs text-gray-600 leading-relaxed italic break-words">
         {result.rationale}
       </p>
       <div className="flex gap-2">
         <button
           onClick={() => onApply(result)}
-          className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          className="btn btn-primary btn-sm"
         >
           Apply suggestion
         </button>
-        <button
-          onClick={run}
-          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-800"
-        >
+        <button onClick={run} className="btn btn-ghost btn-sm">
           Re-classify
         </button>
       </div>
@@ -448,23 +490,42 @@ function BridgeCard({
   const pct = Math.round(pair.similarity * 100);
   return (
     <li
-      className="bg-white border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all"
+      role="button"
+      tabIndex={0}
+      aria-label={`Bridge between ${pair.node_a.title} and ${pair.node_b.title}, ${pct}% similar`}
+      className="card-interactive cursor-pointer px-4 py-3"
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-500">Similarity</span>
+        <span className="section-label normal-case tracking-normal">
+          Similarity
+        </span>
         <span className="text-xs font-mono text-indigo-600">{pct}%</span>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
-          <span className="font-medium text-sm truncate">{pair.node_a.title}</span>
-          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded min-w-0">
+          <span className="font-medium text-sm truncate">
+            {pair.node_a.title}
+          </span>
+          <span
+            className={`badge self-start ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {pair.node_a.type}
           </span>
         </div>
-        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
-          <span className="font-medium text-sm truncate">{pair.node_b.title}</span>
-          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}>
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded min-w-0">
+          <span className="font-medium text-sm truncate">
+            {pair.node_b.title}
+          </span>
+          <span
+            className={`badge self-start ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {pair.node_b.type}
           </span>
         </div>
@@ -486,23 +547,44 @@ function TriangleCard({
   const extra = pair.intermediates.length - previewIntermediates.length;
   return (
     <li
-      className="bg-white border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all"
+      role="button"
+      tabIndex={0}
+      aria-label={`Triangle between ${pair.node_a.title} and ${pair.node_b.title}, ${pair.intermediate_count} shared neighbours`}
+      className="card-interactive cursor-pointer px-4 py-3"
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-gray-500">Shared neighbours</span>
-        <span className="text-xs font-mono text-indigo-600">{pair.intermediate_count}</span>
+        <span className="section-label normal-case tracking-normal">
+          Shared neighbours
+        </span>
+        <span className="text-xs font-mono text-indigo-600">
+          {pair.intermediate_count}
+        </span>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-2">
-        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
-          <span className="font-medium text-sm truncate">{pair.node_a.title}</span>
-          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded min-w-0">
+          <span className="font-medium text-sm truncate">
+            {pair.node_a.title}
+          </span>
+          <span
+            className={`badge self-start ${TYPE_COLORS[pair.node_a.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {pair.node_a.type}
           </span>
         </div>
-        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded">
-          <span className="font-medium text-sm truncate">{pair.node_b.title}</span>
-          <span className={`self-start text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}>
+        <div className="flex flex-col gap-1 px-3 py-2 border border-gray-100 rounded min-w-0">
+          <span className="font-medium text-sm truncate">
+            {pair.node_b.title}
+          </span>
+          <span
+            className={`badge self-start ${TYPE_COLORS[pair.node_b.type] ?? "bg-gray-100 text-gray-600"}`}
+          >
             {pair.node_b.type}
           </span>
         </div>
@@ -523,7 +605,15 @@ function TriangleCard({
 
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 
-function NoteCard({ node, hint, onClick }: { node: NodeSummary; hint?: string; onClick: () => void }) {
+function NoteCard({
+  node,
+  hint,
+  onClick,
+}: {
+  node: NodeSummary;
+  hint?: string;
+  onClick: () => void;
+}) {
   const [showPreview, setShowPreview] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -531,17 +621,24 @@ function NoteCard({ node, hint, onClick }: { node: NodeSummary; hint?: string; o
   return (
     <li
       ref={ref}
-      onMouseEnter={() => { timer.current = setTimeout(() => setShowPreview(true), 300); }}
-      onMouseLeave={() => { clearTimeout(timer.current); setShowPreview(false); }}
+      onMouseEnter={() => {
+        timer.current = setTimeout(() => setShowPreview(true), 300);
+      }}
+      onMouseLeave={() => {
+        clearTimeout(timer.current);
+        setShowPreview(false);
+      }}
     >
       <button
         onClick={onClick}
-        className="w-full text-left flex items-start justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-indigo-300 hover:shadow-sm transition-all"
+        className="card-interactive w-full text-left flex items-start justify-between gap-3 px-4 py-3"
       >
-        <div className="flex flex-col gap-1 min-w-0 pr-4">
+        <div className="flex flex-col gap-1 min-w-0">
           <span className="font-medium text-sm truncate">{node.title}</span>
           {node.summary && (
-            <span className="text-xs text-gray-500 line-clamp-2">{node.summary}</span>
+            <span className="text-xs text-gray-500 line-clamp-2">
+              {node.summary}
+            </span>
           )}
           {hint && <span className="text-xs text-gray-400">{hint}</span>}
           {node.tags.length > 0 && (
@@ -552,12 +649,58 @@ function NoteCard({ node, hint, onClick }: { node: NodeSummary; hint?: string; o
             </div>
           )}
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}>
+        <span
+          className={`badge shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+        >
           {node.type}
         </span>
       </button>
       <NotePreviewPopover node={node} anchorRef={ref} visible={showPreview} />
     </li>
+  );
+}
+
+// ── Loading skeletons ─────────────────────────────────────────────────────────
+
+function NoteCardSkeletonList() {
+  return (
+    <ul
+      className="flex flex-col gap-2"
+      aria-busy="true"
+      aria-label="Loading notes"
+    >
+      {Array.from({ length: 5 }).map((_, i) => (
+        <li
+          key={i}
+          className="card px-4 py-3 flex items-start justify-between gap-3"
+        >
+          <div className="flex flex-col gap-2 min-w-0 flex-1">
+            <div className="skeleton h-4 w-1/2" />
+            <div className="skeleton h-3 w-3/4" />
+          </div>
+          <div className="skeleton h-5 w-16 rounded-full shrink-0" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PairCardSkeletonList({ caption }: { caption: string }) {
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true">
+      <p className="text-sm text-gray-500">{caption}</p>
+      <ul className="flex flex-col gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <li key={i} className="card px-4 py-3 flex flex-col gap-2">
+            <div className="skeleton h-3 w-24" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="skeleton h-14 rounded" />
+              <div className="skeleton h-14 rounded" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -569,14 +712,19 @@ export default function DiscoverPage() {
   const [stale, setStale] = useState<NodeSummary[] | null>(null);
   const [bridges, setBridges] = useState<BridgeCandidate[] | null>(null);
   const [triangles, setTriangles] = useState<TriangleCandidate[] | null>(null);
-  const [selectedTriangle, setSelectedTriangle] = useState<TriangleCandidate | null>(null);
+  const [selectedTriangle, setSelectedTriangle] =
+    useState<TriangleCandidate | null>(null);
   const [crossTag, setCrossTag] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Slide-out state
-  const [selectedBridge, setSelectedBridge] = useState<BridgeCandidate | null>(null);
-  const [bridgeDetails, setBridgeDetails] = useState<[NodeDetail | null, NodeDetail | null]>([null, null]);
+  const [selectedBridge, setSelectedBridge] = useState<BridgeCandidate | null>(
+    null,
+  );
+  const [bridgeDetails, setBridgeDetails] = useState<
+    [NodeDetail | null, NodeDetail | null]
+  >([null, null]);
   const [loadingBridgeDetails, setLoadingBridgeDetails] = useState(false);
   const [bridgePrefill, setBridgePrefill] = useState<{
     fromId: string;
@@ -586,7 +734,8 @@ export default function DiscoverPage() {
     key: number;
   } | null>(null);
   const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
-  const [selectedNodeDetail, setSelectedNodeDetail] = useState<NodeDetail | null>(null);
+  const [selectedNodeDetail, setSelectedNodeDetail] =
+    useState<NodeDetail | null>(null);
   const [loadingNodeDetail, setLoadingNodeDetail] = useState(false);
   const [nodePickTarget, setNodePickTarget] = useState<NodeRef | null>(null);
 
@@ -597,28 +746,53 @@ export default function DiscoverPage() {
 
   // Fetch full node detail when an orphan/stale node is opened
   useEffect(() => {
-    if (!selectedNode) { setSelectedNodeDetail(null); return; }
+    if (!selectedNode) {
+      setSelectedNodeDetail(null);
+      return;
+    }
     let cancelled = false;
     setLoadingNodeDetail(true);
     setSelectedNodeDetail(null);
     getNode(selectedNode.id)
-      .then((d) => { if (!cancelled) setSelectedNodeDetail(d); })
-      .catch(() => { if (!cancelled) setSelectedNodeDetail(null); })
-      .finally(() => { if (!cancelled) setLoadingNodeDetail(false); });
-    return () => { cancelled = true; };
+      .then((d) => {
+        if (!cancelled) setSelectedNodeDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedNodeDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNodeDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedNode]);
 
   // Fetch full node details when a bridge pair is opened
   useEffect(() => {
-    if (!selectedBridge) { setBridgeDetails([null, null]); return; }
+    if (!selectedBridge) {
+      setBridgeDetails([null, null]);
+      return;
+    }
     let cancelled = false;
     setLoadingBridgeDetails(true);
     setBridgeDetails([null, null]);
-    Promise.all([getNode(selectedBridge.node_a.id), getNode(selectedBridge.node_b.id)])
-      .then(([a, b]) => { if (!cancelled) setBridgeDetails([a, b]); })
-      .catch(() => { if (!cancelled) setBridgeDetails([null, null]); })
-      .finally(() => { if (!cancelled) setLoadingBridgeDetails(false); });
-    return () => { cancelled = true; };
+    Promise.all([
+      getNode(selectedBridge.node_a.id),
+      getNode(selectedBridge.node_b.id),
+    ])
+      .then(([a, b]) => {
+        if (!cancelled) setBridgeDetails([a, b]);
+      })
+      .catch(() => {
+        if (!cancelled) setBridgeDetails([null, null]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBridgeDetails(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedBridge]);
 
   useEffect(() => {
@@ -634,7 +808,11 @@ export default function DiscoverPage() {
           const data = await listStale({ limit: 50 });
           if (!cancelled) setStale(data);
         } else if (tab === "bridges" && bridges === null) {
-          const data = await listBridges({ limit: 30, minSimilarity: 0.7, crossTag });
+          const data = await listBridges({
+            limit: 30,
+            minSimilarity: 0.7,
+            crossTag,
+          });
           if (!cancelled) setBridges(data);
         } else if (tab === "triangles" && triangles === null) {
           const data = await listTriangles({ limit: 30, minIntermediates: 2 });
@@ -669,21 +847,27 @@ export default function DiscoverPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold">Discover</h2>
+        <h2 className="page-title">Discover</h2>
         <p className="text-sm text-gray-500 mt-1">
           Re-encounter notes you&apos;ve forgotten or never linked.
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200">
+      <div
+        role="tablist"
+        aria-label="Discovery modes"
+        className="flex gap-1 border-b border-gray-200 overflow-x-auto scrollbar-none"
+      >
         {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               tab === t
-                ? "border-indigo-600 text-indigo-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                ? "text-gray-900 font-medium border-indigo-600"
+                : "text-gray-500 hover:text-gray-900 border-transparent"
             }`}
           >
             {TAB_LABELS[t]}
@@ -693,16 +877,21 @@ export default function DiscoverPage() {
 
       <p className="text-sm text-gray-600">{TAB_DESCRIPTIONS[tab]}</p>
 
-      {error && <div className="text-sm text-red-600">{error}</div>}
+      {error && <div className="alert-error">{error}</div>}
 
       {tab === "orphans" && (
         <>
           {loading && orphans === null ? (
-            <p className="text-sm text-gray-400">Loading…</p>
+            <NoteCardSkeletonList />
           ) : orphans && orphans.length === 0 ? (
-            <p className="text-sm text-gray-400">
-              No orphan notes — every note in your knowledge base is linked.
-            </p>
+            <div className="empty-state">
+              <p className="text-sm font-medium text-gray-700">
+                No orphan notes
+              </p>
+              <p className="text-sm text-gray-500">
+                Every note in your knowledge base is linked into the graph.
+              </p>
+            </div>
           ) : (
             <ul className="flex flex-col gap-2">
               {orphans?.map((n) => (
@@ -716,9 +905,17 @@ export default function DiscoverPage() {
       {tab === "stale" && (
         <>
           {loading && stale === null ? (
-            <p className="text-sm text-gray-400">Loading…</p>
+            <NoteCardSkeletonList />
           ) : stale && stale.length === 0 ? (
-            <p className="text-sm text-gray-400">No notes yet.</p>
+            <div className="empty-state">
+              <p className="text-sm font-medium text-gray-700">
+                Nothing stale here
+              </p>
+              <p className="text-sm text-gray-500">
+                No notes yet — capture some and they&apos;ll surface here as
+                they age.
+              </p>
+            </div>
           ) : (
             <ul className="flex flex-col gap-2">
               {stale?.map((n) => (
@@ -753,15 +950,18 @@ export default function DiscoverPage() {
           </label>
 
           {loading && bridges === null ? (
-            <p className="text-sm text-gray-400">
-              Scanning embeddings — this can take a moment on large corpora.
-            </p>
+            <PairCardSkeletonList caption="Scanning embeddings — this can take a moment on large corpora." />
           ) : bridges && bridges.length === 0 ? (
-            <p className="text-sm text-gray-400">
-              {crossTag
-                ? "No cross-tag bridges found. Toggle off to see all candidates."
-                : "No bridge candidates found. Try lowering the similarity threshold or adding more notes."}
-            </p>
+            <div className="empty-state">
+              <p className="text-sm font-medium text-gray-700">
+                No bridge candidates
+              </p>
+              <p className="text-sm text-gray-500">
+                {crossTag
+                  ? "No cross-tag bridges found. Toggle off to see all candidates."
+                  : "Try lowering the similarity threshold or adding more notes."}
+              </p>
+            </div>
           ) : (
             <ul className="flex flex-col gap-3">
               {bridges?.map((br) => (
@@ -779,12 +979,17 @@ export default function DiscoverPage() {
       {tab === "triangles" && (
         <>
           {loading && triangles === null ? (
-            <p className="text-sm text-gray-400">Scanning the graph for shared neighbours…</p>
+            <PairCardSkeletonList caption="Scanning the graph for shared neighbours…" />
           ) : triangles && triangles.length === 0 ? (
-            <p className="text-sm text-gray-400">
-              No triangle candidates with ≥2 shared neighbours yet. Add more connections or
-              try Bridges for semantic candidates.
-            </p>
+            <div className="empty-state">
+              <p className="text-sm font-medium text-gray-700">
+                No triangle candidates
+              </p>
+              <p className="text-sm text-gray-500">
+                Nothing with ≥2 shared neighbours yet. Add more connections, or
+                try Bridges for semantic candidates.
+              </p>
+            </div>
           ) : (
             <ul className="flex flex-col gap-3">
               {triangles?.map((t) => (
@@ -807,18 +1012,16 @@ export default function DiscoverPage() {
         >
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">A</span>
+              <span className="section-label">A</span>
               <Link
                 href={`/nodes/${selectedTriangle.node_a.id}`}
-                className="text-sm font-medium text-indigo-700 hover:underline"
+                className="text-sm font-medium text-indigo-700 hover:underline break-words"
               >
                 {selectedTriangle.node_a.title}
               </Link>
             </div>
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">
-                Shared via
-              </span>
+              <span className="section-label">Shared via</span>
               <ul className="flex flex-col gap-1">
                 {selectedTriangle.intermediates.map((n) => (
                   <li key={n.id} className="text-xs">
@@ -833,28 +1036,33 @@ export default function DiscoverPage() {
               </ul>
             </div>
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">B</span>
+              <span className="section-label">B</span>
               <Link
                 href={`/nodes/${selectedTriangle.node_b.id}`}
-                className="text-sm font-medium text-indigo-700 hover:underline"
+                className="text-sm font-medium text-indigo-700 hover:underline break-words"
               >
                 {selectedTriangle.node_b.title}
               </Link>
             </div>
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium mb-3">Create A → B connection</p>
+            <p className="section-label mb-3">Create A → B connection</p>
             <EdgeForm
               fromId={selectedTriangle.node_a.id}
               toId={selectedTriangle.node_b.id}
-              excludeIds={[selectedTriangle.node_a.id, selectedTriangle.node_b.id]}
+              excludeIds={[
+                selectedTriangle.node_a.id,
+                selectedTriangle.node_b.id,
+              ]}
               onSuccess={() => {
                 setTriangles((prev) =>
                   prev
                     ? prev.filter(
                         (t) =>
-                          !(t.node_a.id === selectedTriangle.node_a.id &&
-                            t.node_b.id === selectedTriangle.node_b.id),
+                          !(
+                            t.node_a.id === selectedTriangle.node_a.id &&
+                            t.node_b.id === selectedTriangle.node_b.id
+                          ),
                       )
                     : prev,
                 );
@@ -873,10 +1081,10 @@ export default function DiscoverPage() {
         >
           <div className="flex flex-col gap-4">
             {loadingBridgeDetails ? (
-              <div className="space-y-3">
-                <div className="h-4 bg-gray-100 rounded w-3/4 animate-pulse" />
-                <div className="h-20 bg-gray-50 rounded animate-pulse" />
-                <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse" />
+              <div className="space-y-3" aria-busy="true">
+                <div className="skeleton h-4 w-3/4" />
+                <div className="skeleton h-20" />
+                <div className="skeleton h-3 w-1/2" />
               </div>
             ) : (
               <>
@@ -895,7 +1103,8 @@ export default function DiscoverPage() {
           <ClassifyBridgePanel
             pair={selectedBridge}
             onApply={(r) => {
-              if (r.no_connection || !r.edge_type || !r.from_id || !r.to_id) return;
+              if (r.no_connection || !r.edge_type || !r.from_id || !r.to_id)
+                return;
               setBridgePrefill({
                 fromId: r.from_id,
                 toId: r.to_id,
@@ -906,7 +1115,7 @@ export default function DiscoverPage() {
             }}
           />
           <div>
-            <p className="text-xs text-gray-500 font-medium mb-3">Create connection</p>
+            <p className="section-label mb-3">Create connection</p>
             <EdgeForm
               fromId={bridgePrefill?.fromId ?? selectedBridge.node_a.id}
               toId={bridgePrefill?.toId ?? selectedBridge.node_b.id}
@@ -920,8 +1129,10 @@ export default function DiscoverPage() {
                   prev
                     ? prev.filter(
                         (b) =>
-                          !(b.node_a.id === selectedBridge.node_a.id &&
-                            b.node_b.id === selectedBridge.node_b.id),
+                          !(
+                            b.node_a.id === selectedBridge.node_a.id &&
+                            b.node_b.id === selectedBridge.node_b.id
+                          ),
                       )
                     : prev,
                 );
@@ -935,12 +1146,17 @@ export default function DiscoverPage() {
       {/* Orphan / stale node slide-out */}
       {selectedNode && (
         <SlideOutPanel
-          title={selectedNode.type.charAt(0).toUpperCase() + selectedNode.type.slice(1)}
+          title={
+            selectedNode.type.charAt(0).toUpperCase() +
+            selectedNode.type.slice(1)
+          }
           onClose={closePanel}
         >
           <div className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-2">
-              <span className="font-medium text-sm">{selectedNode.title}</span>
+              <span className="font-medium text-sm break-words min-w-0">
+                {selectedNode.title}
+              </span>
               <Link
                 href={`/nodes/${selectedNode.id}`}
                 className="text-xs text-indigo-600 hover:underline shrink-0"
@@ -951,25 +1167,29 @@ export default function DiscoverPage() {
             </div>
             {selectedNode.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {selectedNode.tags.map((t) => <TagChip key={t.id} tag={t} />)}
+                {selectedNode.tags.map((t) => (
+                  <TagChip key={t.id} tag={t} />
+                ))}
               </div>
             )}
             {loadingNodeDetail ? (
-              <div className="space-y-1.5 mt-1">
-                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-full" />
-                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-5/6" />
-                <div className="h-2.5 bg-gray-100 rounded animate-pulse w-3/4" />
+              <div className="space-y-1.5 mt-1" aria-busy="true">
+                <div className="skeleton h-2.5 w-full" />
+                <div className="skeleton h-2.5 w-5/6" />
+                <div className="skeleton h-2.5 w-3/4" />
               </div>
-            ) : (selectedNodeDetail?.content || selectedNodeDetail?.summary) ? (
-              <p className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap pr-1">
+            ) : selectedNodeDetail?.content || selectedNodeDetail?.summary ? (
+              <p className="text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto scrollbar-thin whitespace-pre-wrap break-words pr-1">
                 {selectedNodeDetail.content || selectedNodeDetail.summary}
               </p>
             ) : selectedNode.summary ? (
-              <p className="text-xs text-gray-500 leading-relaxed">{selectedNode.summary}</p>
+              <p className="text-xs text-gray-500 leading-relaxed break-words">
+                {selectedNode.summary}
+              </p>
             ) : null}
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium mb-3">Create connection</p>
+            <p className="section-label mb-3">Create connection</p>
             <EdgeForm
               fromId={selectedNode.id}
               toId={nodePickTarget?.id ?? null}
@@ -978,9 +1198,13 @@ export default function DiscoverPage() {
               onSuccess={() => {
                 // Remove from orphans/stale list
                 if (tab === "orphans") {
-                  setOrphans((prev) => prev ? prev.filter((n) => n.id !== selectedNode.id) : prev);
+                  setOrphans((prev) =>
+                    prev ? prev.filter((n) => n.id !== selectedNode.id) : prev,
+                  );
                 } else {
-                  setStale((prev) => prev ? prev.filter((n) => n.id !== selectedNode.id) : prev);
+                  setStale((prev) =>
+                    prev ? prev.filter((n) => n.id !== selectedNode.id) : prev,
+                  );
                 }
                 closePanel();
               }}

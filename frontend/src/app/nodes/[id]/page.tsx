@@ -103,14 +103,19 @@ function EditableField({
       setDraft(e.target.value),
     onBlur: handleBlur,
     onKeyDown: handleKeyDown,
-    className: `w-full bg-white border border-indigo-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${className}`,
+    "aria-label": multiline ? "Edit content" : "Edit title",
+    className: `w-full ${className}`,
   };
 
   if (editing) {
     return multiline ? (
-      <textarea {...sharedProps} rows={10} />
+      <textarea
+        {...sharedProps}
+        className={`textarea ${className}`}
+        rows={10}
+      />
     ) : (
-      <input {...sharedProps} />
+      <input {...sharedProps} className={`input ${className}`} />
     );
   }
 
@@ -118,7 +123,7 @@ function EditableField({
     <div
       onClick={() => setEditing(true)}
       title="Click to edit"
-      className={`cursor-text rounded px-2 py-1 hover:bg-white hover:shadow-sm transition-colors ${className}`}
+      className={`cursor-text rounded-md px-2 py-1 break-words hover:bg-gray-50 hover:shadow-sm transition-colors ${className}`}
     >
       {value ? (
         markdown ? (
@@ -129,7 +134,7 @@ function EditableField({
           value
         )
       ) : (
-        <span className="text-gray-300 italic">Click to edit</span>
+        <span className="text-gray-400 italic">Click to edit</span>
       )}
     </div>
   );
@@ -185,15 +190,13 @@ function TagEditor({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-1">
         {currentTags.map((t) => (
-          <span
-            key={t.id}
-            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700"
-          >
+          <span key={t.id} className="badge gap-1 bg-indigo-50 text-indigo-700">
             {t.name}
             <button
               onClick={() => removeTag(t.id)}
               disabled={saving}
-              className="text-indigo-400 hover:text-indigo-700 leading-none"
+              aria-label={`Remove tag ${t.name}`}
+              className="text-indigo-400 hover:text-indigo-700 leading-none disabled:opacity-50"
             >
               ×
             </button>
@@ -211,8 +214,9 @@ function TagEditor({
             }
           }}
           placeholder="Add tag…"
+          aria-label="Add tag"
           disabled={saving}
-          className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+          className="input"
         />
         {input && suggestions.length > 0 && (
           <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-xs max-h-40 overflow-y-auto">
@@ -322,20 +326,20 @@ function EdgePanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Connections</h3>
+        <h3 className="section-label">Connections</h3>
         <button
           onClick={() => {
             setAddOpen((o) => !o);
             setEdgeError(null);
           }}
-          className="text-xs text-indigo-600 hover:text-indigo-800"
+          className="btn btn-ghost btn-sm"
         >
           {addOpen ? "Cancel" : "+ Add"}
         </button>
       </div>
 
       {addOpen && (
-        <div className="border border-indigo-100 rounded-lg p-3 flex flex-col gap-3 bg-indigo-50/40">
+        <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 flex flex-col gap-3">
           <NodePicker onSelect={setTarget} exclude={node.id} previewOnHover />
           {target && (
             <>
@@ -360,7 +364,8 @@ function EdgePanel({
                 <select
                   value={edgeType}
                   onChange={(e) => setEdgeType(e.target.value as EdgeType)}
-                  className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  aria-label="Connection type"
+                  className="input"
                 >
                   {EDGE_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -368,7 +373,7 @@ function EdgePanel({
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500">
+                <p className="field-hint">
                   {EDGE_TYPE_META[edgeType].description}
                 </p>
               </div>
@@ -376,14 +381,15 @@ function EdgePanel({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Why does this connection exist? (optional)"
+                aria-label="Connection note"
                 rows={2}
-                className="text-sm border border-gray-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                className="textarea"
               />
-              {edgeError && <p className="text-xs text-red-600">{edgeError}</p>}
+              {edgeError && <p className="alert-error">{edgeError}</p>}
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="self-end px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                className="btn btn-primary btn-sm self-end"
               >
                 {saving ? "Saving…" : "Create connection"}
               </button>
@@ -399,7 +405,7 @@ function EdgePanel({
       {EDGE_TYPES.filter((t) => byType[t].length > 0).map((t) => (
         <div key={t} className="flex flex-col gap-1">
           <span
-            className={`text-xs font-medium px-1.5 py-0.5 rounded self-start ${EDGE_COLORS[t]}`}
+            className={`badge self-start ${EDGE_COLORS[t]}`}
             title={EDGE_TYPE_META[t].description}
           >
             {EDGE_TYPE_META[t].label}
@@ -428,7 +434,8 @@ function EdgePanel({
                 )}
                 <button
                   onClick={() => handleDelete(e.id)}
-                  className="text-xs text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                  aria-label={`Remove connection to ${e.neighbor.title}`}
+                  className="text-sm leading-none text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   ×
                 </button>
@@ -460,7 +467,7 @@ function EdgePanel({
                 </Link>
               </div>
               <span
-                className={`text-xs px-1.5 py-0.5 rounded ${EDGE_COLORS[e.type]}`}
+                className={`badge shrink-0 ${EDGE_COLORS[e.type]}`}
                 title={EDGE_TYPE_META[e.type].description}
               >
                 {EDGE_TYPE_META[e.type].label}
@@ -590,19 +597,19 @@ function SourcePanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Source</h3>
+        <h3 className="section-label">Source</h3>
         {knownAttached && (
           <button
             onClick={detach}
             disabled={saving}
-            className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+            className="btn btn-ghost btn-sm text-gray-400 hover:text-red-600"
           >
             Detach
           </button>
         )}
       </div>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="alert-error">{error}</p>}
 
       {knownAttached ? (
         <div className="flex flex-col gap-1.5 border border-blue-100 bg-blue-50/50 rounded px-3 py-2">
@@ -648,7 +655,8 @@ function SourcePanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search sources…"
-            className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+            aria-label="Search sources"
+            className="input"
           />
           <ul className="max-h-40 overflow-y-auto border border-gray-100 rounded divide-y divide-gray-100">
             {filtered.length === 0 && (
@@ -676,7 +684,7 @@ function SourcePanel({
 
           <button
             onClick={() => setShowNew((v) => !v)}
-            className="text-xs text-indigo-600 hover:text-indigo-800 self-start"
+            className="btn btn-ghost btn-sm self-start text-indigo-600 hover:text-indigo-700"
           >
             {showNew ? "▲ Cancel new source" : "+ New source"}
           </button>
@@ -684,23 +692,25 @@ function SourcePanel({
           {showNew && (
             <form
               onSubmit={handleCreateAndAttach}
-              className="space-y-2 rounded border border-indigo-200 bg-indigo-50 p-3"
+              className="flex flex-col gap-2 rounded-md border border-indigo-200 bg-indigo-50 p-3"
             >
-              {newError && <p className="text-xs text-red-600">{newError}</p>}
+              {newError && <p className="alert-error">{newError}</p>}
               <input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Title *"
+                aria-label="Source title"
                 required
-                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                className="input"
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <select
                   value={newType}
                   onChange={(e) =>
                     setNewType(e.target.value as (typeof SOURCE_TYPES)[number])
                   }
-                  className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  aria-label="Source type"
+                  className="input capitalize"
                 >
                   {SOURCE_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -712,7 +722,8 @@ function SourcePanel({
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                   placeholder="URL or file:// path"
-                  className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  aria-label="Source URL or file path"
+                  className="input"
                 />
               </div>
               <div className="flex justify-end gap-2">
@@ -722,14 +733,14 @@ function SourcePanel({
                     setShowNew(false);
                     setNewError(null);
                   }}
-                  className="text-xs text-gray-500 hover:text-gray-800"
+                  className="btn btn-ghost btn-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !newTitle.trim()}
-                  className="text-xs bg-indigo-600 text-white rounded px-3 py-1 hover:bg-indigo-700 disabled:opacity-50"
+                  className="btn btn-primary btn-sm"
                 >
                   {saving ? "Saving…" : "Create & attach"}
                 </button>
@@ -743,7 +754,7 @@ function SourcePanel({
               setQuery("");
               setShowNew(false);
             }}
-            className="text-xs text-gray-400 hover:text-gray-700 self-start"
+            className="btn btn-ghost btn-sm self-start"
           >
             Cancel
           </button>
@@ -751,7 +762,7 @@ function SourcePanel({
       ) : (
         <button
           onClick={() => setAttaching(true)}
-          className="text-xs text-indigo-600 hover:text-indigo-800 self-start"
+          className="btn btn-ghost btn-sm self-start text-indigo-600 hover:text-indigo-700"
         >
           + Attach source
         </button>
@@ -785,12 +796,12 @@ function CriticPanel({ node }: { node: NodeDetail }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Critic mode</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="section-label">Critic mode</h3>
         <button
           onClick={run}
           disabled={loading}
-          className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+          className="btn btn-ghost btn-sm text-indigo-600 hover:text-indigo-700"
         >
           {loading
             ? "Asking…"
@@ -801,13 +812,13 @@ function CriticPanel({ node }: { node: NodeDetail }) {
       </div>
 
       {!answer && !loading && !error && (
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-500">
           Ask Claude to enumerate the questions a careful reader would raise
           about this note.
         </p>
       )}
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="alert-error">{error}</p>}
 
       {answer && (
         <div className="prose prose-sm max-w-none text-sm text-gray-700">
@@ -883,12 +894,12 @@ function SuggestLinksPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">AI Suggestions</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="section-label">AI suggestions</h3>
         <button
           onClick={load}
           disabled={loading}
-          className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+          className="btn btn-ghost btn-sm text-indigo-600 hover:text-indigo-700"
         >
           {loading
             ? "Thinking…"
@@ -898,27 +909,22 @@ function SuggestLinksPanel({
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="alert-error">{error}</p>}
 
       {visible.length === 0 && !loading && suggestions.length > 0 && (
-        <p className="text-xs text-gray-400">All suggestions reviewed.</p>
+        <p className="text-xs text-gray-500">All suggestions reviewed.</p>
       )}
 
       {visible.map((s) => (
-        <div
-          key={s.node_id}
-          className="border border-gray-100 rounded-lg p-3 flex flex-col gap-2 bg-white"
-        >
+        <div key={s.node_id} className="card flex flex-col gap-2 p-3">
           <div className="flex items-start justify-between gap-2">
             <Link
               href={`/nodes/${s.node_id}`}
-              className="text-sm font-medium text-indigo-700 hover:underline"
+              className="text-sm font-medium text-indigo-700 hover:underline break-words"
             >
               {s.node_title}
             </Link>
-            <span
-              className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${EDGE_COLORS[s.edge_type]}`}
-            >
+            <span className={`badge shrink-0 ${EDGE_COLORS[s.edge_type]}`}>
               {s.edge_type}
             </span>
           </div>
@@ -930,13 +936,13 @@ function SuggestLinksPanel({
             <button
               onClick={() => accept(s)}
               disabled={accepting === s.node_id}
-              className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary btn-sm"
             >
               {accepting === s.node_id ? "Saving…" : "Accept"}
             </button>
             <button
               onClick={() => setDismissed((d) => new Set([...d, s.node_id]))}
-              className="text-xs px-2 py-1 text-gray-500 hover:text-gray-800"
+              className="btn btn-ghost btn-sm"
             >
               Dismiss
             </button>
@@ -1003,8 +1009,8 @@ export default function NodePage() {
 
   if (error) {
     return (
-      <div className="flex flex-col gap-3">
-        <p className="text-red-600 text-sm">{error}</p>
+      <div className="flex flex-col gap-4">
+        <div className="alert-error">{error}</div>
         <Link href="/inbox" className="text-sm text-indigo-600 hover:underline">
           ← Back to inbox
         </Link>
@@ -1012,58 +1018,82 @@ export default function NodePage() {
     );
   }
 
-  if (!node) return <div className="text-sm text-gray-400">Loading…</div>;
+  if (!node) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="skeleton h-5 w-32" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            <div className="card flex flex-col gap-4 p-6">
+              <div className="skeleton h-7 w-2/3" />
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-4 w-4/5" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-6">
+            <div className="card h-32 p-4">
+              <div className="skeleton h-full w-full" />
+            </div>
+            <div className="card h-32 p-4">
+              <div className="skeleton h-full w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/notes"
-            className="text-sm text-gray-400 hover:text-gray-700"
+            className="text-sm text-gray-500 hover:text-gray-800 shrink-0"
           >
             ← Notes
           </Link>
           <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+            className={`badge capitalize shrink-0 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
           >
             {node.type}
           </span>
         </div>
         {showDeleteConfirm ? (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs text-gray-500">
               Delete this note? This cannot be undone.
             </span>
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="text-sm text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+              className="btn btn-danger btn-sm"
             >
               {deleting ? "Deleting…" : "Yes, delete"}
             </button>
             <button
               onClick={() => setShowDeleteConfirm(false)}
               disabled={deleting}
-              className="text-sm text-gray-400 hover:text-gray-700"
+              className="btn btn-ghost btn-sm"
             >
               Cancel
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <ExportMenu node={node} contentRef={contentRef} />
             {node.type === "fleeting" && (
               <Link
                 href={`/inbox/process/${nodeId}`}
-                className="text-sm text-indigo-600 hover:text-indigo-800"
+                className="btn btn-primary btn-sm"
               >
                 Process →
               </Link>
             )}
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="text-sm text-gray-400 hover:text-red-500"
+              className="btn btn-ghost btn-sm text-gray-500 hover:text-red-600"
             >
               Delete note
             </button>
@@ -1074,10 +1104,7 @@ export default function NodePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <div
-            ref={contentRef}
-            className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col gap-4"
-          >
+          <div ref={contentRef} className="card flex flex-col gap-4 p-6">
             <EditableField
               value={node.title}
               onSave={(v) => saveField("title", v)}
@@ -1092,10 +1119,8 @@ export default function NodePage() {
             />
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-              Tags
-            </h3>
+          <div className="card p-4">
+            <h3 className="section-label mb-3">Tags</h3>
             <TagEditor
               currentTags={node.tags}
               allTags={allTags}
@@ -1103,7 +1128,7 @@ export default function NodePage() {
             />
           </div>
 
-          <div className="text-xs text-gray-400 flex gap-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
             <span>Created {new Date(node.created_at).toLocaleString()}</span>
             <span>Updated {new Date(node.updated_at).toLocaleString()}</span>
           </div>
@@ -1112,20 +1137,20 @@ export default function NodePage() {
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
           {node.type !== "fleeting" && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="card p-4">
               <SourcePanel node={node} onChange={reload} />
             </div>
           )}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="card p-4">
             <EdgePanel node={node} onRefresh={reload} />
           </div>
           {node.type !== "fleeting" && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="card p-4">
               <SuggestLinksPanel nodeId={nodeId} onEdgeCreated={reload} />
             </div>
           )}
           {node.type !== "fleeting" && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="card p-4">
               <CriticPanel node={node} />
             </div>
           )}
@@ -1195,21 +1220,23 @@ function ExportMenu({
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="text-sm text-gray-400 hover:text-gray-700"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="btn btn-ghost btn-sm"
       >
         Export ▾
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 z-10 w-44 rounded border border-gray-200 bg-white shadow-md text-sm">
+        <div className="absolute right-0 mt-1 z-10 w-44 overflow-hidden rounded-md border border-gray-200 bg-white shadow-md text-sm">
           <button
             onClick={handlePng}
-            className="block w-full px-3 py-1.5 text-left hover:bg-gray-50"
+            className="block w-full px-3 py-2 text-left hover:bg-gray-50"
           >
             PNG (Mermaid chart)
           </button>
           <button
             onClick={handleMarkdown}
-            className="block w-full px-3 py-1.5 text-left hover:bg-gray-50"
+            className="block w-full px-3 py-2 text-left hover:bg-gray-50"
           >
             Markdown (.md)
           </button>

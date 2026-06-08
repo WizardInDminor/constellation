@@ -23,8 +23,12 @@ const ALL_TYPES = ["permanent", "structure", "literature"] as const;
 function TagChip({ tag }: { tag: TagRef }) {
   return (
     <span
-      className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500"
-      style={tag.color ? { backgroundColor: tag.color + "33", color: tag.color } : undefined}
+      className="badge bg-gray-100 text-gray-500"
+      style={
+        tag.color
+          ? { backgroundColor: tag.color + "33", color: tag.color }
+          : undefined
+      }
     >
       {tag.name}
     </span>
@@ -35,21 +39,25 @@ function NoteCard({ node }: { node: NodeSummary }) {
   return (
     <Link
       href={`/nodes/${node.id}`}
-      className="flex items-start justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-indigo-300 hover:shadow-sm transition-all"
+      className="card-interactive flex items-start justify-between gap-4 px-4 py-3"
     >
-      <div className="flex flex-col gap-1 min-w-0 pr-4">
+      <div className="flex flex-col gap-1 min-w-0">
         <span className="font-medium text-sm truncate">{node.title}</span>
         {node.summary && (
-          <span className="text-xs text-gray-500 line-clamp-2">{node.summary}</span>
+          <span className="text-xs text-gray-500 line-clamp-2">
+            {node.summary}
+          </span>
         )}
         {node.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-0.5">
-            {node.tags.map((t) => <TagChip key={t.id} tag={t} />)}
+            {node.tags.map((t) => (
+              <TagChip key={t.id} tag={t} />
+            ))}
           </div>
         )}
       </div>
       <span
-        className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+        className={`badge shrink-0 mt-0.5 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
       >
         {TYPE_LABELS[node.type] ?? node.type}
       </span>
@@ -65,8 +73,13 @@ function HoverableNoteCard({ node }: { node: NodeSummary }) {
   return (
     <li
       ref={ref}
-      onMouseEnter={() => { timer.current = setTimeout(() => setShow(true), 300); }}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false); }}
+      onMouseEnter={() => {
+        timer.current = setTimeout(() => setShow(true), 300);
+      }}
+      onMouseLeave={() => {
+        clearTimeout(timer.current);
+        setShow(false);
+      }}
     >
       <NoteCard node={node} />
       <NotePreviewPopover node={node} anchorRef={ref} visible={show} />
@@ -76,9 +89,12 @@ function HoverableNoteCard({ node }: { node: NodeSummary }) {
 
 function SkeletonRow() {
   return (
-    <li className="bg-white border border-gray-200 rounded-lg px-4 py-3 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-2/3 mb-2" />
-      <div className="h-3 bg-gray-100 rounded w-full" />
+    <li className="card flex items-start justify-between gap-4 px-4 py-3">
+      <div className="flex-1 min-w-0">
+        <div className="skeleton h-4 w-2/3 mb-2" />
+        <div className="skeleton h-3 w-full" />
+      </div>
+      <div className="skeleton h-5 w-16 rounded-full shrink-0" />
     </li>
   );
 }
@@ -118,8 +134,13 @@ export default function NotesPage() {
           listNodes("literature", 1, 100, filters),
           listTags(),
         ]);
-        const merged = [...permanent.items, ...structure.items, ...literature.items].sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+        const merged = [
+          ...permanent.items,
+          ...structure.items,
+          ...literature.items,
+        ].sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
         );
         setNotes(merged);
         setAllTags(tags);
@@ -158,47 +179,64 @@ export default function NotesPage() {
 
   const schemaFiltersActive = noSummary || noOutgoing || noEdges || thinSummary;
   const isFiltered =
-    activeTypes.size < ALL_TYPES.length || activeTags.size > 0 || schemaFiltersActive;
+    activeTypes.size < ALL_TYPES.length ||
+    activeTags.size > 0 ||
+    schemaFiltersActive;
 
   if (error) {
-    return <div className="text-red-600 text-sm">{error}</div>;
+    return (
+      <div className="flex flex-col gap-4">
+        <h2 className="page-title">Notes</h2>
+        <div className="alert-error">{error}</div>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Notes</h2>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="page-title">Notes</h2>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {!loading && activeTags.size === 1 && (
             <Link
               href={`/cluster-links?tag_id=${Array.from(activeTags)[0]}`}
-              className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
             >
               Suggest cross-links →
             </Link>
           )}
-          {!loading && isFiltered && filtered.length > 0 && filtered.length <= 25 && (
-            <Link
-              href={`/graph?ids=${filtered.map((n) => n.id).join(",")}`}
-              className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
-            >
-              Open in graph →
-            </Link>
-          )}
+          {!loading &&
+            isFiltered &&
+            filtered.length > 0 &&
+            filtered.length <= 25 && (
+              <Link
+                href={`/graph?ids=${filtered.map((n) => n.id).join(",")}`}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                Open in graph →
+              </Link>
+            )}
           <span className="text-sm text-gray-500">
-            {loading ? "Loading…" : isFiltered ? `${filtered.length} of ${notes.length}` : `${notes.length} saved`}
+            {loading
+              ? "Loading…"
+              : isFiltered
+                ? `${filtered.length} of ${notes.length}`
+                : `${notes.length} saved`}
           </span>
         </div>
       </div>
 
-      {/* Type filter */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
+      {/* Filter toolbar */}
+      <div className="card flex flex-col gap-4 p-4">
+        {/* Type filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="section-label mr-1 shrink-0">Type</span>
           {ALL_TYPES.map((type) => (
             <button
               key={type}
               onClick={() => toggleType(type)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              aria-pressed={activeTypes.has(type)}
+              className={`badge border transition-colors ${
                 activeTypes.has(type)
                   ? TYPE_COLORS[type] + " border-transparent"
                   : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
@@ -211,23 +249,28 @@ export default function NotesPage() {
 
         {/* Tag filter — only shown when tags exist */}
         {allTags.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-400">Tags:</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="section-label mr-1 shrink-0">Tags</span>
             {allTags.map((tag) => (
               <button
                 key={tag.id}
                 onClick={() => toggleTag(tag.id)}
-                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                aria-pressed={activeTags.has(tag.id)}
+                className={`badge border transition-colors ${
                   activeTags.has(tag.id)
                     ? "border-transparent"
                     : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                 }`}
                 style={
                   activeTags.has(tag.id) && tag.color
-                    ? { backgroundColor: tag.color + "33", color: tag.color, borderColor: "transparent" }
+                    ? {
+                        backgroundColor: tag.color + "33",
+                        color: tag.color,
+                        borderColor: "transparent",
+                      }
                     : activeTags.has(tag.id)
-                    ? { backgroundColor: "#e0e7ff", color: "#4338ca" }
-                    : undefined
+                      ? { backgroundColor: "#e0e7ff", color: "#4338ca" }
+                      : undefined
                 }
               >
                 {tag.name}
@@ -236,7 +279,7 @@ export default function NotesPage() {
             {activeTags.size > 0 && (
               <button
                 onClick={() => setActiveTags(new Set())}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="btn btn-ghost btn-sm ml-1"
               >
                 Clear
               </button>
@@ -245,8 +288,8 @@ export default function NotesPage() {
         )}
 
         {/* Schema filters (ADR-055) — AND-compose with type/tag chips */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-400">Find:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="section-label mr-1 shrink-0">Find</span>
           {[
             { active: noSummary, set: setNoSummary, label: "no summary" },
             {
@@ -254,13 +297,18 @@ export default function NotesPage() {
               set: setThinSummary,
               label: `thin summary (<${THIN_SUMMARY_CHARS} chars)`,
             },
-            { active: noOutgoing, set: setNoOutgoing, label: "no outgoing edges" },
+            {
+              active: noOutgoing,
+              set: setNoOutgoing,
+              label: "no outgoing edges",
+            },
             { active: noEdges, set: setNoEdges, label: "no edges at all" },
           ].map(({ active, set, label }) => (
             <button
               key={label}
               onClick={() => set(!active)}
-              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+              aria-pressed={active}
+              className={`badge border transition-colors ${
                 active
                   ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
@@ -277,7 +325,7 @@ export default function NotesPage() {
                 setNoOutgoing(false);
                 setNoEdges(false);
               }}
-              className="text-xs text-gray-400 hover:text-gray-600"
+              className="btn btn-ghost btn-sm ml-1"
             >
               Clear
             </button>
@@ -287,14 +335,32 @@ export default function NotesPage() {
 
       {loading ? (
         <ul className="flex flex-col gap-2">
-          {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
         </ul>
       ) : filtered.length === 0 ? (
-        <p className="text-gray-400 text-sm">
-          {notes.length === 0
-            ? "No permanent or structure notes yet. Process some inbox notes to get started."
-            : "No notes match the active filters."}
-        </p>
+        <div className="empty-state">
+          {notes.length === 0 ? (
+            <>
+              <p className="font-medium text-gray-700">No notes yet</p>
+              <p className="text-sm text-gray-500">
+                Process some inbox notes to turn them into permanent or
+                structure notes.
+              </p>
+              <Link href="/inbox" className="btn btn-primary btn-sm mt-2">
+                Go to inbox
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-gray-700">No matching notes</p>
+              <p className="text-sm text-gray-500">
+                No notes match the active filters. Try clearing some filters.
+              </p>
+            </>
+          )}
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {filtered.map((node) => (

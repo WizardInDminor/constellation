@@ -30,12 +30,7 @@ import {
   searchNodes,
   updateNode,
 } from "@/lib/api";
-import type {
-  EdgeType,
-  NodeDetail,
-  NodeRef,
-  TagRef,
-} from "@/lib/api";
+import type { EdgeType, NodeDetail, NodeRef, TagRef } from "@/lib/api";
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
 interface Props {
@@ -193,71 +188,68 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-8 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 py-8 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={node ? `Edit note: ${node.title}` : "Edit note"}
+        className="scrollbar-thin w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl ring-1 ring-black/5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-start justify-between gap-2 mb-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold truncate">
+            <h2 className="page-title text-base truncate">
               {node?.title ?? "Loading…"}
             </h2>
-            {node && (
-              <p className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">
-                {node.type}
-              </p>
-            )}
+            {node && <p className="section-label mt-0.5">{node.type}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none shrink-0"
+            className="shrink-0 text-xl leading-none text-gray-400 hover:text-gray-700"
             aria-label="Close"
           >
             ×
           </button>
         </div>
 
-        {error && (
-          <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert-error mb-4">{error}</div>}
 
         {!node ? (
-          <p className="text-xs text-gray-400">Loading…</p>
+          <div className="space-y-2">
+            <div className="skeleton h-3 w-3/4" />
+            <div className="skeleton h-3 w-full" />
+            <div className="skeleton h-3 w-5/6" />
+          </div>
         ) : (
           <div className="space-y-4">
             {/* Content */}
             <div>
-              <label className="block text-[11px] font-medium text-gray-600 mb-1">
+              <label htmlFor="nip-content" className="label">
                 Content
               </label>
               <textarea
+                id="nip-content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={6}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y font-mono"
+                className="textarea font-mono"
               />
             </div>
 
             {/* Tags */}
             <div>
-              <label className="block text-[11px] font-medium text-gray-600 mb-1">
+              <label htmlFor="nip-tag-input" className="label">
                 Tags
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
                 {tags.map((t) => (
-                  <span
-                    key={t.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs"
-                  >
+                  <span key={t.id} className="badge bg-gray-100 text-gray-700">
                     {t.name}
                     <button
                       onClick={() => removeTag(t.id)}
-                      className="text-gray-400 hover:text-rose-500"
+                      className="ml-1 text-gray-400 hover:text-rose-500"
                       aria-label={`Remove ${t.name}`}
                     >
                       ×
@@ -266,6 +258,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                 ))}
                 <div className="relative">
                   <input
+                    id="nip-tag-input"
                     type="text"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
@@ -276,15 +269,15 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                       }
                     }}
                     placeholder="add tag…"
-                    className="rounded border border-gray-200 px-2 py-0.5 text-xs w-32 focus:border-blue-500 focus:outline-none"
+                    className="input w-32"
                   />
                   {tagInput && tagSuggestions.length > 0 && (
-                    <div className="absolute z-10 mt-1 max-h-32 w-40 overflow-y-auto rounded border border-gray-200 bg-white shadow-md">
+                    <div className="card scrollbar-thin absolute z-10 mt-1 max-h-32 w-40 overflow-y-auto shadow-lg">
                       {tagSuggestions.slice(0, 6).map((t) => (
                         <button
                           key={t.id}
                           onClick={() => addTag(t)}
-                          className="block w-full px-2 py-1 text-left text-xs hover:bg-gray-50"
+                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-indigo-50"
                         >
                           {t.name}
                         </button>
@@ -297,9 +290,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
 
             {/* Edges */}
             <div>
-              <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                Edges out
-              </label>
+              <div className="label">Edges out</div>
               {node.outgoing_edges.length === 0 ? (
                 <p className="text-xs text-gray-400">No outgoing edges.</p>
               ) : (
@@ -340,10 +331,11 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                       value={edgeSearch}
                       onChange={(e) => setEdgeSearch(e.target.value)}
                       placeholder="Find note to link…"
-                      className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                      aria-label="Find note to link"
+                      className="input"
                     />
                     {edgeResults.length > 0 && (
-                      <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-md">
+                      <div className="card scrollbar-thin absolute z-10 mt-1 max-h-40 w-full overflow-y-auto shadow-lg">
                         {edgeResults.map((r) => (
                           <button
                             key={r.id}
@@ -352,7 +344,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                               setEdgeSearch(r.title);
                               setEdgeResults([]);
                             }}
-                            className="block w-full px-2 py-1 text-left text-xs hover:bg-gray-50"
+                            className="block w-full px-3 py-1.5 text-left text-sm hover:bg-indigo-50"
                           >
                             {r.title}
                           </button>
@@ -362,7 +354,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs">
-                    <span className="rounded bg-blue-50 px-2 py-0.5 truncate">
+                    <span className="rounded bg-indigo-50 text-indigo-800 px-2 py-0.5 truncate">
                       → {edgeTarget.title}
                     </span>
                     <button
@@ -380,7 +372,8 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                   <select
                     value={edgeType}
                     onChange={(e) => setEdgeType(e.target.value as EdgeType)}
-                    className="rounded border border-gray-200 px-1.5 py-0.5 text-xs"
+                    aria-label="Edge type"
+                    className="input w-auto"
                   >
                     {EDGE_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -391,7 +384,7 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
                   <button
                     onClick={handleAddEdge}
                     disabled={!edgeTarget || addingEdge}
-                    className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="btn btn-secondary btn-sm"
                   >
                     {addingEdge ? "Adding…" : "Add edge"}
                   </button>
@@ -399,17 +392,14 @@ export function NodeInteractionPopup({ nodeId, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-              <button
-                onClick={onClose}
-                className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-              >
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+              <button onClick={onClose} className="btn btn-ghost">
                 Cancel
               </button>
               <button
                 onClick={handleSaveCore}
                 disabled={saving}
-                className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {saving ? "Saving…" : "Save"}
               </button>

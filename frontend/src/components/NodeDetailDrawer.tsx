@@ -58,44 +58,49 @@ export function NodeDetailDrawer({ nodeId, onClose }: NodeDetailDrawerProps) {
   if (!nodeId) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-40 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Note details"
+    >
       <div
         className="absolute inset-0 bg-black/30"
         onClick={onClose}
         aria-hidden
       />
-      <aside className="relative w-full max-w-md bg-white shadow-xl flex flex-col h-full">
-        <header className="flex items-start justify-between gap-2 p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2 min-w-0">
+      <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-xl">
+        <header className="flex items-start justify-between gap-2 border-b border-gray-200 p-4">
+          <div className="flex min-w-0 items-center gap-2">
             {detail && (
               <span
-                className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[detail.type] ?? "bg-gray-100 text-gray-600"}`}
+                className={`badge shrink-0 ${TYPE_COLORS[detail.type] ?? "bg-gray-100 text-gray-600"}`}
               >
                 {detail.type}
               </span>
             )}
-            <h2 className="text-sm font-semibold text-gray-900 truncate">
+            <h2 className="truncate text-sm font-semibold text-gray-900">
               {detail?.title ?? (loading ? "Loading…" : "")}
             </h2>
           </div>
           <button
             onClick={onClose}
             aria-label="Close panel"
-            className="shrink-0 text-gray-400 hover:text-gray-700 text-xl leading-none"
+            className="shrink-0 text-xl leading-none text-gray-400 hover:text-gray-700"
           >
             ×
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
           {loading && !detail && (
             <div className="space-y-2">
-              <div className="h-3 bg-gray-100 rounded animate-pulse w-3/4" />
-              <div className="h-3 bg-gray-100 rounded animate-pulse w-full" />
-              <div className="h-3 bg-gray-100 rounded animate-pulse w-5/6" />
+              <div className="skeleton h-3 w-3/4" />
+              <div className="skeleton h-3 w-full" />
+              <div className="skeleton h-3 w-5/6" />
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <div className="alert-error">{error}</div>}
           {detail && (
             <>
               {detail.tags.length > 0 && (
@@ -103,7 +108,7 @@ export function NodeDetailDrawer({ nodeId, onClose }: NodeDetailDrawerProps) {
                   {detail.tags.map((t: TagRef) => (
                     <span
                       key={t.id}
-                      className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                      className="badge bg-gray-100 text-gray-600"
                       style={
                         t.color
                           ? { backgroundColor: t.color + "33", color: t.color }
@@ -117,20 +122,16 @@ export function NodeDetailDrawer({ nodeId, onClose }: NodeDetailDrawerProps) {
               )}
               {detail.summary && (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-                    Summary
-                  </div>
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  <div className="section-label mb-1">Summary</div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
                     {detail.summary}
                   </p>
                 </div>
               )}
               {detail.content && (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-                    Content
-                  </div>
-                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  <div className="section-label mb-1">Content</div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
                     {detail.content}
                   </p>
                 </div>
@@ -143,10 +144,10 @@ export function NodeDetailDrawer({ nodeId, onClose }: NodeDetailDrawerProps) {
         </div>
 
         {detail && (
-          <footer className="p-4 border-t border-gray-200">
+          <footer className="border-t border-gray-200 p-4">
             <Link
               href={`/nodes/${detail.id}`}
-              className="block w-full text-center text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1.5 transition-colors"
+              className="btn btn-primary w-full"
             >
               Open full note →
             </Link>

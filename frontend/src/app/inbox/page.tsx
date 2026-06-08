@@ -7,7 +7,7 @@ export default async function InboxPage() {
     nodes = await getInboxNodes();
   } catch {
     return (
-      <div className="text-red-600 text-sm">
+      <div className="alert-error">
         Could not reach the backend. Is it running?
       </div>
     );
