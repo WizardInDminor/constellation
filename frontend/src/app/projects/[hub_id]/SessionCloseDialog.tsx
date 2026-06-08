@@ -7,15 +7,8 @@
  */
 
 import { useEffect, useState } from "react";
-import {
-  getSessionWrap,
-  patchSession,
-} from "@/lib/api";
-import type {
-  SessionStatus,
-  SessionWrapCounts,
-  WorkSession,
-} from "@/lib/api";
+import { getSessionWrap, patchSession } from "@/lib/api";
+import type { SessionStatus, SessionWrapCounts, WorkSession } from "@/lib/api";
 
 const STATUS_OPTIONS: { value: SessionStatus; label: string }[] = [
   { value: "completed", label: "Completed" },
@@ -76,31 +69,37 @@ export function SessionCloseDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="End session"
+        className="w-full max-w-lg bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold truncate">End session</h2>
-            <p className="text-[11px] text-gray-400 truncate mt-0.5">
+            <h2 className="text-base font-semibold text-gray-900 truncate">
+              End session
+            </h2>
+            <p className="text-xs text-gray-500 truncate mt-0.5">
               {session.intent}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            aria-label="Close"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
         </div>
 
         {wrap && (
-          <div className="mb-4 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600 grid grid-cols-3 gap-2">
+          <div className="mb-4 rounded-md bg-gray-50 px-3 py-2.5 grid grid-cols-3 gap-2">
             <Stat label="Nodes" value={wrap.nodes_created} />
             <Stat label="Captures" value={wrap.fleetings_created} />
             <Stat label="Edges" value={wrap.edges_created} />
@@ -109,60 +108,59 @@ export function SessionCloseDialog({
 
         {closed ? (
           <div className="space-y-3">
-            <p className="text-sm">
+            <p className="text-sm text-gray-700">
               Session closed —{" "}
               <span className="font-medium">
-                {closed.status} · {Math.round((closed.duration_seconds ?? 0) / 60)}m
+                {closed.status} ·{" "}
+                {Math.round((closed.duration_seconds ?? 0) / 60)}m
               </span>
             </p>
-            <button
-              onClick={onClose}
-              className="w-full rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-            >
+            <button onClick={onClose} className="btn btn-primary w-full">
               Done
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="session-closing-notes" className="label">
                 Closing notes — what shifted, what felt unresolved
               </label>
               <textarea
+                id="session-closing-notes"
                 autoFocus
                 value={closingNotes}
                 onChange={(e) => setClosingNotes(e.target.value)}
                 rows={3}
                 placeholder="e.g. Got the harbor scene working. Vincent's motivation still murky."
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                className="textarea"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Next session intent — what you'd pick up
+              <label htmlFor="session-next-intent" className="label">
+                Next session intent — what you&apos;d pick up
               </label>
               <textarea
+                id="session-next-intent"
                 value={nextIntent}
                 onChange={(e) => setNextIntent(e.target.value)}
                 rows={2}
                 placeholder="e.g. Re-read Vincent's backstory notes; draft his confrontation scene."
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                className="textarea"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Status
-              </label>
+              <span className="label mb-1.5">Status</span>
               <div className="grid grid-cols-3 gap-1.5">
                 {STATUS_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
+                    aria-pressed={status === opt.value}
                     onClick={() => setStatus(opt.value)}
-                    className={`rounded border px-2 py-1.5 text-xs ${
+                    className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
                       status === opt.value
                         ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                        : "border-gray-200 hover:border-gray-300"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                     }`}
                   >
                     {opt.label}
@@ -170,19 +168,15 @@ export function SessionCloseDialog({
                 ))}
               </div>
             </div>
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="alert-error">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-              >
+              <button type="button" onClick={onClose} className="btn btn-ghost">
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {saving ? "Closing…" : "End session"}
               </button>

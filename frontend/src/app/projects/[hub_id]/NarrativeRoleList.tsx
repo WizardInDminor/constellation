@@ -75,47 +75,47 @@ export function NarrativeRoleList({
   }, [tagName]);
 
   return (
-    <div className="space-y-3 max-w-3xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">
-            {roleLabelPlural}
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Slice 5 lists; full per-{roleLabel.toLowerCase()} sheets land
-            in Phase 10.
+    <div className="space-y-4 max-w-3xl">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="section-label">{roleLabelPlural}</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Slice 5 lists; full per-{roleLabel.toLowerCase()} sheets land in
+            Phase 10.
           </p>
         </div>
         <button
           onClick={() => setCreating(true)}
-          className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+          className="btn btn-secondary btn-sm shrink-0"
         >
           + New {roleLabel.toLowerCase()}
         </button>
       </div>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {items === null ? (
-        <p className="text-xs text-gray-400">Loading…</p>
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <li key={i} className="card px-3 py-2.5">
+              <div className="skeleton h-4 w-2/3" />
+              <div className="skeleton mt-2 h-3 w-full" />
+            </li>
+          ))}
+        </ul>
       ) : items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">
-          No {roleLabelPlural.toLowerCase()} yet. Click “New
-          {" "}
-          {roleLabel.toLowerCase()}” to get started.
-        </p>
+        <div className="empty-state">
+          <p className="text-sm font-medium text-gray-700">
+            No {roleLabelPlural.toLowerCase()} yet
+          </p>
+          <p className="text-xs text-gray-500">
+            Click “New {roleLabel.toLowerCase()}” to add the first one.
+          </p>
+        </div>
       ) : (
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {items.map((n) => (
-            <NarrativeRoleItem
-              key={n.id}
-              item={n}
-              onChanged={refresh}
-            />
+            <NarrativeRoleItem key={n.id} item={n} onChanged={refresh} />
           ))}
         </ul>
       )}
@@ -145,21 +145,21 @@ function NarrativeRoleItem({
   onChanged: () => void;
 }) {
   const { anchorProps, popup } = useNodeInteraction(item.id, onChanged);
-  const categoryTag = ((item as unknown as { tags?: TagRef[] }).tags ?? []).find(
-    (t) => t.name.startsWith("narrative:lore-"),
-  );
+  const categoryTag = (
+    (item as unknown as { tags?: TagRef[] }).tags ?? []
+  ).find((t) => t.name.startsWith("narrative:lore-"));
   return (
     <li>
       <button
         {...anchorProps}
-        className="block w-full rounded border border-gray-200 bg-white px-3 py-2 text-left hover:border-indigo-300 transition"
+        className="card-interactive block w-full px-3 py-2.5 text-left"
         title="Click for quick-edit (Ctrl+click also opens this)"
       >
         <p className="text-sm font-medium text-gray-900 truncate">
           {item.title}
         </p>
         {categoryTag && (
-          <p className="text-[10px] text-gray-400 mt-0.5">
+          <p className="section-label mt-1">
             {categoryTag.name.replace("narrative:lore-", "").replace(/-/g, " ")}
           </p>
         )}
@@ -247,43 +247,52 @@ function QuickCreateDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`New ${roleLabel.toLowerCase()}`}
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">New {roleLabel.toLowerCase()}</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            New {roleLabel.toLowerCase()}
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="role-title" className="label">
               Title
             </label>
             <input
+              id="role-title"
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="input"
             />
           </div>
           {categoryTags && categoryTags.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="role-category" className="label">
                 Category
               </label>
               <select
+                id="role-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                className="input"
               >
                 {categoryTags.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -295,13 +304,14 @@ function QuickCreateDialog({
           )}
           {roleLabel.toLowerCase() === "character" && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="role-archetype" className="label">
                 Archetype
               </label>
               <select
+                id="role-archetype"
                 value={archetype}
                 onChange={(e) => setArchetype(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                className="input"
               >
                 <option value="">— unset —</option>
                 <option>Protagonist</option>
@@ -313,29 +323,26 @@ function QuickCreateDialog({
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="role-description" className="label">
               Description
             </label>
             <textarea
+              id="role-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm resize-none"
+              className="textarea"
             />
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="alert-error">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !title.trim()}
-              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {saving ? "Creating…" : "Create"}
             </button>

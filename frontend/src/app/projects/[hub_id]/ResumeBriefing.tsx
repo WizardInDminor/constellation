@@ -19,11 +19,7 @@ import {
   ragScopedWithSession,
   saveAnswer,
 } from "@/lib/api";
-import type {
-  NodeSummary,
-  ProjectScope,
-  WorkSession,
-} from "@/lib/api";
+import type { NodeSummary, ProjectScope, WorkSession } from "@/lib/api";
 
 const DEFAULT_BRIEFING_PROMPT =
   "List open decisions, unfinished work, and anything captured since my last " +
@@ -116,69 +112,65 @@ export function ResumeBriefing({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-          Resume briefing
-        </p>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="section-label">Resume briefing</h2>
         <button
           onClick={() => setEditing((e) => !e)}
-          className="text-[10px] text-indigo-600 hover:text-indigo-700"
+          className="btn btn-ghost btn-sm text-indigo-600 hover:text-indigo-700"
         >
-          {editing ? "cancel" : "edit prompt"}
+          {editing ? "Cancel" : "Edit prompt"}
         </button>
       </div>
 
       {editing ? (
         <>
+          <label htmlFor="briefing-prompt" className="sr-only">
+            Briefing prompt
+          </label>
           <textarea
+            id="briefing-prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={4}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            className="textarea text-xs"
           />
           <div className="flex justify-end">
-            <button
-              onClick={savePrompt}
-              className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
-            >
+            <button onClick={savePrompt} className="btn btn-primary btn-sm">
               Save prompt
             </button>
           </div>
         </>
       ) : (
-        <p className="text-[11px] text-gray-600 whitespace-pre-wrap">{prompt}</p>
+        <p className="text-xs text-gray-600 whitespace-pre-wrap">{prompt}</p>
       )}
 
-      <label className="flex items-center gap-2 text-[11px] text-gray-600">
+      <label className="flex items-center gap-2 text-xs text-gray-600">
         <input
           type="checkbox"
           checked={includeFleeting}
           disabled={!activeSession}
           onChange={(e) => setIncludeFleeting(e.target.checked)}
+          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
-        Include today's unprocessed captures
+        Include today&apos;s unprocessed captures
         {!activeSession && (
-          <span className="text-gray-300">(start a session to enable)</span>
+          <span className="text-gray-400">(start a session to enable)</span>
         )}
       </label>
 
       <button
         onClick={runBriefing}
         disabled={running}
-        className="w-full rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="btn btn-primary btn-sm w-full"
       >
         {running ? "Running…" : "Run briefing"}
       </button>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {result && (
         <div className="space-y-2">
-          <div className="rounded border border-gray-200 bg-white px-3 py-2 text-xs whitespace-pre-wrap max-h-64 overflow-y-auto">
+          <div className="card scrollbar-thin px-3 py-2 text-xs whitespace-pre-wrap max-h-64 overflow-y-auto">
             {result}
           </div>
           {savedId && (

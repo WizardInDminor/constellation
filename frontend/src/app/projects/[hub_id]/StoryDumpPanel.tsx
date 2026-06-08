@@ -23,7 +23,11 @@ import type {
   ProjectScope,
 } from "@/lib/api";
 
-const DUMP_TYPES: { value: "story-arc" | "character" | "themes"; label: string; hint: string }[] = [
+const DUMP_TYPES: {
+  value: "story-arc" | "character" | "themes";
+  label: string;
+  hint: string;
+}[] = [
   {
     value: "story-arc",
     label: "Story arc",
@@ -48,9 +52,9 @@ interface Props {
 
 export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
   const [text, setText] = useState("");
-  const [dumpType, setDumpType] = useState<"story-arc" | "character" | "themes">(
-    "story-arc",
-  );
+  const [dumpType, setDumpType] = useState<
+    "story-arc" | "character" | "themes"
+  >("story-arc");
   const [response, setResponse] = useState<NarrativeDumpResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,13 +112,13 @@ export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
           )
             .then((r) => r.json())
             .then(
-              (
-                tags: { id: string; name: string }[],
-              ): string | undefined =>
+              (tags: { id: string; name: string }[]): string | undefined =>
                 tags.find((t) => t.name === "narrative:character")?.id,
             ));
         if (tagId) {
-          await updateNode(node.id, { tag_ids: [...node.tags.map((t) => t.id), tagId] });
+          await updateNode(node.id, {
+            tag_ids: [...node.tags.map((t) => t.id), tagId],
+          });
         }
       } else {
         // theme
@@ -130,13 +134,13 @@ export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
           )
             .then((r) => r.json())
             .then(
-              (
-                tags: { id: string; name: string }[],
-              ): string | undefined =>
+              (tags: { id: string; name: string }[]): string | undefined =>
                 tags.find((t) => t.name === "narrative:theme")?.id,
             ));
         if (tagId) {
-          await updateNode(node.id, { tag_ids: [...node.tags.map((t) => t.id), tagId] });
+          await updateNode(node.id, {
+            tag_ids: [...node.tags.map((t) => t.id), tagId],
+          });
         }
       }
       // Mark accepted by removing the candidate from the response list.
@@ -168,32 +172,41 @@ export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
   }
 
   return (
-    <div className="space-y-3 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
       <div>
-        <h2 className="text-sm font-semibold text-gray-900">Story dump</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <h2 className="section-label">Story dump</h2>
+        <p className="text-xs text-gray-500 mt-1">
           Paste narrative thinking; the assistant extracts candidate nodes
-          (events, characters, or themes). Review individually before
-          anything becomes graph data.
+          (events, characters, or themes). Review individually before anything
+          becomes graph data.
         </p>
       </div>
 
-      <form onSubmit={handleExtract} className="space-y-2">
+      <form onSubmit={handleExtract} className="space-y-3">
+        <label htmlFor="story-dump-text" className="sr-only">
+          Narrative dump text
+        </label>
         <textarea
+          id="story-dump-text"
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={8}
           placeholder="Dump narrative thinking here — a character rant, a sequence of beats, a tangle of theme observations."
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="textarea font-mono"
         />
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="inline-flex rounded-md border border-gray-200 overflow-hidden"
+            role="group"
+            aria-label="Dump type"
+          >
             {DUMP_TYPES.map((dt) => (
               <button
                 key={dt.value}
                 type="button"
+                aria-pressed={dumpType === dt.value}
                 onClick={() => setDumpType(dt.value)}
-                className={`px-2.5 py-1 text-xs border-l first:border-l-0 border-gray-200 ${
+                className={`px-2.5 py-1 text-xs font-medium border-l first:border-l-0 border-gray-200 transition-colors ${
                   dumpType === dt.value
                     ? "bg-amber-600 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
@@ -207,65 +220,63 @@ export function StoryDumpPanel({ scope, defaultTimelineId }: Props) {
           <button
             type="submit"
             disabled={loading || !text.trim()}
-            className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            className="btn btn-sm bg-amber-600 text-white shadow-sm hover:bg-amber-700 active:bg-amber-800"
           >
             {loading ? "Extracting…" : "Extract nodes →"}
           </button>
         </div>
-        <p className="text-[11px] text-gray-400">
+        <p className="field-hint">
           {DUMP_TYPES.find((d) => d.value === dumpType)?.hint}
         </p>
       </form>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {response && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-xs text-gray-500">
             {response.candidates.length} candidate
             {response.candidates.length === 1 ? "" : "s"}. Accept or dismiss
             individually.
           </p>
           {response.candidates.length === 0 && (
-            <p className="text-xs text-gray-400 italic">
-              All candidates reviewed.
-            </p>
+            <div className="empty-state">
+              <p className="text-sm font-medium text-gray-700">
+                All candidates reviewed
+              </p>
+              <p className="text-xs text-gray-500">
+                Paste more narrative thinking above to extract again.
+              </p>
+            </div>
           )}
           <ul className="space-y-2">
             {response.candidates.map((c, idx) => (
-              <li
-                key={idx}
-                className="rounded border border-gray-200 bg-white p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
+              <li key={idx} className="card p-3">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {c.title}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-400 mt-0.5">
+                    <p className="section-label mt-1">
                       {c.subtype}
                       {c.story_time && ` · ${c.story_time}`}
                       {c.archetype && ` · ${c.archetype}`}
                     </p>
-                    <p className="text-xs text-gray-600 mt-1">
+                    <p className="text-xs text-gray-600 mt-1.5">
                       {c.description}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0">
+                  <div className="flex flex-col gap-1.5 shrink-0">
                     <button
                       onClick={() => acceptCandidate(idx, c)}
                       disabled={accepting.has(idx)}
-                      className="rounded bg-emerald-600 px-2 py-0.5 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className="btn btn-sm bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800"
                     >
-                      Accept
+                      {accepting.has(idx) ? "Accepting…" : "Accept"}
                     </button>
                     <button
                       onClick={() => dismissCandidate(idx)}
-                      className="text-xs text-gray-500 hover:text-gray-700"
+                      className="btn btn-ghost btn-sm"
                     >
                       Dismiss
                     </button>

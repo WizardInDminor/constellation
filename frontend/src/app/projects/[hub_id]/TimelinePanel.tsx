@@ -58,12 +58,13 @@ const ACT_BAND_Y = 4;
 // Default discourse_position step when appending a new event to the lane.
 const POSITION_STEP = 100;
 
-const PROSE_STATUS_COLORS: Record<ProseStatus, { dot: string; label: string }> = {
-  planned: { dot: "bg-gray-300", label: "Planned" },
-  draft: { dot: "bg-amber-400", label: "Draft" },
-  written: { dot: "bg-emerald-500", label: "Written" },
-  revised: { dot: "bg-blue-500", label: "Revised" },
-};
+const PROSE_STATUS_COLORS: Record<ProseStatus, { dot: string; label: string }> =
+  {
+    planned: { dot: "bg-gray-300", label: "Planned" },
+    draft: { dot: "bg-amber-400", label: "Draft" },
+    written: { dot: "bg-emerald-500", label: "Written" },
+    revised: { dot: "bg-blue-500", label: "Revised" },
+  };
 
 // Slice 5: registered lane info — each lane reports its SVG ref + a
 // position converter to the parent so cross-lane drag can hit-test the
@@ -123,12 +124,9 @@ export function TimelinePanel({ scope }: Props) {
   // walks this map to find which lane the cursor is over.
   const laneRegistry = useRef<Map<string, LaneRegistration>>(new Map());
 
-  const registerLane = useCallback(
-    (laneId: string, reg: LaneRegistration) => {
-      laneRegistry.current.set(laneId, reg);
-    },
-    [],
-  );
+  const registerLane = useCallback((laneId: string, reg: LaneRegistration) => {
+    laneRegistry.current.set(laneId, reg);
+  }, []);
   const unregisterLane = useCallback((laneId: string) => {
     laneRegistry.current.delete(laneId);
   }, []);
@@ -235,22 +233,26 @@ export function TimelinePanel({ scope }: Props) {
   }, [refresh]);
 
   if (error) {
-    return (
-      <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-        {error}
-      </div>
-    );
+    return <div className="alert-error">{error}</div>;
   }
   if (timeline === null) {
-    return <p className="text-xs text-gray-400">Loading timeline…</p>;
+    return (
+      <div className="space-y-3" aria-busy="true">
+        <div className="skeleton h-6 w-1/3" />
+        <div className="skeleton h-40 w-full" />
+      </div>
+    );
   }
   if (timeline.lanes.length === 0) {
     // Shouldn't happen — backend lazy-creates a default lane. Defensive.
     return (
-      <p className="text-xs text-gray-400">
-        No timelines yet. The backend should have created one — try
-        refreshing.
-      </p>
+      <div className="empty-state">
+        <p className="text-sm font-medium text-gray-700">No timelines yet</p>
+        <p className="text-xs text-gray-500">
+          The backend should have created one automatically — try refreshing the
+          page.
+        </p>
+      </div>
     );
   }
 
@@ -280,27 +282,25 @@ export function TimelinePanel({ scope }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">
-            Narrative timeline
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Click empty canvas to add an event. Drag a card to reorder.
-            Click a card for details. Ctrl+click for quick-edit.
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="section-label">Narrative timeline</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Click empty canvas to add an event. Drag a card to reorder. Click a
+            card for details. Ctrl+click for quick-edit.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={() => setNewTimelineOpen(true)}
-            className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            className="btn btn-secondary btn-sm"
             title="Create a parallel timeline (Slice 5)"
           >
             + Timeline
           </button>
           <button
             onClick={() => setActDialog(timeline.lanes[0].timeline.id)}
-            className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            className="btn btn-secondary btn-sm"
           >
             + Act span
           </button>
@@ -421,23 +421,20 @@ function LaneToggle({
     <div className="flex items-center gap-2 text-xs flex-wrap">
       {lanes.length > 1 && (
         <>
-          <span className="text-gray-400 uppercase tracking-wider text-[10px]">
-            Lanes
-          </span>
+          <span className="section-label">Lanes</span>
           {lanes.map((l) => {
             const isHidden = hidden.has(l.timeline.id);
             return (
               <button
                 key={l.timeline.id}
                 onClick={() => onToggle(l.timeline.id)}
-                className={`rounded-full border px-2 py-0.5 ${
+                aria-pressed={!isHidden}
+                className={`badge border transition-colors ${
                   isHidden
                     ? "border-gray-200 text-gray-400 line-through"
                     : "border-indigo-300 bg-indigo-50 text-indigo-700"
                 }`}
-                title={
-                  isHidden ? "Show this lane" : "Hide this lane"
-                }
+                title={isHidden ? "Show this lane" : "Hide this lane"}
               >
                 {l.timeline.title}
               </button>
@@ -446,15 +443,12 @@ function LaneToggle({
         </>
       )}
       {highlightedCharacterId && (
-        <div className="ml-auto flex items-center gap-1">
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
+        <div className="ml-auto flex items-center gap-2">
+          <span className="badge bg-amber-100 text-amber-800">
             Character highlight active
           </span>
-          <button
-            onClick={onClearHighlight}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            clear
+          <button onClick={onClearHighlight} className="btn btn-ghost btn-sm">
+            Clear
           </button>
         </div>
       )}
@@ -551,13 +545,7 @@ function TimelineLaneCanvas({
     const laneId = lane.timeline.id;
     onRegisterLane(laneId, reg);
     return () => onUnregisterLane(laneId);
-  }, [
-    lane.timeline.id,
-    canvasWidth,
-    minPos,
-    onRegisterLane,
-    onUnregisterLane,
-  ]);
+  }, [lane.timeline.id, canvasWidth, minPos, onRegisterLane, onUnregisterLane]);
 
   function handleCanvasClick(e: React.MouseEvent<SVGSVGElement>) {
     if (drag) return; // Don't create while dragging
@@ -591,7 +579,7 @@ function TimelineLaneCanvas({
       className={`border rounded-lg overflow-x-auto bg-gray-50 transition-shadow ${containerBorder}`}
     >
       <div className="px-3 py-2 border-b border-gray-200 bg-white text-xs text-gray-500 flex items-center gap-2">
-        <span className="font-medium text-gray-700 truncate">
+        <span className="font-medium text-gray-700 truncate min-w-0">
           {lane.timeline.title}
         </span>
         <span className="text-gray-300">·</span>
@@ -602,7 +590,8 @@ function TimelineLaneCanvas({
           <>
             <span className="text-gray-300">·</span>
             <span>
-              {lane.act_spans.length} act{lane.act_spans.length === 1 ? "" : "s"}
+              {lane.act_spans.length} act
+              {lane.act_spans.length === 1 ? "" : "s"}
             </span>
           </>
         )}
@@ -733,43 +722,49 @@ function TimelineLaneCanvas({
             over this lane but the dragged event lives in another lane.
             This makes cross-lane drag legible — the user sees the card
             preview hovering over the target lane. */}
-        {drag && isCrossLaneTarget && (() => {
-          const sourceEvent = drag.eventId;
-          // Build a minimal ghost event for the card renderer.
-          const ghostEvent = {
-            node: { id: sourceEvent, title: "(dragging…)", type: "permanent" as const },
-            discourse_position: drag.targetPosition,
-            story_time: null,
-            prose_status: null,
-            manuscript_location: null,
-            timeline_count: 1,
-            character_ids: [],
-            theme_ids: [],
-          };
-          return (
-            <g style={{ pointerEvents: "none", opacity: 0.7 }}>
-              <EventCard
-                event={ghostEvent}
-                x={positionToX(drag.targetPosition)}
-                y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
-                onPointerDown={() => {}}
-                onClick={() => {}}
-                onCtrlClick={() => {}}
-                ghost={false}
-                dimmed={false}
-              />
-              <text
-                x={positionToX(drag.targetPosition)}
-                y={LANE_HEIGHT - 4}
-                fontSize={10}
-                fontWeight={600}
-                fill={drag.altHeld ? "#a97830" : "#3b82f6"}
-              >
-                {drag.altHeld ? "Copy to both (crossover)" : "Move here"}
-              </text>
-            </g>
-          );
-        })()}
+        {drag &&
+          isCrossLaneTarget &&
+          (() => {
+            const sourceEvent = drag.eventId;
+            // Build a minimal ghost event for the card renderer.
+            const ghostEvent = {
+              node: {
+                id: sourceEvent,
+                title: "(dragging…)",
+                type: "permanent" as const,
+              },
+              discourse_position: drag.targetPosition,
+              story_time: null,
+              prose_status: null,
+              manuscript_location: null,
+              timeline_count: 1,
+              character_ids: [],
+              theme_ids: [],
+            };
+            return (
+              <g style={{ pointerEvents: "none", opacity: 0.7 }}>
+                <EventCard
+                  event={ghostEvent}
+                  x={positionToX(drag.targetPosition)}
+                  y={LANE_HEIGHT / 2 - EVENT_CARD_HEIGHT / 2 + 8}
+                  onPointerDown={() => {}}
+                  onClick={() => {}}
+                  onCtrlClick={() => {}}
+                  ghost={false}
+                  dimmed={false}
+                />
+                <text
+                  x={positionToX(drag.targetPosition)}
+                  y={LANE_HEIGHT - 4}
+                  fontSize={10}
+                  fontWeight={600}
+                  fill={drag.altHeld ? "#a97830" : "#3b82f6"}
+                >
+                  {drag.altHeld ? "Copy to both (crossover)" : "Move here"}
+                </text>
+              </g>
+            );
+          })()}
       </svg>
       {popupEventId && (
         <NodeInteractionPopup
@@ -979,7 +974,9 @@ function EventSidePanel({
       ),
     ).then((results) => {
       if (cancelled) return;
-      setCharacters(results.filter((x: NodeDetail | null): x is NodeDetail => x !== null));
+      setCharacters(
+        results.filter((x: NodeDetail | null): x is NodeDetail => x !== null),
+      );
     });
     return () => {
       cancelled = true;
@@ -1006,12 +1003,19 @@ function EventSidePanel({
   }
 
   return (
-    <div className="fixed right-4 top-20 z-30 w-80 rounded-lg border border-gray-200 bg-white shadow-lg p-4 max-h-[70vh] overflow-y-auto">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold truncate">{event.node.title}</h3>
+    <div
+      role="dialog"
+      aria-label={`Event details: ${event.node.title}`}
+      className="card scrollbar-thin fixed right-4 top-20 z-30 w-80 max-h-[70vh] overflow-y-auto p-4 shadow-lg"
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 truncate">
+          {event.node.title}
+        </h3>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+          aria-label="Close event details"
         >
           ×
         </button>
@@ -1024,7 +1028,9 @@ function EventSidePanel({
         </div>
         <div>
           <dt className="font-medium text-gray-500">Story time</dt>
-          <dd>{event.story_time || <em className="text-gray-300">unset</em>}</dd>
+          <dd>
+            {event.story_time || <em className="text-gray-300">unset</em>}
+          </dd>
         </div>
         <div>
           <dt className="font-medium text-gray-500">Discourse position</dt>
@@ -1034,13 +1040,14 @@ function EventSidePanel({
           <dt className="font-medium text-gray-500">Prose status</dt>
           <dd>
             <select
+              aria-label="Prose status"
               value={proseStatus}
               onChange={(e) => {
                 const v = e.target.value as ProseStatus | "";
                 setProseStatus(v);
                 saveField({ prose_status: v || null });
               }}
-              className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs"
+              className="input mt-1 py-1 text-xs"
             >
               <option value="">— unset —</option>
               {Object.entries(PROSE_STATUS_COLORS).map(([v, meta]) => (
@@ -1056,11 +1063,14 @@ function EventSidePanel({
           <dd>
             <input
               type="text"
+              aria-label="Manuscript location"
               value={manuscriptLoc}
               onChange={(e) => setManuscriptLoc(e.target.value)}
-              onBlur={() => saveField({ manuscript_location: manuscriptLoc || null })}
+              onBlur={() =>
+                saveField({ manuscript_location: manuscriptLoc || null })
+              }
               placeholder="e.g. manuscript.md L427"
-              className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs font-mono"
+              className="input mt-1 py-1 text-xs font-mono"
             />
           </dd>
         </div>
@@ -1094,9 +1104,9 @@ function EventSidePanel({
             )}
             <button
               onClick={() => setShowCharacterPicker((x) => !x)}
-              className="mt-1 text-[10px] text-indigo-600 hover:text-indigo-700"
+              className="btn btn-ghost btn-sm mt-1 text-indigo-600 hover:text-indigo-700"
             >
-              {showCharacterPicker ? "cancel" : "+ attach character"}
+              {showCharacterPicker ? "Cancel" : "+ attach character"}
             </button>
             {showCharacterPicker && (
               <AttachCharacterPicker
@@ -1115,8 +1125,8 @@ function EventSidePanel({
               Themes ({event.theme_ids.length})
             </dt>
             <dd className="text-gray-400 italic">
-              Theme attachment editor lands in Phase 10. Dots on the card
-              show count.
+              Theme attachment editor lands in Phase 10. Dots on the card show
+              count.
             </dd>
           </div>
         ) : null}
@@ -1132,22 +1142,20 @@ function EventSidePanel({
         <button
           type="button"
           onClick={onOpenSceneContext}
-          className="rounded bg-amber-500 px-3 py-1 text-xs font-medium text-white hover:bg-amber-600"
+          className="btn btn-sm bg-amber-500 text-white shadow-sm hover:bg-amber-600 active:bg-amber-700"
           title="Live graph assembly — every open is a fresh query"
         >
           Scene Context →
         </button>
       </div>
 
-      {saving && (
-        <p className="mt-2 text-[10px] text-gray-400">Saving…</p>
-      )}
+      {saving && <p className="mt-2 text-[10px] text-gray-400">Saving…</p>}
       {savedAt && !saving && (
         <p className="mt-2 text-[10px] text-emerald-600">
           Saved {savedAt.toLocaleTimeString()}
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="alert-error mt-2">{error}</p>}
     </div>
   );
 }
@@ -1164,9 +1172,7 @@ function AttachCharacterPicker({
   onAttached: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<
-    { id: string; title: string }[]
-  >([]);
+  const [results, setResults] = useState<{ id: string; title: string }[]>([]);
   const [creating, setCreating] = useState(false);
 
   // Search character-tagged structure nodes via the existing FTS search +
@@ -1231,13 +1237,14 @@ function AttachCharacterPicker({
       <input
         type="text"
         autoFocus
+        aria-label="Search characters"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="search characters…"
-        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-xs"
+        className="input py-1 text-xs"
       />
       {results.length > 0 && (
-        <div className="rounded border border-gray-100 bg-gray-50 max-h-32 overflow-y-auto">
+        <div className="scrollbar-thin rounded-md border border-gray-200 bg-gray-50 max-h-32 overflow-y-auto">
           {results.map((r) => (
             <button
               key={r.id}
@@ -1296,60 +1303,65 @@ function NewTimelineDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New parallel timeline"
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">New parallel timeline</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            New parallel timeline
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="new-timeline-title" className="label">
               Title
             </label>
             <input
+              id="new-timeline-title"
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Vincent's thread"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="new-timeline-desc" className="label">
               Description (optional)
             </label>
             <textarea
+              id="new-timeline-desc"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={2}
               placeholder="What this thread covers"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              className="textarea"
             />
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="alert-error">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !title.trim()}
-              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {saving ? "Creating…" : "Create timeline"}
             </button>
@@ -1406,57 +1418,65 @@ function CreateEventDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New scene"
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">New scene</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">New scene</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="new-scene-title" className="label">
               Title
             </label>
             <input
+              id="new-scene-title"
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Harbor arrival"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="new-scene-story-time" className="label">
               Story time (free-text)
             </label>
             <input
+              id="new-scene-story-time"
               value={storyTime}
               onChange={(e) => setStoryTime(e.target.value)}
               placeholder="e.g. Act 2 Scene 3, Day 14, 1943-06-06"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="new-scene-prose-status" className="label">
               Prose status
             </label>
             <select
+              id="new-scene-prose-status"
               value={proseStatus}
               onChange={(e) =>
                 setProseStatus(e.target.value as ProseStatus | "")
               }
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="input"
             >
               <option value="">— unset —</option>
               <option value="planned">Planned</option>
@@ -1465,23 +1485,19 @@ function CreateEventDialog({
               <option value="revised">Revised</option>
             </select>
           </div>
-          <p className="text-[11px] text-gray-400">
-            Discourse position: {discoursePosition} (set by click; drag the
-            card to change).
+          <p className="field-hint">
+            Discourse position: {discoursePosition} (set by click; drag the card
+            to change).
           </p>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="alert-error">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !title.trim()}
-              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {saving ? "Creating…" : "Create scene"}
             </button>
@@ -1540,83 +1556,90 @@ function CreateActSpanDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New act span"
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">New act span</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">
+            New act span
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="act-span-label" className="label">
               Label
             </label>
             <input
+              id="act-span-label"
               autoFocus
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Act 1"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="act-span-start" className="label">
                 Start position
               </label>
               <input
+                id="act-span-start"
                 type="number"
                 value={startPos}
                 onChange={(e) => setStartPos(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-mono"
+                className="input font-mono"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="act-span-end" className="label">
                 End position
               </label>
               <input
+                id="act-span-end"
                 type="number"
                 value={endPos}
                 onChange={(e) => setEndPos(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-mono"
+                className="input font-mono"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="act-span-color" className="label">
               Color (optional hex)
             </label>
             <input
+              id="act-span-color"
               value={color}
               onChange={(e) => setColor(e.target.value)}
               placeholder="#a97830"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-mono"
+              className="input font-mono"
             />
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="alert-error">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !label.trim()}
-              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {saving ? "Creating…" : "Create"}
             </button>
