@@ -4505,6 +4505,60 @@ the axis affects both consistently.
 
 ---
 
+## ADR-073 — Frontend visual foundation: single accent, global focus ring, scrolling nav
+
+**Status:** Accepted
+
+**Context:** The frontend grew page-by-page with ad-hoc Tailwind utilities and
+no shared design layer. `globals.css` was empty, the Tailwind config was
+unextended, and there was no app-wide treatment for keyboard focus, text
+selection, or reduced-motion. Concrete symptoms: the top nav mixed three
+accent colors (`indigo-700` brand, `blue-600` Ask, `indigo-600` Synthesize),
+gave no active-state indication of the current page, and packed 11
+non-wrapping links into a single fixed row that clips on narrow viewports.
+Most interactive elements (nav links, dashboard tiles, note cards) had no
+visible keyboard focus state at all — a WCAG 2.4.7 gap.
+
+**Decision:** Establish a thin, token-light visual foundation rather than
+adopt a component library:
+
+- **Indigo is the single brand accent.** Ask's stray `blue-600` is folded
+  into indigo. Generative actions (Ask, Synthesize) remain visually grouped
+  via a divider and medium weight, not a separate hue.
+- **Global `:focus-visible` ring** in `globals.css`, backed by a `--brand`
+  CSS variable. Components that define their own ring still win on `:focus`.
+- **Top nav becomes horizontally scrollable** (`overflow-x-auto` +
+  `scrollbar-none`) instead of clipping/wrapping, with an animated
+  active-page underline driven by `usePathname`.
+- **App-wide base styles**: font smoothing, heading tracking, a
+  `prefers-reduced-motion` reset, and `scrollbar-thin`/`scrollbar-none`
+  utilities.
+
+**Rationale:**
+
+- A handful of base rules and shared utility classes deliver app-wide
+  consistency and accessibility wins without a large refactor or a new
+  dependency, which suits a single-user tool.
+- Keeping tokens minimal (CSS variables + Tailwind's default palette)
+  avoids a parallel theming system that would drift from the inline
+  utilities already in use across pages.
+- `:focus-visible` over `:focus` keeps the ring keyboard-only, so mouse
+  users see no regression.
+
+**Consequences:**
+
+- New interactive elements inherit a focus ring for free; opt out only
+  with an explicit local style.
+- Accent color is centralized conceptually but still expressed as inline
+  `indigo-*` utilities per element — a future ADR could promote a Tailwind
+  `brand` color token if churn warrants it.
+- The scrolling nav trades guaranteed visibility of every link on small
+  screens for a stable, non-clipping layout; a future breakpoint-driven
+  menu can supersede this if the link count keeps growing.
+- No change to routes, data, or component APIs — purely presentational.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
