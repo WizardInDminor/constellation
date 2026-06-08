@@ -10,10 +10,7 @@
 
 import { useState } from "react";
 import { generateLearningMap } from "@/lib/api";
-import type {
-  LearningMapResponse,
-  ProjectScope,
-} from "@/lib/api";
+import type { LearningMapResponse, ProjectScope } from "@/lib/api";
 
 interface Props {
   scope: ProjectScope;
@@ -39,9 +36,7 @@ export function LearningMapPanel({ scope }: Props) {
       setMap(result);
     } catch (e) {
       setError(
-        e instanceof Error
-          ? e.message
-          : "Failed to generate learning map",
+        e instanceof Error ? e.message : "Failed to generate learning map",
       );
     } finally {
       setGenerating(false);
@@ -49,45 +44,43 @@ export function LearningMapPanel({ scope }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-gray-900 mb-1">
-          Learning map
-        </h2>
-        <p className="text-xs text-gray-500">
+        <h2 className="section-label">Learning map</h2>
+        <p className="text-xs text-gray-500 mt-1">
           Generates a phased plan with web-researched free sources. Suggested
-          sources are not verified — confirm or replace each one before
-          relying on it (ADR-070).
+          sources are not verified — confirm or replace each one before relying
+          on it (ADR-070).
         </p>
       </div>
 
       <div className="space-y-2">
+        <label htmlFor="learning-map-topic" className="sr-only">
+          Learning topic
+        </label>
         <input
+          id="learning-map-topic"
           type="text"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           placeholder="Topic — e.g. Motor encoders, Pandas groupby, control theory"
-          className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="input"
         />
         {scope.prior_knowledge && (
-          <p className="text-[11px] text-gray-400">
+          <p className="field-hint">
             Prior-knowledge entry will be passed to the planner.
           </p>
         )}
         <button
           onClick={handleGenerate}
           disabled={generating || !topic.trim()}
-          className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="btn btn-primary btn-sm"
         >
           {generating ? "Researching…" : "Generate learning map"}
         </button>
       </div>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {map && (
         <div className="space-y-4">
@@ -98,12 +91,9 @@ export function LearningMapPanel({ scope }: Props) {
               ))}
             </div>
           )}
-          <ol className="space-y-4">
+          <ol className="space-y-3">
             {map.phases.map((phase, i) => (
-              <li
-                key={i}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-3"
-              >
+              <li key={i} className="card px-4 py-3">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">
                   Phase {i + 1}: {phase.name}
                 </h3>
@@ -116,16 +106,14 @@ export function LearningMapPanel({ scope }: Props) {
                 )}
                 {phase.sources.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-                      Sources
-                    </p>
+                    <p className="section-label mb-1.5">Sources</p>
                     <ul className="space-y-2">
                       {phase.sources.map((s) => (
                         <li
                           key={s.source_id}
                           className="text-xs border-l-2 border-amber-200 pl-2"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {s.url ? (
                               <a
                                 href={s.url}
@@ -140,7 +128,7 @@ export function LearningMapPanel({ scope }: Props) {
                                 {s.title}
                               </span>
                             )}
-                            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                            <span className="badge shrink-0 bg-amber-100 text-amber-800">
                               Suggested — not verified
                             </span>
                           </div>

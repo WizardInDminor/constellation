@@ -45,19 +45,25 @@ export function SessionDialog({ projectMode, onClose, onConfirm }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Start session"
+        className="w-full max-w-md bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">Start session</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            Start session
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            aria-label="Close"
+            className="btn btn-ghost btn-sm -mr-1 text-lg leading-none"
+            aria-label="Close dialog"
           >
             ×
           </button>
@@ -65,37 +71,37 @@ export function SessionDialog({ projectMode, onClose, onConfirm }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="session-intent" className="label">
               What are you working on today?
             </label>
             <textarea
+              id="session-intent"
               autoFocus
               value={intent}
               onChange={(e) => setIntent(e.target.value)}
               rows={3}
               placeholder="e.g. Process the last six literature notes into permanents"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              className="textarea"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Session mode
-            </label>
-            <p className="text-[10px] text-gray-400 mb-2">
+            <span className="label mb-1.5">Session mode</span>
+            <p className="field-hint mt-0 mb-2">
               Pre-filled from project mode; override if this session has a
               different shape.
             </p>
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-4 gap-1.5">
               {SESSION_MODES.map((m) => (
                 <button
                   key={m.value}
                   type="button"
+                  aria-pressed={mode === m.value}
                   onClick={() => setMode(m.value)}
-                  className={`rounded border px-2 py-1 text-xs ${
+                  className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
                     mode === m.value
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                      : "border-gray-200 text-gray-700 hover:border-gray-300"
+                      : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
                   {m.label}
@@ -105,33 +111,30 @@ export function SessionDialog({ projectMode, onClose, onConfirm }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="session-duration" className="label">
               Estimated duration (minutes, optional)
             </label>
             <input
+              id="session-duration"
               type="number"
               min="1"
               value={estimated}
               onChange={(e) => setEstimated(e.target.value)}
               placeholder="e.g. 45"
-              className="w-32 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="input w-32"
             />
           </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="alert-error">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !intent.trim()}
-              className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="btn btn-primary"
             >
               {saving ? "Starting…" : "Start"}
             </button>

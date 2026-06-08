@@ -16,25 +16,35 @@ interface Props {
   isConnecting?: boolean;
 }
 
-export function NodePanel({ node, detail, loadingDetail, onClose, onStartConnect, isConnecting }: Props) {
+export function NodePanel({
+  node,
+  detail,
+  loadingDetail,
+  onClose,
+  onStartConnect,
+  isConnecting,
+}: Props) {
   const color = nodeColor(node.type);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start justify-between gap-2 p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="flex h-full flex-col">
+      <div className="flex items-start justify-between gap-2 border-b border-gray-700 p-4">
+        <div className="flex min-w-0 items-center gap-2">
           <span
-            className="shrink-0 rounded px-2 py-0.5 text-xs font-medium"
+            className="badge shrink-0"
             style={{ backgroundColor: color + "33", color }}
           >
             {node.type}
           </span>
-          <h2 className="text-sm font-semibold text-gray-100 truncate">{node.title}</h2>
+          <h2 className="truncate text-sm font-semibold text-gray-100">
+            {node.title}
+          </h2>
         </div>
         <button
           onClick={onClose}
-          className="shrink-0 text-gray-400 hover:text-gray-100 text-lg leading-none"
+          className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg leading-none text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-100"
           aria-label="Close panel"
+          title="Close panel"
         >
           ×
         </button>
@@ -58,31 +68,36 @@ export function NodePanel({ node, detail, loadingDetail, onClose, onStartConnect
 function SourcePanel({ node }: { node: GraphNodeRef }) {
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
         {node.source_entry_type && (
           <div>
-            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Type</div>
-            <span className="text-sm text-gray-300">{node.source_entry_type}</span>
+            <div className="section-label mb-1">Type</div>
+            <p className="text-sm text-gray-300">{node.source_entry_type}</p>
           </div>
         )}
         {node.source_author && (
           <div>
-            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Author</div>
-            <span className="text-sm text-gray-300">{node.source_author}</span>
+            <div className="section-label mb-1">Author</div>
+            <p className="text-sm text-gray-300">{node.source_author}</p>
           </div>
         )}
         {node.source_url && (
           <div>
-            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">URL</div>
-            <span className="text-xs text-gray-400 break-all">{node.source_url}</span>
+            <div className="section-label mb-1">URL</div>
+            <p className="break-all text-xs text-gray-400">{node.source_url}</p>
           </div>
+        )}
+        {!node.source_entry_type && !node.source_author && !node.source_url && (
+          <p className="text-xs italic text-gray-500">
+            No source details available.
+          </p>
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-700">
+      <div className="border-t border-gray-700 p-4">
         <Link
           href={`/sources/${node.id}`}
-          className="block w-full text-center text-sm bg-teal-700 hover:bg-teal-600 text-white rounded px-3 py-1.5 transition-colors"
+          className="btn w-full bg-teal-700 text-white hover:bg-teal-600"
         >
           Open source →
         </Link>
@@ -107,9 +122,21 @@ function NotePanel({
   useEffect(() => {
     if (!onStartConnect || isConnecting) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      if (
+        e.key === "e" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
         const active = document.activeElement;
-        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
+        if (
+          active &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "TEXTAREA" ||
+            active.tagName === "SELECT")
+        )
+          return;
         onStartConnect!();
       }
     }
@@ -119,14 +146,11 @@ function NotePanel({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
         {node.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {node.tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full px-2 py-0.5 text-xs bg-gray-700 text-gray-300"
-              >
+              <span key={tag} className="badge bg-gray-700 text-gray-300">
                 {tag}
               </span>
             ))}
@@ -135,38 +159,37 @@ function NotePanel({
 
         <div>
           {loadingDetail ? (
-            <div className="space-y-1.5">
-              <div className="h-3 bg-gray-700 rounded animate-pulse w-3/4" />
-              <div className="h-3 bg-gray-700 rounded animate-pulse w-full" />
-              <div className="h-3 bg-gray-700 rounded animate-pulse w-5/6" />
+            <div className="space-y-2">
+              <div className="skeleton h-3 w-3/4 bg-gray-700" />
+              <div className="skeleton h-3 w-full bg-gray-700" />
+              <div className="skeleton h-3 w-5/6 bg-gray-700" />
             </div>
-          ) : (detail?.content || detail?.summary) ? (
+          ) : detail?.content || detail?.summary ? (
             <NoteContent
               content={detail.content || detail.summary}
               className="prose prose-sm prose-invert max-w-none text-sm text-gray-300 leading-relaxed"
             />
           ) : (
-            <p className="text-xs text-gray-500 italic">No content</p>
+            <p className="text-xs italic text-gray-500">No content yet.</p>
           )}
         </div>
       </div>
 
-      <div className="p-4 border-t border-gray-700 space-y-2">
+      <div className="space-y-2 border-t border-gray-700 p-4">
         {onStartConnect && !isConnecting && (
           <button
             onClick={onStartConnect}
-            className="block w-full text-center text-sm border border-indigo-500 text-indigo-400 hover:bg-indigo-900/40 rounded px-3 py-1.5 transition-colors"
+            className="btn w-full border border-indigo-500 text-indigo-400 hover:bg-indigo-900/40"
           >
-            Connect to… <span className="opacity-50 text-xs font-mono ml-1">E</span>
+            Connect to… <kbd className="ml-1 text-xs opacity-60">E</kbd>
           </button>
         )}
         {isConnecting && (
-          <p className="text-xs text-indigo-400 text-center">Click another node to connect</p>
+          <p className="text-center text-xs text-indigo-400">
+            Click another node to connect
+          </p>
         )}
-        <Link
-          href={`/nodes/${node.id}`}
-          className="block w-full text-center text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1.5 transition-colors"
-        >
+        <Link href={`/nodes/${node.id}`} className="btn btn-primary w-full">
           Open note →
         </Link>
       </div>

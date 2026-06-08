@@ -40,7 +40,10 @@ function NodePickerRow({
     timer.current = setTimeout(() => setHovered(true), HOVER_DELAY_MS);
   }
   function cancelAndHide() {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
     setHovered(false);
   }
 
@@ -68,10 +71,10 @@ function NodePickerRow({
         onMouseLeave={previewOnHover ? cancelAndHide : undefined}
         onFocus={previewOnHover ? scheduleShow : undefined}
         onBlur={previewOnHover ? cancelAndHide : undefined}
-        className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-indigo-50"
       >
         <span
-          className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
+          className={`badge shrink-0 ${TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-600"}`}
         >
           {node.type}
         </span>
@@ -102,7 +105,11 @@ export function NodePicker({
   function handleChange(v: string) {
     setQuery(v);
     if (timer.current) clearTimeout(timer.current);
-    if (!v.trim()) { setResults([]); setOpen(false); return; }
+    if (!v.trim()) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
     timer.current = setTimeout(async () => {
       const res = await searchNodes(v);
       setResults(res.filter((n) => !excludeIds.has(n.id)));
@@ -129,18 +136,20 @@ export function NodePicker({
         value={query}
         onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+        aria-label={placeholder}
+        className="input pr-8"
       />
       {query && (
         <button
           onClick={clear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+          aria-label="Clear search"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
         >
           ×
         </button>
       )}
       {open && results.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-sm max-h-48 overflow-y-auto">
+        <ul className="card scrollbar-thin absolute z-10 mt-1 max-h-48 w-full overflow-y-auto text-sm shadow-lg">
           {results.map((n) => (
             <NodePickerRow
               key={n.id}

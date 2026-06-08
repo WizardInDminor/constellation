@@ -10,7 +10,12 @@ interface Props {
   onClose: () => void;
 }
 
-export function BatchPanel({ selectedCount, allTagRefs, onApplyTags, onClose }: Props) {
+export function BatchPanel({
+  selectedCount,
+  allTagRefs,
+  onApplyTags,
+  onClose,
+}: Props) {
   const [pendingTagIds, setPendingTagIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,68 +43,86 @@ export function BatchPanel({ selectedCount, allTagRefs, onApplyTags, onClose }: 
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <span className="text-sm font-semibold text-gray-100">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-2 border-b border-gray-700 p-4">
+        <h2 className="text-sm font-semibold text-gray-100">
           {selectedCount} node{selectedCount !== 1 ? "s" : ""} selected
-        </span>
+        </h2>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-100 text-lg leading-none"
+          className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg leading-none text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-100"
+          aria-label="Clear selection"
+          title="Clear selection"
         >
           ×
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
         <div>
-          <div className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Add tags to all selected</div>
+          <div className="section-label mb-2">Add tags to all selected</div>
           {allTagRefs.length === 0 ? (
-            <p className="text-xs text-gray-500 italic">No tags exist yet. Create tags on individual notes first.</p>
+            <p className="text-xs italic text-gray-500">
+              No tags exist yet. Create tags on individual notes first.
+            </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {allTagRefs.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
-                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                    pendingTagIds.has(tag.id)
-                      ? "border-transparent"
-                      : "border-gray-600 text-gray-400 hover:border-gray-400"
-                  }`}
-                  style={
-                    pendingTagIds.has(tag.id)
-                      ? tag.color
-                        ? { backgroundColor: tag.color + "33", color: tag.color }
-                        : { backgroundColor: "#3730a3", color: "#c7d2fe" }
-                      : undefined
-                  }
-                >
-                  {tag.name}
-                </button>
-              ))}
+            <div className="flex flex-wrap gap-1.5">
+              {allTagRefs.map((tag) => {
+                const selected = pendingTagIds.has(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleTag(tag.id)}
+                    aria-pressed={selected}
+                    className={`badge border transition-colors ${
+                      selected
+                        ? "border-transparent"
+                        : "border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200"
+                    }`}
+                    style={
+                      selected
+                        ? tag.color
+                          ? {
+                              backgroundColor: tag.color + "33",
+                              color: tag.color,
+                            }
+                          : { backgroundColor: "#3730a3", color: "#c7d2fe" }
+                        : undefined
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <p className="text-xs text-gray-500">
-          Selected tags will be added to all {selectedCount} nodes. Existing tags are preserved.
+        <p className="field-hint mt-0">
+          Selected tags will be added to all {selectedCount} nodes. Existing
+          tags are preserved.
         </p>
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && (
+          <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            {error}
+          </p>
+        )}
       </div>
 
-      <div className="p-4 border-t border-gray-700 space-y-2">
+      <div className="space-y-2 border-t border-gray-700 p-4">
         <button
           onClick={handleApply}
           disabled={saving || pendingTagIds.size === 0}
-          className="w-full text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1.5 disabled:opacity-40 transition-colors"
+          className="btn btn-primary w-full"
         >
-          {saving ? "Applying…" : `Apply ${pendingTagIds.size > 0 ? `${pendingTagIds.size} tag${pendingTagIds.size !== 1 ? "s" : ""}` : "tags"}`}
+          {saving
+            ? "Applying…"
+            : `Apply ${pendingTagIds.size > 0 ? `${pendingTagIds.size} tag${pendingTagIds.size !== 1 ? "s" : ""}` : "tags"}`}
         </button>
         <button
           onClick={onClose}
-          className="w-full text-sm text-gray-400 hover:text-gray-200 rounded px-3 py-1.5 transition-colors"
+          className="btn w-full text-gray-400 hover:bg-gray-800 hover:text-gray-200"
         >
           Clear selection
         </button>

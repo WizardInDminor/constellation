@@ -174,10 +174,20 @@ export default function ProcessPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="text-sm text-gray-500">Fetching AI suggestions…</div>
-        <div className="h-1 w-full bg-gray-100 rounded overflow-hidden">
-          <div className="h-full bg-indigo-400 animate-pulse w-1/2" />
+      <div className="flex flex-col gap-6">
+        <div className="section-label">Fetching AI suggestions…</div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="card flex flex-col gap-3 p-4">
+            <div className="skeleton h-3 w-16" />
+            <div className="skeleton h-4 w-3/4" />
+            <div className="skeleton h-3 w-full" />
+            <div className="skeleton h-3 w-5/6" />
+          </div>
+          <div className="card flex flex-col gap-3 p-4">
+            <div className="skeleton h-3 w-40" />
+            <div className="skeleton h-4 w-2/3" />
+            <div className="skeleton h-20 w-full" />
+          </div>
         </div>
       </div>
     );
@@ -186,8 +196,11 @@ export default function ProcessPage() {
   if (error) {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-red-600 text-sm">{error}</p>
-        <Link href="/inbox" className="text-sm text-indigo-600 hover:underline">
+        <div className="alert-error">{error}</div>
+        <Link
+          href="/inbox"
+          className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
           ← Back to inbox
         </Link>
       </div>
@@ -196,36 +209,34 @@ export default function ProcessPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Link href="/inbox" className="text-sm text-gray-400 hover:text-gray-700">
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/inbox" className="btn btn-ghost btn-sm">
           ← Inbox
         </Link>
-        <h2 className="text-lg font-semibold">Process note</h2>
+        <h1 className="page-title">Process note</h1>
         <button
           type="button"
           onClick={regenerate}
-          className="ml-auto text-xs text-gray-400 hover:text-indigo-600"
+          className="btn btn-secondary btn-sm ml-auto"
         >
           Re-generate
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {/* Fleeting note */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
-          <span className="text-xs font-medium text-amber-600 uppercase tracking-wide">
-            Fleeting
-          </span>
-          <h3 className="font-semibold">{fleeting?.title}</h3>
+        <div className="card flex flex-col gap-2 p-4">
+          <span className="badge bg-amber-100 text-amber-700">Fleeting</span>
+          <h2 className="font-semibold text-gray-900">{fleeting?.title}</h2>
           <NoteContent
             content={fleeting?.content ?? ""}
-            className="prose prose-sm max-w-none text-sm text-gray-600"
+            className="prose prose-sm max-w-none break-words text-sm text-gray-600"
           />
         </div>
 
         {/* Candidate cards */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <span className="text-xs font-medium text-indigo-600 uppercase tracking-wide">
+          <span className="section-label text-indigo-600">
             AI suggestions — accept, edit, or discard
           </span>
 
@@ -234,13 +245,13 @@ export default function ProcessPage() {
             return (
               <div
                 key={field.id}
-                className={`border rounded-lg p-4 flex flex-col gap-3 transition-opacity ${
-                  isAccepted ? "border-indigo-200 bg-white" : "border-gray-100 bg-gray-50 opacity-50"
+                className={`card flex flex-col gap-3 p-4 transition-opacity ${
+                  isAccepted ? "border-indigo-200" : "bg-gray-50 opacity-50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Note {index + 1}</span>
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <span className="section-label">Note {index + 1}</span>
+                  <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs font-medium text-gray-600">
                     <input
                       type="checkbox"
                       {...register(`candidates.${index}.accepted`)}
@@ -249,48 +260,75 @@ export default function ProcessPage() {
                     Accept
                   </label>
                 </div>
-                <input
-                  {...register(`candidates.${index}.title`)}
-                  disabled={!isAccepted}
-                  placeholder="Title"
-                  className="w-full border border-gray-200 rounded px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:bg-transparent disabled:border-transparent"
-                />
-                <MarkdownTextarea
-                  {...register(`candidates.${index}.content`)}
-                  previewValue={watchedCandidates[index]?.content ?? ""}
-                  disabled={!isAccepted}
-                  rows={4}
-                  placeholder="Content"
-                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:bg-transparent disabled:border-transparent"
-                />
-                <input
-                  {...register(`candidates.${index}.summary`)}
-                  disabled={!isAccepted}
-                  placeholder="One-sentence summary (optional)"
-                  className="w-full border border-gray-100 rounded px-2 py-1 text-xs text-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-300 disabled:bg-transparent disabled:border-transparent"
-                />
+                <div>
+                  <label htmlFor={`candidate-${index}-title`} className="label">
+                    Title
+                  </label>
+                  <input
+                    id={`candidate-${index}-title`}
+                    {...register(`candidates.${index}.title`)}
+                    disabled={!isAccepted}
+                    placeholder="Title"
+                    className="input font-medium"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor={`candidate-${index}-content`}
+                    className="label"
+                  >
+                    Content
+                  </label>
+                  <MarkdownTextarea
+                    id={`candidate-${index}-content`}
+                    {...register(`candidates.${index}.content`)}
+                    previewValue={watchedCandidates[index]?.content ?? ""}
+                    disabled={!isAccepted}
+                    rows={4}
+                    placeholder="Content"
+                    className="textarea"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor={`candidate-${index}-summary`}
+                    className="label"
+                  >
+                    Summary
+                  </label>
+                  <input
+                    id={`candidate-${index}-summary`}
+                    {...register(`candidates.${index}.summary`)}
+                    disabled={!isAccepted}
+                    placeholder="One-sentence summary (optional)"
+                    className="input"
+                  />
+                  <p className="field-hint">
+                    Optional. A short gloss for the note.
+                  </p>
+                </div>
               </div>
             );
           })}
 
           {confirmZero ? (
-            <div className="flex flex-col gap-2 border border-amber-200 bg-amber-50 rounded-lg p-4">
+            <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm text-amber-800">
                 Mark as processed without saving any notes?
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={confirmMarkProcessed}
                   disabled={saving}
-                  className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+                  className="btn btn-sm bg-amber-600 text-white shadow-sm hover:bg-amber-700 active:bg-amber-800"
                 >
                   Confirm
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmZero(false)}
-                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+                  className="btn btn-ghost btn-sm"
                 >
                   Cancel
                 </button>
@@ -300,7 +338,7 @@ export default function ProcessPage() {
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 self-end"
+              className="btn btn-primary self-end"
             >
               {saving
                 ? "Saving…"

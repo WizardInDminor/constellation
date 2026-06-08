@@ -16,10 +16,10 @@ const MODE_LABELS: Record<SearchMode, string> = {
 };
 
 const NODE_TYPE_COLORS: Record<string, string> = {
-  permanent: "bg-blue-100 text-blue-800",
-  literature: "bg-purple-100 text-purple-800",
-  structure: "bg-green-100 text-green-800",
-  fleeting: "bg-yellow-100 text-yellow-800",
+  permanent: "bg-green-100 text-green-800",
+  literature: "bg-blue-100 text-blue-800",
+  structure: "bg-purple-100 text-purple-800",
+  fleeting: "bg-amber-100 text-amber-800",
 };
 
 function ResultCard({ result }: { result: SearchResult }) {
@@ -31,31 +31,41 @@ function ResultCard({ result }: { result: SearchResult }) {
   return (
     <div
       ref={ref}
-      onMouseEnter={() => { timer.current = setTimeout(() => setShowPreview(true), 300); }}
-      onMouseLeave={() => { clearTimeout(timer.current); setShowPreview(false); }}
+      onMouseEnter={() => {
+        timer.current = setTimeout(() => setShowPreview(true), 300);
+      }}
+      onMouseLeave={() => {
+        clearTimeout(timer.current);
+        setShowPreview(false);
+      }}
     >
-      <Link
-        href={`/nodes/${node.id}`}
-        className="block rounded-lg border border-gray-200 bg-white p-4 hover:border-blue-300 hover:shadow-sm transition-all"
-      >
+      <Link href={`/nodes/${node.id}`} className="card-interactive block p-4">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="font-medium text-gray-900 leading-snug">{node.title}</h3>
+          <h3 className="font-medium text-gray-900 leading-snug">
+            {node.title}
+          </h3>
           <span
-            className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${NODE_TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-700"}`}
+            className={`badge shrink-0 ${NODE_TYPE_COLORS[node.type] ?? "bg-gray-100 text-gray-700"}`}
           >
             {node.type}
           </span>
         </div>
         {node.summary && (
-          <p className="mt-1.5 text-sm text-gray-500 line-clamp-2">{node.summary}</p>
+          <p className="mt-1.5 text-sm text-gray-500 line-clamp-2">
+            {node.summary}
+          </p>
         )}
         {node.tags && node.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {node.tags.map((t) => (
               <span
                 key={t.id}
-                className="rounded-full px-2 py-0.5 text-xs"
-                style={t.color ? { backgroundColor: t.color + "33", color: t.color } : { backgroundColor: "#e5e7eb", color: "#374151" }}
+                className="badge"
+                style={
+                  t.color
+                    ? { backgroundColor: t.color + "33", color: t.color }
+                    : { backgroundColor: "#e5e7eb", color: "#374151" }
+                }
               >
                 {t.name}
               </span>
@@ -84,26 +94,28 @@ function SearchPageInner() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const doSearch = useCallback(
-    async (q: string, m: SearchMode) => {
-      if (!q.trim()) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const fn = m === "semantic" ? searchSemantic : m === "fulltext" ? searchFulltext : searchHybrid;
-        const res = await fn(q);
-        setResults(res.results);
-        setActiveTypes(new Set());
-        setActiveTags(new Set());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Search failed");
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const doSearch = useCallback(async (q: string, m: SearchMode) => {
+    if (!q.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const fn =
+        m === "semantic"
+          ? searchSemantic
+          : m === "fulltext"
+            ? searchFulltext
+            : searchHybrid;
+      const res = await fn(q);
+      setResults(res.results);
+      setActiveTypes(new Set());
+      setActiveTags(new Set());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Search failed");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Run search when URL params change (back/forward nav)
   useEffect(() => {
@@ -133,7 +145,10 @@ function SearchPageInner() {
   const availableTypes = results
     ? Array.from(new Set(results.map((r) => r.node.type))).sort()
     : [];
-  const tagMap = new Map<string, { id: string; name: string; color?: string | null }>();
+  const tagMap = new Map<
+    string,
+    { id: string; name: string; color?: string | null }
+  >();
   if (results) {
     for (const r of results) {
       for (const t of r.node.tags ?? []) {
@@ -141,13 +156,16 @@ function SearchPageInner() {
       }
     }
   }
-  const availableTags = Array.from(tagMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const availableTags = Array.from(tagMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   const visibleResults = results
     ? results.filter(
         (r) =>
           (activeTypes.size === 0 || activeTypes.has(r.node.type)) &&
-          (activeTags.size === 0 || (r.node.tags ?? []).some((t) => activeTags.has(t.id))),
+          (activeTags.size === 0 ||
+            (r.node.tags ?? []).some((t) => activeTags.has(t.id))),
       )
     : null;
 
@@ -173,44 +191,54 @@ function SearchPageInner() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold text-gray-900">Search</h1>
+      <h1 className="page-title mb-6">Search</h1>
 
       {/* Search form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
+        <label htmlFor="search-query" className="sr-only">
+          Search your notes
+        </label>
         <input
+          id="search-query"
           ref={inputRef}
-          type="text"
+          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search your notes…"
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="input flex-1"
           autoFocus
         />
         <button
           type="submit"
           disabled={loading || !query.trim()}
-          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn-primary px-5"
         >
           Search
         </button>
       </form>
 
       {/* Mode toggle */}
-      <div className="mt-3 flex gap-1">
+      <div
+        className="mt-3 flex flex-wrap items-center gap-1"
+        role="group"
+        aria-label="Search mode"
+      >
         {(["hybrid", "semantic", "fulltext"] as SearchMode[]).map((m) => (
           <button
             key={m}
+            type="button"
             onClick={() => switchMode(m)}
+            aria-pressed={mode === m}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
               mode === m
-                ? "bg-blue-600 text-white"
+                ? "bg-indigo-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
             {MODE_LABELS[m]}
           </button>
         ))}
-        <span className="ml-auto text-xs text-gray-400 self-center">
+        <span className="ml-auto self-center text-xs text-gray-400">
           {mode === "hybrid" && "Vector + fulltext combined"}
           {mode === "semantic" && "Vector similarity"}
           {mode === "fulltext" && "Keyword match · works offline"}
@@ -224,10 +252,13 @@ function SearchPageInner() {
             {availableTypes.map((type) => (
               <button
                 key={type}
+                type="button"
+                aria-pressed={activeTypes.has(type)}
                 onClick={() => toggleType(type)}
                 className={`text-xs px-3 py-0.5 rounded-full border transition-colors ${
                   activeTypes.has(type)
-                    ? (NODE_TYPE_COLORS[type] ?? "bg-gray-200 text-gray-700") + " border-transparent"
+                    ? (NODE_TYPE_COLORS[type] ?? "bg-gray-200 text-gray-700") +
+                      " border-transparent"
                     : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -237,6 +268,8 @@ function SearchPageInner() {
             {availableTags.map((tag) => (
               <button
                 key={tag.id}
+                type="button"
+                aria-pressed={activeTags.has(tag.id)}
                 onClick={() => toggleTag(tag.id)}
                 className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                   activeTags.has(tag.id)
@@ -247,8 +280,8 @@ function SearchPageInner() {
                   activeTags.has(tag.id) && tag.color
                     ? { backgroundColor: tag.color + "33", color: tag.color }
                     : activeTags.has(tag.id)
-                    ? { backgroundColor: "#e0e7ff", color: "#4338ca" }
-                    : undefined
+                      ? { backgroundColor: "#e0e7ff", color: "#4338ca" }
+                      : undefined
                 }
               >
                 {tag.name}
@@ -256,8 +289,12 @@ function SearchPageInner() {
             ))}
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setActiveTypes(new Set()); setActiveTags(new Set()); }}
-                className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+                type="button"
+                onClick={() => {
+                  setActiveTypes(new Set());
+                  setActiveTags(new Set());
+                }}
+                className="btn btn-ghost btn-sm ml-1"
               >
                 Clear ({activeFilterCount})
               </button>
@@ -267,28 +304,49 @@ function SearchPageInner() {
       )}
 
       {/* Results */}
-      <div className="mt-4">
+      <div className="mt-6">
         {loading && (
-          <div className="flex justify-center py-12 text-gray-400 text-sm">Searching…</div>
-        )}
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+          <div className="space-y-3" aria-busy="true" aria-label="Searching">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="skeleton h-4 w-1/2" />
+                  <div className="skeleton h-4 w-16" />
+                </div>
+                <div className="skeleton mt-3 h-3 w-full" />
+                <div className="skeleton mt-1.5 h-3 w-2/3" />
+              </div>
+            ))}
           </div>
         )}
-        {!loading && results !== null && results.length === 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">
-            No results for &ldquo;{params.get("q")}&rdquo;
+        {!loading && error && <div className="alert-error">{error}</div>}
+        {!loading && !error && results === null && (
+          <div className="empty-state">
+            <p className="text-sm font-medium text-gray-600">
+              Search your notes
+            </p>
+            <p className="text-sm text-gray-400">
+              Enter a query above to find notes by meaning or keyword.
+            </p>
+          </div>
+        )}
+        {!loading && !error && results !== null && results.length === 0 && (
+          <div className="empty-state">
+            <p className="text-sm font-medium text-gray-600">
+              No results for &ldquo;{params.get("q")}&rdquo;
+            </p>
             {mode !== "fulltext" && (
-              <span>
-                {" — try "}
+              <p className="text-sm text-gray-400">
+                Try a{" "}
                 <button
-                  className="text-blue-600 underline"
+                  type="button"
+                  className="font-medium text-indigo-600 hover:underline"
                   onClick={() => switchMode("fulltext")}
                 >
                   fulltext
-                </button>
-              </span>
+                </button>{" "}
+                search instead.
+              </p>
             )}
           </div>
         )}
@@ -304,11 +362,17 @@ function SearchPageInner() {
             ))}
           </div>
         )}
-        {!loading && visibleResults && visibleResults.length === 0 && results && results.length > 0 && (
-          <div className="py-12 text-center text-sm text-gray-400">
-            No results match the active filters.
-          </div>
-        )}
+        {!loading &&
+          visibleResults &&
+          visibleResults.length === 0 &&
+          results &&
+          results.length > 0 && (
+            <div className="empty-state">
+              <p className="text-sm text-gray-400">
+                No results match the active filters.
+              </p>
+            </div>
+          )}
       </div>
     </div>
   );

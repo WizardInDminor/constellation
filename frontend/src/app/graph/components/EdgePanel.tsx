@@ -77,48 +77,47 @@ export function EdgePanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start justify-between gap-2 p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex h-full flex-col">
+      <div className="flex items-start justify-between gap-2 border-b border-gray-700 p-4">
+        <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`rounded px-2 py-0.5 text-xs font-medium font-mono ${
-              isResolved ? "opacity-50 line-through" : ""
+            className={`badge font-mono ${
+              isResolved ? "line-through opacity-50" : ""
             }`}
             style={{ backgroundColor: color + "33", color }}
           >
             {edge.type}
           </span>
           {isResolved && (
-            <span className="rounded bg-gray-700 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-200">
+            <span className="badge bg-gray-700 text-[10px] uppercase tracking-wide text-gray-200">
               Resolved
             </span>
           )}
         </div>
         <button
           onClick={onClose}
-          className="shrink-0 text-gray-400 hover:text-gray-100 text-lg leading-none"
+          className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded text-lg leading-none text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-100"
           aria-label="Close panel"
+          title="Close panel"
         >
           ×
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto p-4">
         {edge.note && (
           <div>
-            <div className="text-xs text-gray-400 mb-1 uppercase tracking-wide">
-              Why this edge exists
-            </div>
+            <div className="section-label mb-1">Why this edge exists</div>
             <p className="text-sm text-gray-300 leading-relaxed">{edge.note}</p>
           </div>
         )}
 
         {edge.classifier_rationale && (
           <div className="border-l-2 border-indigo-500/60 pl-3">
-            <div className="text-xs text-indigo-300/80 mb-1 uppercase tracking-wide">
+            <div className="section-label mb-1 text-indigo-300/80">
               Classifier rationale
             </div>
-            <p className="text-sm text-gray-300 leading-relaxed italic">
+            <p className="text-sm italic leading-relaxed text-gray-300">
               {edge.classifier_rationale}
             </p>
           </div>
@@ -126,9 +125,7 @@ export function EdgePanel({
 
         {isResolved && (
           <div className="border-l-2 border-amber-500/60 pl-3">
-            <div className="text-xs text-amber-300/80 mb-1 uppercase tracking-wide">
-              Resolved
-            </div>
+            <div className="section-label mb-1 text-amber-300/80">Resolved</div>
             {edge.resolved_by_node_id && resolverTitle ? (
               <p className="text-sm text-gray-300 leading-relaxed">
                 Superseded by{" "}
@@ -150,7 +147,7 @@ export function EdgePanel({
 
         <div className="space-y-2">
           <div>
-            <div className="text-xs text-gray-400 mb-1">From</div>
+            <div className="section-label mb-1">From</div>
             <Link
               href={`/nodes/${edge.from_id}`}
               className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline"
@@ -159,7 +156,7 @@ export function EdgePanel({
             </Link>
           </div>
           <div>
-            <div className="text-xs text-gray-400 mb-1">To</div>
+            <div className="section-label mb-1">To</div>
             <Link
               href={`/nodes/${edge.to_id}`}
               className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline"
@@ -170,12 +167,12 @@ export function EdgePanel({
         </div>
 
         {isResolvable && (
-          <div className="border-t border-gray-700 pt-4 space-y-2">
+          <div className="space-y-2 border-t border-gray-700 pt-4">
             {!isResolved && !picking && (
               <button
                 onClick={() => setPicking(true)}
                 disabled={submitting}
-                className="w-full rounded bg-gray-800 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-50"
+                className="btn w-full bg-gray-800 text-gray-200 hover:bg-gray-700"
               >
                 Mark resolved…
               </button>
@@ -183,7 +180,7 @@ export function EdgePanel({
 
             {!isResolved && picking && (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400 uppercase tracking-wide">
+                <div className="section-label">
                   Pick the synthesis note that supersedes this tension
                 </div>
                 <NodePicker
@@ -192,18 +189,18 @@ export function EdgePanel({
                   placeholder="Search notes…"
                   previewOnHover={true}
                 />
-                <div className="flex gap-2 text-xs">
+                <div className="flex gap-2">
                   <button
                     onClick={handleResolveWithoutSynthesis}
                     disabled={submitting}
-                    className="rounded bg-gray-800 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+                    className="btn btn-sm flex-1 bg-gray-800 text-gray-300 hover:bg-gray-700"
                   >
                     Resolve without a synthesis note
                   </button>
                   <button
                     onClick={() => setPicking(false)}
                     disabled={submitting}
-                    className="rounded px-2 py-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
+                    className="btn btn-sm text-gray-400 hover:bg-gray-800 hover:text-gray-200"
                   >
                     Cancel
                   </button>
@@ -215,13 +212,17 @@ export function EdgePanel({
               <button
                 onClick={handleClearResolution}
                 disabled={submitting}
-                className="w-full rounded bg-gray-800 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-50"
+                className="btn w-full bg-gray-800 text-gray-200 hover:bg-gray-700"
               >
                 Clear resolution
               </button>
             )}
 
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && (
+              <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {error}
+              </p>
+            )}
           </div>
         )}
       </div>

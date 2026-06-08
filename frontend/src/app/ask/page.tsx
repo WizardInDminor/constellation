@@ -6,7 +6,13 @@ import Link from "next/link";
 import { NoteContent } from "@/components/NoteContent";
 import { listTags, ragQuery, saveAnswer } from "@/lib/api";
 import { resolveCitations } from "@/lib/citations";
-import type { RagResponse, NodeUsed, EdgeTraversed, RagMode, TagRef } from "@/lib/api";
+import type {
+  RagResponse,
+  NodeUsed,
+  EdgeTraversed,
+  RagMode,
+  TagRef,
+} from "@/lib/api";
 
 const MODE_OPTIONS: {
   value: RagMode;
@@ -16,7 +22,8 @@ const MODE_OPTIONS: {
   {
     value: "default",
     label: "Balanced",
-    description: "Default behaviour — preserves nuance and hedges when notes are thin.",
+    description:
+      "Default behaviour — preserves nuance and hedges when notes are thin.",
   },
   {
     value: "brief",
@@ -31,10 +38,10 @@ const MODE_OPTIONS: {
 ];
 
 const NODE_TYPE_COLORS: Record<string, string> = {
-  permanent: "bg-blue-100 text-blue-800",
-  literature: "bg-purple-100 text-purple-800",
-  structure: "bg-green-100 text-green-800",
-  fleeting: "bg-yellow-100 text-yellow-800",
+  permanent: "bg-green-100 text-green-700",
+  literature: "bg-blue-100 text-blue-700",
+  structure: "bg-purple-100 text-purple-700",
+  fleeting: "bg-amber-100 text-amber-700",
 };
 
 // ADR-061: recency presets. `null` means no `since` filter.
@@ -66,37 +73,46 @@ function ProvenancePanel({
   const neighborNodes = provenance.filter((n) => n.role === "neighbor");
 
   return (
-    <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50">
+    <div className="card mt-6 bg-gray-50">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-100"
       >
         <span>
-          Sources used ({provenance.length} note{provenance.length !== 1 ? "s" : ""}
-          {edges.length > 0 && `, ${edges.length} connection${edges.length !== 1 ? "s" : ""}`})
+          Sources used ({provenance.length} note
+          {provenance.length !== 1 ? "s" : ""}
+          {edges.length > 0 &&
+            `, ${edges.length} connection${edges.length !== 1 ? "s" : ""}`}
+          )
         </span>
-        <span className="text-gray-400">{open ? "▲" : "▼"}</span>
+        <span aria-hidden="true" className="text-gray-400">
+          {open ? "▲" : "▼"}
+        </span>
       </button>
 
       {open && (
-        <div className="border-t border-gray-200 px-4 pb-4 pt-3 space-y-4">
+        <div className="space-y-4 border-t border-gray-200 px-4 pb-4 pt-4">
           {directNodes.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
-                Direct matches
-              </p>
+              <p className="section-label mb-2">Direct matches</p>
               <ul className="space-y-1.5">
-                {directNodes.map((n, i) => (
-                  <li key={n.node_id} className="flex items-center gap-2 text-sm">
-                    <span className="w-14 shrink-0 text-xs text-gray-400">Note {provenance.indexOf(n) + 1}</span>
+                {directNodes.map((n) => (
+                  <li
+                    key={n.node_id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="w-14 shrink-0 text-xs font-medium text-gray-400">
+                      Note {provenance.indexOf(n) + 1}
+                    </span>
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${NODE_TYPE_COLORS[n.node_type] ?? "bg-gray-100 text-gray-700"}`}
+                      className={`badge shrink-0 ${NODE_TYPE_COLORS[n.node_type] ?? "bg-gray-100 text-gray-700"}`}
                     >
                       {n.node_type}
                     </span>
                     <Link
                       href={`/nodes/${n.node_id}`}
-                      className="text-blue-600 hover:underline truncate"
+                      className="truncate text-indigo-600 hover:underline"
                     >
                       {n.title}
                     </Link>
@@ -108,21 +124,24 @@ function ProvenancePanel({
 
           {neighborNodes.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
-                Via graph expansion
-              </p>
+              <p className="section-label mb-2">Via graph expansion</p>
               <ul className="space-y-1.5">
                 {neighborNodes.map((n) => (
-                  <li key={n.node_id} className="flex items-center gap-2 text-sm">
-                    <span className="w-14 shrink-0 text-xs text-gray-400">Note {provenance.indexOf(n) + 1}</span>
+                  <li
+                    key={n.node_id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="w-14 shrink-0 text-xs font-medium text-gray-400">
+                      Note {provenance.indexOf(n) + 1}
+                    </span>
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${NODE_TYPE_COLORS[n.node_type] ?? "bg-gray-100 text-gray-700"}`}
+                      className={`badge shrink-0 ${NODE_TYPE_COLORS[n.node_type] ?? "bg-gray-100 text-gray-700"}`}
                     >
                       {n.node_type}
                     </span>
                     <Link
                       href={`/nodes/${n.node_id}`}
-                      className="text-blue-600 hover:underline truncate"
+                      className="truncate text-indigo-600 hover:underline"
                     >
                       {n.title}
                     </Link>
@@ -134,12 +153,12 @@ function ProvenancePanel({
 
           {edges.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
-                Connections traversed
-              </p>
-              <ul className="space-y-1 text-xs text-gray-500 font-mono">
+              <p className="section-label mb-2">Connections traversed</p>
+              <ul className="space-y-1 font-mono text-xs text-gray-500">
                 {edges.map((e) => {
-                  const fromNode = provenance.find((n) => n.node_id === e.from_id);
+                  const fromNode = provenance.find(
+                    (n) => n.node_id === e.from_id,
+                  );
                   const toNode = provenance.find((n) => n.node_id === e.to_id);
                   const fromLabel = fromNode
                     ? `Note ${provenance.indexOf(fromNode) + 1}`
@@ -150,7 +169,12 @@ function ProvenancePanel({
                   return (
                     <li key={e.edge_id}>
                       {fromLabel} → [{e.edge_type}] → {toLabel}
-                      {e.note && <span className="text-gray-400 not-italic font-sans"> ({e.note})</span>}
+                      {e.note && (
+                        <span className="text-gray-400 not-italic font-sans">
+                          {" "}
+                          ({e.note})
+                        </span>
+                      )}
                     </li>
                   );
                 })}
@@ -198,7 +222,8 @@ export default function AskPage() {
     try {
       const res = await ragQuery(query.trim(), {
         mode,
-        tag_filter: selectedTagIds.size > 0 ? Array.from(selectedTagIds) : undefined,
+        tag_filter:
+          selectedTagIds.size > 0 ? Array.from(selectedTagIds) : undefined,
         since: recencyDays !== null ? daysAgoIso(recencyDays) : undefined,
       });
       setResponse(res);
@@ -261,66 +286,76 @@ export default function AskPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-2 text-2xl font-semibold text-gray-900">Ask your notes</h1>
+      <h1 className="page-title mb-1.5">Ask your notes</h1>
       <p className="mb-6 text-sm text-gray-500">
-        Questions are answered using your own notes. Answers include citations you can follow.
+        Questions are answered using your own notes. Answers include citations
+        you can follow.
       </p>
 
       {/* Question input */}
       <form onSubmit={handleSubmit}>
+        <label htmlFor="ask-question" className="sr-only">
+          Question about your notes
+        </label>
         <textarea
+          id="ask-question"
           ref={textareaRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask a question about your notes…"
           rows={4}
-          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          className="textarea resize-none"
           autoFocus
         />
 
         {/* ADR-061: scope controls. Collapsed by default to keep the page calm
             when scope is off; opens to expose tag and recency selectors. */}
-        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50">
+        <div className="card mt-3 bg-gray-50">
           <button
             type="button"
             onClick={() => setScopeOpen((o) => !o)}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+            aria-expanded={scopeOpen}
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-600 hover:bg-gray-100"
           >
             <span className="flex items-center gap-2">
-              <span className="uppercase tracking-wide text-gray-500">Scope</span>
+              <span className="section-label">Scope</span>
               {scopeActive ? (
-                <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700 normal-case tracking-normal">
+                <span className="badge bg-indigo-100 text-indigo-700">
                   {selectedTagIds.size > 0
                     ? `${selectedTagIds.size} tag${selectedTagIds.size === 1 ? "" : "s"}`
                     : null}
-                  {selectedTagIds.size > 0 && recencyDays !== null ? " · " : null}
+                  {selectedTagIds.size > 0 && recencyDays !== null
+                    ? " · "
+                    : null}
                   {recencyDays !== null
-                    ? RECENCY_OPTIONS.find((o) => o.value === recencyDays)?.label
+                    ? RECENCY_OPTIONS.find((o) => o.value === recencyDays)
+                        ?.label
                     : null}
                 </span>
               ) : (
-                <span className="text-gray-400 normal-case tracking-normal">any note, any time</span>
+                <span className="text-gray-400">any note, any time</span>
               )}
             </span>
-            <span className="text-gray-400">{scopeOpen ? "▲" : "▼"}</span>
+            <span aria-hidden="true" className="text-gray-400">
+              {scopeOpen ? "▲" : "▼"}
+            </span>
           </button>
           {scopeOpen && (
-            <div className="border-t border-gray-200 px-3 pb-3 pt-2 space-y-3">
+            <div className="space-y-3 border-t border-gray-200 px-3 pb-3 pt-3">
               <div>
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                  Recency
-                </p>
+                <p className="section-label mb-1.5">Recency</p>
                 <div className="flex flex-wrap gap-1.5">
                   {RECENCY_OPTIONS.map((opt) => (
                     <button
                       key={String(opt.value)}
                       type="button"
                       onClick={() => setRecencyDays(opt.value)}
-                      className={`rounded-full px-2.5 py-1 text-xs ${
+                      aria-pressed={recencyDays === opt.value}
+                      className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
                         recencyDays === opt.value
-                          ? "bg-blue-600 text-white"
-                          : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                          ? "bg-indigo-600 text-white"
+                          : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
                       }`}
                     >
                       {opt.label}
@@ -329,7 +364,7 @@ export default function AskPage() {
                 </div>
               </div>
               <div>
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                <p className="section-label mb-1.5">
                   Tags (matches any selected)
                 </p>
                 {allTags.length === 0 ? (
@@ -343,10 +378,11 @@ export default function AskPage() {
                           key={tag.id}
                           type="button"
                           onClick={() => toggleTag(tag.id)}
-                          className={`rounded-full px-2.5 py-1 text-xs ${
+                          aria-pressed={active}
+                          className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
                             active
-                              ? "bg-blue-600 text-white"
-                              : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                              ? "bg-indigo-600 text-white"
+                              : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
                           }`}
                         >
                           {tag.name}
@@ -360,7 +396,7 @@ export default function AskPage() {
                 <button
                   type="button"
                   onClick={clearScope}
-                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                  className="text-xs text-gray-500 underline hover:text-gray-700"
                 >
                   Clear scope
                 </button>
@@ -369,17 +405,22 @@ export default function AskPage() {
           )}
         </div>
 
-        <div className="mt-3 flex items-start justify-between gap-4">
+        <div className="mt-3 flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div className="flex flex-col gap-1">
-            <div className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-xs">
+            <div
+              role="group"
+              aria-label="Answer mode"
+              className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 text-xs"
+            >
               {MODE_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setMode(opt.value)}
-                  className={`px-3 py-1.5 border-l border-gray-200 first:border-l-0 transition-colors ${
+                  aria-pressed={mode === opt.value}
+                  className={`border-l border-gray-200 px-3 py-1.5 transition-colors first:border-l-0 ${
                     mode === opt.value
-                      ? "bg-blue-600 text-white"
+                      ? "bg-indigo-600 text-white"
                       : "bg-white text-gray-600 hover:bg-gray-50"
                   }`}
                   title={opt.description}
@@ -388,7 +429,7 @@ export default function AskPage() {
                 </button>
               ))}
             </div>
-            <span className="text-xs text-gray-400 max-w-xs">
+            <span className="max-w-xs text-xs text-gray-400">
               {MODE_OPTIONS.find((m) => m.value === mode)?.description}
             </span>
           </div>
@@ -398,7 +439,7 @@ export default function AskPage() {
                 <button
                   type="button"
                   onClick={reset}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                  className="btn btn-secondary"
                 >
                   Ask another
                 </button>
@@ -406,8 +447,14 @@ export default function AskPage() {
               <button
                 type="submit"
                 disabled={loading || !query.trim()}
-                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="btn btn-primary"
               >
+                {loading && (
+                  <span
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  />
+                )}
                 {loading ? "Thinking…" : "Ask"}
               </button>
             </div>
@@ -417,16 +464,12 @@ export default function AskPage() {
       </form>
 
       {/* Error */}
-      {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error mt-4">{error}</div>}
 
       {/* Loading */}
       {loading && (
         <div className="mt-8 flex flex-col items-center gap-3 text-gray-400">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-blue-500" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-500" />
           <p className="text-sm">Searching notes and composing answer…</p>
         </div>
       )}
@@ -434,7 +477,7 @@ export default function AskPage() {
       {/* Answer */}
       {resolvedAnswer && response && (
         <div className="mt-6">
-          <div className="prose prose-sm max-w-none rounded-lg border border-gray-200 bg-white px-6 py-5">
+          <div className="card prose prose-sm max-w-none break-words px-6 py-5">
             <NoteContent content={resolvedAnswer} />
           </div>
 
@@ -443,8 +486,14 @@ export default function AskPage() {
               type="button"
               onClick={handleSaveAsNote}
               disabled={saving}
-              className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+              className="btn btn-secondary border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
             >
+              {saving && (
+                <span
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600"
+                />
+              )}
               {saving ? "Saving…" : "Save as note"}
             </button>
           </div>

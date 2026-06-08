@@ -60,17 +60,18 @@ export function AskBar({ primaryTagId, onResult, onError, onClear }: Props) {
       <button
         type="button"
         disabled={disabled}
+        aria-pressed={scope === value}
         onClick={() => setScope(value)}
         title={
           disabled
             ? "Set a primary tag on the project scope to enable this option."
             : undefined
         }
-        className={`px-2.5 py-1 text-xs border-l first:border-l-0 border-gray-200 transition-colors ${
+        className={`border-l border-gray-200 px-2.5 py-1 text-xs transition-colors first:border-l-0 ${
           scope === value
             ? "bg-indigo-600 text-white"
             : disabled
-              ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+              ? "cursor-not-allowed bg-gray-50 text-gray-300"
               : "bg-white text-gray-600 hover:bg-gray-50"
         }`}
       >
@@ -84,14 +85,22 @@ export function AskBar({ primaryTagId, onResult, onError, onClear }: Props) {
       onSubmit={handleSubmit}
       className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 flex-shrink-0"
     >
+      <label htmlFor="ask-bar-input" className="sr-only">
+        Ask a question about this project
+      </label>
       <input
+        id="ask-bar-input"
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Ask anything about this project…"
-        className="flex-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm focus:bg-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="input flex-1"
       />
-      <div className="inline-flex items-center rounded-md border border-gray-200 overflow-hidden">
+      <div
+        className="inline-flex shrink-0 items-center overflow-hidden rounded-md border border-gray-200"
+        role="group"
+        aria-label="Ask scope"
+      >
         {makeToggle("project", "Project", !hasPrimary)}
         {makeToggle("both", "Both", !hasPrimary)}
         {makeToggle("full", "Full corpus", false)}
@@ -99,7 +108,7 @@ export function AskBar({ primaryTagId, onResult, onError, onClear }: Props) {
       <button
         type="submit"
         disabled={loading || !query.trim()}
-        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        className="btn btn-primary btn-sm shrink-0"
       >
         {loading ? "Asking…" : "Ask"}
       </button>

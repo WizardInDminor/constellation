@@ -4505,6 +4505,111 @@ the axis affects both consistently.
 
 ---
 
+## ADR-074 — Frontend visual foundation: single accent, global focus ring, scrolling nav
+
+**Status:** Accepted
+
+**Context:** The frontend grew page-by-page with ad-hoc Tailwind utilities and
+no shared design layer. `globals.css` was empty, the Tailwind config was
+unextended, and there was no app-wide treatment for keyboard focus, text
+selection, or reduced-motion. Concrete symptoms: the top nav mixed three
+accent colors (`indigo-700` brand, `blue-600` Ask, `indigo-600` Synthesize),
+gave no active-state indication of the current page, and packed 11
+non-wrapping links into a single fixed row that clips on narrow viewports.
+Most interactive elements (nav links, dashboard tiles, note cards) had no
+visible keyboard focus state at all — a WCAG 2.4.7 gap.
+
+**Decision:** Establish a thin, token-light visual foundation rather than
+adopt a component library:
+
+- **Indigo is the single brand accent.** Ask's stray `blue-600` is folded
+  into indigo. Generative actions (Ask, Synthesize) remain visually grouped
+  via a divider and medium weight, not a separate hue.
+- **Global `:focus-visible` ring** in `globals.css`, backed by a `--brand`
+  CSS variable. Components that define their own ring still win on `:focus`.
+- **Top nav becomes horizontally scrollable** (`overflow-x-auto` +
+  `scrollbar-none`) instead of clipping/wrapping, with an animated
+  active-page underline driven by `usePathname`.
+- **App-wide base styles**: font smoothing, heading tracking, a
+  `prefers-reduced-motion` reset, and `scrollbar-thin`/`scrollbar-none`
+  utilities.
+
+**Rationale:**
+
+- A handful of base rules and shared utility classes deliver app-wide
+  consistency and accessibility wins without a large refactor or a new
+  dependency, which suits a single-user tool.
+- Keeping tokens minimal (CSS variables + Tailwind's default palette)
+  avoids a parallel theming system that would drift from the inline
+  utilities already in use across pages.
+- `:focus-visible` over `:focus` keeps the ring keyboard-only, so mouse
+  users see no regression.
+
+**Consequences:**
+
+- New interactive elements inherit a focus ring for free; opt out only
+  with an explicit local style.
+- Accent color is centralized conceptually but still expressed as inline
+  `indigo-*` utilities per element — a future ADR could promote a Tailwind
+  `brand` color token if churn warrants it.
+- The scrolling nav trades guaranteed visibility of every link on small
+  screens for a stable, non-clipping layout; a future breakpoint-driven
+  menu can supersede this if the link count keeps growing.
+- No change to routes, data, or component APIs — purely presentational.
+
+---
+
+## ADR-075 — Shared UI primitives via a Tailwind `@layer components` layer
+
+**Status:** Accepted
+
+**Context:** ADR-074 unified the global chrome, but each page still styled
+buttons, inputs, cards, badges, and empty/loading/error states with bespoke
+inline Tailwind strings. The same button appeared as `px-3 py-1 rounded
+bg-indigo-600 …` on one page and `px-3 py-1.5 rounded-md bg-indigo-600 …` on
+another; "no results" states ranged from italic gray text to dashed cards.
+Applying a consistent visual language across ~30 page/component files needed
+a single source of truth.
+
+**Decision:** Add a `@layer components` block in `globals.css` defining
+reusable primitives via `@apply`, and compose pages from them:
+
+- Buttons: `.btn` + `.btn-primary` / `.btn-secondary` / `.btn-ghost` /
+  `.btn-danger`, with `.btn-sm`.
+- Form controls: `.input`, `.textarea`, `.label`, `.field-hint`.
+- Surfaces: `.card`, `.card-interactive`.
+- Misc: `.badge`, `.page-title`, `.section-label`, `.empty-state`,
+  `.skeleton`, `.alert-error`.
+
+Layout (width, margins, grid placement) stays at the call site; the classes
+own only the visual identity. No React component library was introduced.
+
+**Rationale:**
+
+- A CSS component layer gives app-wide consistency with the smallest possible
+  footprint — no new dependency, no prop API to design, no migration of every
+  element into wrapper components. Pages keep using Tailwind utilities for
+  layout and just swap visual strings for a class name.
+- `@apply` keeps the primitives co-located with the rest of the design tokens
+  in `globals.css`, so the brand accent, focus ring, and component styles
+  evolve together.
+- Semantic colors that encode meaning (note-type chips, success/warning/error,
+  user tag colors) stay as explicit utilities and are deliberately *not*
+  folded into the primitives, so meaning is never accidentally restyled.
+
+**Consequences:**
+
+- New UI should reach for these classes first; bespoke button/input strings
+  are now the exception, not the norm.
+- The primitives are intentionally minimal. Variants beyond the current set
+  (e.g. icon-only button sizing, input error state) can be added to the layer
+  rather than re-invented per page.
+- Because layout stays at the call site, the classes never fight the page —
+  but callers must still supply `w-full`, `ml-auto`, etc. where needed.
+- Purely presentational: no routes, data, or component APIs changed.
+
+---
+
 ## ADR-073 — Markdown-first note content with KaTeX math rendering
 
 > Numbering note: the prompt that scoped this work referred to it as

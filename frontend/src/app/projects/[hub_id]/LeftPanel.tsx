@@ -60,11 +60,12 @@ export function LeftPanel({ project, onScopeChanged }: Props) {
 function ScopeStats({ project }: { project: ProjectDetail }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-        Scope
-      </p>
+      <p className="section-label mb-1.5">Scope</p>
       <div className="space-y-1 text-gray-500">
-        <Row label="Pinned" value={String(project.scope.pinned_node_ids.length)} />
+        <Row
+          label="Pinned"
+          value={String(project.scope.pinned_node_ids.length)}
+        />
         <Row label="Tags" value={String(project.scope.tag_ids.length)} />
         <Row
           label="Last visit"
@@ -162,28 +163,27 @@ function PinnedNotesSection({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-          Pinned notes
-        </p>
+        <p className="section-label">Pinned notes</p>
         <button
           onClick={() => setPickerOpen((o) => !o)}
-          className="text-[10px] text-indigo-600 hover:text-indigo-700"
+          className="text-[10px] font-medium text-indigo-600 hover:text-indigo-700"
+          aria-expanded={pickerOpen}
         >
           {pickerOpen ? "done" : "+ add"}
         </button>
       </div>
       {loading ? (
-        <p className="text-gray-400">Loading…</p>
+        <ul className="space-y-1.5" aria-busy="true">
+          <li className="skeleton h-3 w-full" />
+          <li className="skeleton h-3 w-4/5" />
+          <li className="skeleton h-3 w-2/3" />
+        </ul>
       ) : pinned.length === 0 && !pickerOpen ? (
         <p className="text-gray-400">No pinned notes.</p>
       ) : (
         <ul className="space-y-1">
           {pinned.map((n) => (
-            <PinnedRow
-              key={n.id}
-              node={n}
-              onRemove={() => removePin(n.id)}
-            />
+            <PinnedRow key={n.id} node={n} onRemove={() => removePin(n.id)} />
           ))}
         </ul>
       )}
@@ -195,10 +195,11 @@ function PinnedNotesSection({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search notes to pin…"
             autoFocus
-            className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+            aria-label="Search notes to pin"
+            className="input"
           />
           {results.length > 0 && (
-            <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-md">
+            <div className="absolute z-20 mt-1 max-h-40 w-full overflow-y-auto scrollbar-thin rounded-md border border-gray-200 bg-white shadow-md">
               {results.map((r) => (
                 <button
                   key={r.id}
@@ -236,8 +237,9 @@ function PinnedRow({
       </Link>
       <button
         onClick={onRemove}
-        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-rose-500 text-[10px]"
+        className="shrink-0 text-[10px] text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 focus-visible:opacity-100"
         title="Unpin"
+        aria-label={`Unpin ${node.title}`}
       >
         ×
       </button>
@@ -261,7 +263,9 @@ function TagsSection({
   const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
-    listTags().then(setAllTags).catch(() => {});
+    listTags()
+      .then(setAllTags)
+      .catch(() => {});
   }, []);
 
   const selectedTags = useMemo(
@@ -303,19 +307,14 @@ function TagsSection({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-        Tags
-      </p>
+      <p className="section-label mb-1.5">Tags</p>
       <div className="flex flex-wrap items-center gap-1">
         {selectedTags.map((t) => (
-          <span
-            key={t.id}
-            className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs"
-          >
+          <span key={t.id} className="badge gap-1 bg-gray-100 text-gray-700">
             {t.name}
             <button
               onClick={() => removeTag(t.id)}
-              className="text-gray-400 hover:text-rose-500"
+              className="text-gray-400 hover:text-red-500"
               aria-label={`Remove ${t.name}`}
             >
               ×
@@ -334,10 +333,11 @@ function TagsSection({
               }
             }}
             placeholder="+ tag"
-            className="rounded border border-gray-200 px-1.5 py-0.5 text-xs w-20 focus:border-blue-500 focus:outline-none"
+            aria-label="Add a tag"
+            className="input w-20 px-2 py-0.5 text-xs"
           />
           {tagInput && suggestions.length > 0 && (
-            <div className="absolute z-20 mt-1 max-h-32 w-32 overflow-y-auto rounded border border-gray-200 bg-white shadow-md">
+            <div className="absolute z-20 mt-1 max-h-32 w-32 overflow-y-auto scrollbar-thin rounded-md border border-gray-200 bg-white shadow-md">
               {suggestions.slice(0, 6).map((t) => (
                 <button
                   key={t.id}
@@ -368,7 +368,9 @@ function PrimaryTagSection({
 }) {
   const [allTags, setAllTags] = useState<TagRef[]>([]);
   useEffect(() => {
-    listTags().then(setAllTags).catch(() => {});
+    listTags()
+      .then(setAllTags)
+      .catch(() => {});
   }, []);
 
   // Available choices: only project tags (set membership matters most here).
@@ -384,7 +386,7 @@ function PrimaryTagSection({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+      <p className="section-label mb-1.5">
         Primary tag
         <span className="ml-1 font-normal normal-case tracking-normal text-gray-300">
           (CLI + Ask anchor)
@@ -398,7 +400,8 @@ function PrimaryTagSection({
         <select
           value={scope.primary_tag_id ?? ""}
           onChange={(e) => setPrimary(e.target.value || null)}
-          className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs"
+          aria-label="Primary tag"
+          className="input text-xs"
         >
           <option value="">— none —</option>
           {projectTags.map((t) => (
@@ -438,7 +441,7 @@ function CoveragePanel({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+      <p className="section-label mb-1.5">
         {mode === "narrative"
           ? "Coverage"
           : mode === "learning"
@@ -446,7 +449,10 @@ function CoveragePanel({
             : "Sub-topics"}
       </p>
       {tags === null ? (
-        <p className="text-gray-400">Loading…</p>
+        <div className="space-y-1.5" aria-busy="true">
+          <div className="skeleton h-3 w-full" />
+          <div className="skeleton h-3 w-3/4" />
+        </div>
       ) : tags.length === 0 ? (
         <p className="text-gray-400 text-[11px]">
           Add project tags above to see coverage.
@@ -482,13 +488,13 @@ function CoveragePanel({
 function QuickCorrectionsPanel({ scope }: { scope: ProjectScope }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+      <p className="section-label mb-1.5">
         Prior knowledge
         <span className="ml-1 font-normal normal-case tracking-normal text-gray-300">
           (Session 1)
         </span>
       </p>
-      <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 whitespace-pre-wrap">
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 whitespace-pre-wrap">
         {scope.prior_knowledge}
       </div>
       <p className="text-[10px] text-gray-300 mt-1">

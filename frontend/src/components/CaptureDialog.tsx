@@ -29,7 +29,8 @@ export function CaptureDialog({ open, onClose }: Props) {
     const newlineIdx = value.indexOf("\n");
     const title = newlineIdx === -1 ? value : value.slice(0, newlineIdx).trim();
     // If there's no second line, use the title as the content too
-    const content = newlineIdx === -1 ? value : value.slice(newlineIdx + 1).trim() || value;
+    const content =
+      newlineIdx === -1 ? value : value.slice(newlineIdx + 1).trim() || value;
 
     await createFleetingNode(title, content);
     if (textareaRef.current) textareaRef.current.value = "";
@@ -53,39 +54,39 @@ export function CaptureDialog({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/50"
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-24 bg-black/50"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-2xl bg-white rounded-lg shadow-xl p-4 flex flex-col gap-3"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Capture a thought"
+        className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 flex flex-col gap-3"
       >
-        <p className="text-xs text-gray-400">
-          First line becomes the title · Ctrl+Enter to capture · Esc to close
-        </p>
         <MarkdownTextarea
           ref={textareaRef}
           onKeyDown={handleKeyDown}
           placeholder="What are you thinking?"
           rows={6}
-          className="w-full resize-none border border-gray-200 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full resize-none border border-gray-300 rounded-lg p-3 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         />
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
-            Capture
-          </button>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-400">
+            First line becomes the title ·{" "}
+            <kbd className="font-mono">Ctrl+Enter</kbd> to capture ·{" "}
+            <kbd className="font-mono">Esc</kbd> to close
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button type="button" onClick={onClose} className="btn btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Capture
+            </button>
+          </div>
         </div>
       </form>
     </div>

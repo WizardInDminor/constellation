@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getActivity, getStats } from "@/lib/api";
-import type { ActivityFeed, CorpusStats, NodeSummary, RecentEdge } from "@/lib/api";
+import type {
+  ActivityFeed,
+  CorpusStats,
+  NodeSummary,
+  RecentEdge,
+} from "@/lib/api";
 
 const TYPE_ACCENTS: Record<string, string> = {
   fleeting: "text-amber-700",
@@ -20,7 +25,14 @@ const TYPE_CHIP: Record<string, string> = {
   source: "bg-teal-100 text-teal-700",
 };
 
-const TYPE_ORDER = ["fleeting", "permanent", "literature", "structure"] as const;
+const TYPE_CHIP_FALLBACK = "bg-gray-100 text-gray-600";
+
+const TYPE_ORDER = [
+  "fleeting",
+  "permanent",
+  "literature",
+  "structure",
+] as const;
 
 function formatRelative(iso: string | null): string {
   if (!iso) return "never";
@@ -48,28 +60,47 @@ function Tile({
   accent?: string;
 }) {
   const body = (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col gap-1 hover:border-indigo-200 transition-colors">
-      <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
-      <span className={`text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</span>
+    <div
+      className={`${href ? "card-interactive" : "card"} p-4 flex flex-col gap-1 h-full`}
+    >
+      <span className="section-label">{label}</span>
+      <span className={`text-2xl font-semibold ${accent ?? "text-gray-900"}`}>
+        {value}
+      </span>
     </div>
   );
-  return href ? <Link href={href}>{body}</Link> : body;
+  return href ? (
+    <Link href={href} className="block">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
-function ActivityNodeRow({ node, timestamp }: { node: NodeSummary; timestamp: string }) {
+function ActivityNodeRow({
+  node,
+  timestamp,
+}: {
+  node: NodeSummary;
+  timestamp: string;
+}) {
   return (
     <Link
       href={`/nodes/${node.id}`}
       className="flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-gray-50 transition-colors"
     >
-      <span className="text-sm truncate flex-1 text-gray-800">{node.title}</span>
+      <span className="text-sm truncate flex-1 text-gray-800">
+        {node.title}
+      </span>
       <div className="flex items-center gap-2 shrink-0">
-        <span
-          className={`text-xs px-1.5 py-0.5 rounded-full ${TYPE_CHIP[node.type] ?? "bg-gray-100 text-gray-600"}`}
-        >
+        <span className={`badge ${TYPE_CHIP[node.type] ?? TYPE_CHIP_FALLBACK}`}>
           {node.type}
         </span>
-        <span className="text-xs text-gray-400 w-12 text-right" title={timestamp}>
+        <span
+          className="text-xs text-gray-400 w-12 text-right"
+          title={timestamp}
+        >
           {formatRelative(timestamp)}
         </span>
       </div>
@@ -87,7 +118,9 @@ function ActivityEdgeRow({ edge }: { edge: RecentEdge }) {
         >
           {edge.from_node.title}
         </Link>
-        <span className="text-xs font-mono text-gray-400 shrink-0">{edge.type}</span>
+        <span className="text-xs font-mono text-gray-400 shrink-0">
+          {edge.type}
+        </span>
         <Link
           href={`/nodes/${edge.to_node.id}`}
           className="truncate text-gray-800 hover:text-indigo-700"
@@ -95,7 +128,10 @@ function ActivityEdgeRow({ edge }: { edge: RecentEdge }) {
           {edge.to_node.title}
         </Link>
       </div>
-      <span className="text-xs text-gray-400 w-12 text-right shrink-0" title={edge.created_at}>
+      <span
+        className="text-xs text-gray-400 w-12 text-right shrink-0"
+        title={edge.created_at}
+      >
         {formatRelative(edge.created_at)}
       </span>
     </div>
@@ -117,18 +153,23 @@ function ActivitySection({
 }) {
   return (
     <section className="flex flex-col gap-1.5">
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</h3>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="section-label">{title}</h3>
         {seeAllHref && (
-          <Link href={seeAllHref} className="text-xs text-indigo-600 hover:text-indigo-800">
+          <Link
+            href={seeAllHref}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+          >
             See all →
           </Link>
         )}
       </div>
       {isEmpty ? (
-        <p className="text-sm text-gray-400 italic px-2 py-3">{emptyCopy}</p>
+        <div className="empty-state py-8">
+          <p className="text-sm text-gray-500">{emptyCopy}</p>
+        </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col">{children}</div>
+        <div className="card p-2 flex flex-col">{children}</div>
       )}
     </section>
   );
@@ -142,7 +183,9 @@ export default function Home() {
   useEffect(() => {
     getStats()
       .then(setStats)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"));
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load stats"),
+      );
     getActivity()
       .then(setActivity)
       .catch(() => {
@@ -153,7 +196,7 @@ export default function Home() {
   return (
     <div className="max-w-3xl mx-auto py-12 px-4 flex flex-col gap-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold text-gray-900">Constellation</h1>
+        <h1 className="page-title text-2xl">Constellation</h1>
         <p className="text-sm text-gray-500">
           Press{" "}
           <kbd className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded text-xs font-mono">
@@ -163,16 +206,12 @@ export default function Home() {
         </p>
       </div>
 
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {!stats && !error && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+            <div key={i} className="skeleton h-20" />
           ))}
         </div>
       )}
@@ -180,7 +219,7 @@ export default function Home() {
       {stats && (
         <>
           <section className="flex flex-col gap-3">
-            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</h2>
+            <h2 className="section-label">Notes</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {TYPE_ORDER.map((t) => (
                 <Tile
@@ -195,7 +234,7 @@ export default function Home() {
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Graph</h2>
+            <h2 className="section-label">Graph</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Tile label="Edges" value={stats.edges} href="/graph" />
               <Tile label="Sources" value={stats.sources} href="/sources" />
@@ -211,7 +250,7 @@ export default function Home() {
 
           {activity && (
             <section className="flex flex-col gap-5">
-              <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              <h2 className="section-label">
                 Last {activity.window_days} days
               </h2>
 
@@ -222,7 +261,11 @@ export default function Home() {
                 emptyCopy="No fleeting notes captured this week."
               >
                 {activity.captured.map((n) => (
-                  <ActivityNodeRow key={n.id} node={n} timestamp={n.created_at} />
+                  <ActivityNodeRow
+                    key={n.id}
+                    node={n}
+                    timestamp={n.created_at}
+                  />
                 ))}
               </ActivitySection>
 
@@ -233,7 +276,11 @@ export default function Home() {
                 emptyCopy="No notes edited this week."
               >
                 {activity.edited.map((n) => (
-                  <ActivityNodeRow key={n.id} node={n} timestamp={n.updated_at} />
+                  <ActivityNodeRow
+                    key={n.id}
+                    node={n}
+                    timestamp={n.updated_at}
+                  />
                 ))}
               </ActivitySection>
 

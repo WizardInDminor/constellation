@@ -7,28 +7,38 @@ interface Props {
 }
 
 export function GraphControls({ onZoomIn, onZoomOut, onFit }: Props) {
+  const buttonClass =
+    "flex h-8 w-8 items-center justify-center rounded-md border border-gray-700 bg-gray-800 text-gray-200 shadow-sm transition-colors hover:border-gray-600 hover:bg-gray-700";
+
   return (
-    <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
+    <div
+      className="absolute bottom-4 right-4 z-10 flex flex-col gap-1.5"
+      role="group"
+      aria-label="Graph zoom controls"
+    >
       <button
         onClick={onFit}
         title="Fit to screen"
-        className="w-8 h-8 flex items-center justify-center rounded bg-gray-800 border border-gray-600 text-gray-200 hover:bg-gray-700 text-xs font-mono"
+        aria-label="Fit graph to screen"
+        className={`${buttonClass} font-mono text-xs`}
       >
-        ⊡
+        <span aria-hidden="true">⊡</span>
       </button>
       <button
         onClick={onZoomIn}
         title="Zoom in"
-        className="w-8 h-8 flex items-center justify-center rounded bg-gray-800 border border-gray-600 text-gray-200 hover:bg-gray-700 text-lg leading-none"
+        aria-label="Zoom in"
+        className={`${buttonClass} text-lg leading-none`}
       >
-        +
+        <span aria-hidden="true">+</span>
       </button>
       <button
         onClick={onZoomOut}
         title="Zoom out"
-        className="w-8 h-8 flex items-center justify-center rounded bg-gray-800 border border-gray-600 text-gray-200 hover:bg-gray-700 text-lg leading-none"
+        aria-label="Zoom out"
+        className={`${buttonClass} text-lg leading-none`}
       >
-        −
+        <span aria-hidden="true">−</span>
       </button>
     </div>
   );

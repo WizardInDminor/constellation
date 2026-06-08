@@ -4,11 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-import {
-  clusterSuggestLinks,
-  createEdge,
-  listTags,
-} from "@/lib/api";
+import { clusterSuggestLinks, createEdge, listTags } from "@/lib/api";
 import type {
   ClusterLinkProposal,
   ClusterSuggestResponse,
@@ -46,25 +42,37 @@ function ProposalRow({
 
   return (
     <li
-      className={`bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2 transition-opacity ${
+      className={`card flex flex-col gap-2 p-3 transition-opacity ${
         dimmed ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-center gap-2 flex-wrap text-sm">
         <span
-          className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[p.from_node.type] ?? "bg-gray-100 text-gray-600"}`}
+          className={`badge shrink-0 ${TYPE_COLORS[p.from_node.type] ?? "bg-gray-100 text-gray-600"}`}
         >
           {p.from_node.type}
         </span>
-        <Link href={`/nodes/${p.from_node.id}`} className="text-indigo-700 hover:underline truncate max-w-xs">
+        <Link
+          href={`/nodes/${p.from_node.id}`}
+          className="text-indigo-700 hover:underline truncate max-w-xs"
+        >
           {p.from_node.title}
         </Link>
-        <span className="text-xs text-gray-400">{directionGlyph(edgeType)}</span>
+        <span className="text-xs text-gray-400" aria-hidden="true">
+          {directionGlyph(edgeType)}
+        </span>
+        <label
+          htmlFor={`edge-type-${p.from_node.id}-${p.to_node.id}`}
+          className="sr-only"
+        >
+          Edge type
+        </label>
         <select
+          id={`edge-type-${p.from_node.id}-${p.to_node.id}`}
           value={edgeType}
           onChange={(e) => onTypeChange(e.target.value as EdgeType)}
           disabled={status !== "pending" && status !== "error"}
-          className="text-xs font-mono border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+          className="input w-auto px-2 py-1 font-mono text-xs"
         >
           {EDGE_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -73,37 +81,49 @@ function ProposalRow({
           ))}
         </select>
         <span
-          className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${TYPE_COLORS[p.to_node.type] ?? "bg-gray-100 text-gray-600"}`}
+          className={`badge shrink-0 ${TYPE_COLORS[p.to_node.type] ?? "bg-gray-100 text-gray-600"}`}
         >
           {p.to_node.type}
         </span>
-        <Link href={`/nodes/${p.to_node.id}`} className="text-indigo-700 hover:underline truncate max-w-xs">
+        <Link
+          href={`/nodes/${p.to_node.id}`}
+          className="text-indigo-700 hover:underline truncate max-w-xs"
+        >
           {p.to_node.title}
         </Link>
       </div>
 
-      <p className="text-xs text-gray-600 italic leading-relaxed">{p.rationale}</p>
-      <p className="text-[10px] text-gray-400">{EDGE_TYPE_META[edgeType].description}</p>
+      <p className="text-xs italic leading-relaxed text-gray-600">
+        {p.rationale}
+      </p>
+      <p className="text-[10px] text-gray-400">
+        {EDGE_TYPE_META[edgeType].description}
+      </p>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <div className="alert-error">{error}</div>}
 
-      <div className="flex items-center gap-3 text-xs">
+      <div className="flex items-center gap-2 text-xs">
         {status === "pending" || status === "error" ? (
           <>
             <button
+              type="button"
               onClick={onAccept}
-              className="px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+              className="btn btn-primary btn-sm"
             >
               Accept
             </button>
-            <button onClick={onReject} className="text-gray-500 hover:text-gray-800">
+            <button
+              type="button"
+              onClick={onReject}
+              className="btn btn-secondary btn-sm"
+            >
               Reject
             </button>
           </>
         ) : status === "saving" ? (
           <span className="text-gray-500">Saving…</span>
         ) : status === "accepted" ? (
-          <span className="text-green-700">✓ Accepted</span>
+          <span className="font-medium text-green-700">✓ Accepted</span>
         ) : (
           <span className="text-gray-500">— Rejected</span>
         )}
@@ -115,14 +135,18 @@ function ProposalRow({
 function ClusterLinksInner() {
   const searchParams = useSearchParams();
   const [tags, setTags] = useState<TagRef[]>([]);
-  const [selectedTagId, setSelectedTagId] = useState<string>(searchParams.get("tag_id") ?? "");
+  const [selectedTagId, setSelectedTagId] = useState<string>(
+    searchParams.get("tag_id") ?? "",
+  );
   const [rows, setRows] = useState<ProposalRowState[]>([]);
   const [scopeSize, setScopeSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listTags().then(setTags).catch(() => {});
+    listTags()
+      .then(setTags)
+      .catch(() => {});
   }, []);
 
   const run = useCallback(async (tagId: string) => {
@@ -132,7 +156,9 @@ function ClusterLinksInner() {
     setRows([]);
     setScopeSize(null);
     try {
-      const res: ClusterSuggestResponse = await clusterSuggestLinks({ tag_id: tagId });
+      const res: ClusterSuggestResponse = await clusterSuggestLinks({
+        tag_id: tagId,
+      });
       setScopeSize(res.scope_size);
       setRows(
         res.proposals.map((p) => ({
@@ -151,7 +177,13 @@ function ClusterLinksInner() {
   // Auto-run when a tag is preselected via URL
   useEffect(() => {
     const urlTag = searchParams.get("tag_id");
-    if (urlTag && urlTag === selectedTagId && rows.length === 0 && !loading && !error) {
+    if (
+      urlTag &&
+      urlTag === selectedTagId &&
+      rows.length === 0 &&
+      !loading &&
+      !error
+    ) {
       run(urlTag);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,25 +225,30 @@ function ClusterLinksInner() {
     }
   }
 
-  const pendingCount = rows.filter((r) => r.status === "pending" || r.status === "error").length;
+  const pendingCount = rows.filter(
+    (r) => r.status === "pending" || r.status === "error",
+  ).length;
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold text-gray-900">Cluster suggest-links</h2>
+        <h1 className="page-title">Cluster suggest-links</h1>
         <p className="text-sm text-gray-500">
-          Pick a tag; Claude runs <code>suggest-links</code> across each note in scope and
-          deduplicates the proposals into one row per pair-of-notes.
+          Pick a tag; Claude runs <code>suggest-links</code> across each note in
+          scope and deduplicates the proposals into one row per pair-of-notes.
         </p>
       </div>
 
-      <div className="flex items-end gap-3 flex-wrap">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">Tag</label>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col">
+          <label htmlFor="cluster-tag" className="label">
+            Tag
+          </label>
           <select
+            id="cluster-tag"
             value={selectedTagId}
             onChange={(e) => setSelectedTagId(e.target.value)}
-            className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+            className="input w-auto min-w-[12rem]"
           >
             <option value="">Choose a tag…</option>
             {tags.map((t) => (
@@ -222,16 +259,18 @@ function ClusterLinksInner() {
           </select>
         </div>
         <button
+          type="button"
           onClick={() => run(selectedTagId)}
           disabled={!selectedTagId || loading}
-          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="btn btn-primary"
         >
           {loading ? "Asking Claude…" : "Suggest"}
         </button>
         {pendingCount > 0 && (
           <button
+            type="button"
             onClick={acceptAll}
-            className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+            className="btn btn-secondary"
           >
             Accept all ({pendingCount})
           </button>
@@ -240,15 +279,12 @@ function ClusterLinksInner() {
 
       {scopeSize !== null && !loading && (
         <p className="text-xs text-gray-500">
-          Scope: {scopeSize} note{scopeSize === 1 ? "" : "s"}. Proposals: {rows.length}.
+          Scope: {scopeSize} note{scopeSize === 1 ? "" : "s"}. Proposals:{" "}
+          {rows.length}.
         </p>
       )}
 
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error">{error}</div>}
 
       {loading && (
         <div className="flex items-center gap-3 text-gray-400">
@@ -272,9 +308,12 @@ function ClusterLinksInner() {
       )}
 
       {!loading && rows.length === 0 && scopeSize !== null && (
-        <p className="text-sm text-gray-400 italic">
-          No proposals — Claude found no meaningful new connections in this scope.
-        </p>
+        <div className="empty-state">
+          <p className="text-sm font-medium text-gray-600">No proposals</p>
+          <p className="text-sm text-gray-400">
+            Claude found no meaningful new connections in this scope.
+          </p>
+        </div>
       )}
     </div>
   );

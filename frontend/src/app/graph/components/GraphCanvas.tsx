@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
-import type { NodeObject, LinkObject, ForceGraphMethods } from "react-force-graph-2d";
+import type {
+  NodeObject,
+  LinkObject,
+  ForceGraphMethods,
+} from "react-force-graph-2d";
 
 import type { GraphEdgeRef, GraphNodeRef } from "@/lib/api";
 import { edgeColor, nodeColor } from "../colors";
@@ -146,8 +150,12 @@ export function GraphCanvas({
   return (
     <div ref={containerRef} className="relative w-full h-full bg-gray-950">
       {connectingMode && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-          <span className="bg-indigo-700 text-white text-xs px-4 py-1.5 rounded-full shadow-lg">
+        <div
+          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="rounded-full bg-indigo-700 px-4 py-1.5 text-xs font-medium text-white shadow-lg">
             Click a node to connect — Esc to cancel
           </span>
         </div>
@@ -173,8 +181,12 @@ export function GraphCanvas({
         onEngineStop={handleEngineStop}
       />
       <GraphControls
-        onZoomIn={() => graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 300)}
-        onZoomOut={() => graphRef.current?.zoom(graphRef.current.zoom() * 0.67, 300)}
+        onZoomIn={() =>
+          graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 300)
+        }
+        onZoomOut={() =>
+          graphRef.current?.zoom(graphRef.current.zoom() * 0.67, 300)
+        }
         onFit={() => graphRef.current?.zoomToFit(400, 20)}
       />
     </div>

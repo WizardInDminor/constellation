@@ -182,11 +182,11 @@ export default function WorkspacePage() {
 
   if (error) {
     return (
-      <div className="p-6">
-        <p className="text-sm text-red-600">{error}</p>
+      <div className="p-6 space-y-3">
+        <div className="alert-error">{error}</div>
         <Link
           href="/projects"
-          className="text-sm text-indigo-600 hover:underline mt-2 block"
+          className="text-sm text-indigo-600 hover:underline"
         >
           ← Back to projects
         </Link>
@@ -194,7 +194,13 @@ export default function WorkspacePage() {
     );
   }
   if (!project) {
-    return <div className="p-6 text-sm text-gray-400">Loading workspace…</div>;
+    return (
+      <div className="p-6 space-y-3" aria-busy="true">
+        <div className="skeleton h-6 w-48" />
+        <div className="skeleton h-4 w-full max-w-md" />
+        <div className="skeleton h-64 w-full" />
+      </div>
+    );
   }
 
   const mode = project.scope.mode;
@@ -218,7 +224,8 @@ export default function WorkspacePage() {
       <div className="border-b border-gray-200 bg-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
         <Link
           href="/projects"
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="btn btn-ghost btn-sm shrink-0"
+          aria-label="Back to projects"
           title="Back to projects"
         >
           ←
@@ -227,27 +234,30 @@ export default function WorkspacePage() {
           {project.hub.title}
         </h1>
         <span
-          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide border ${accent.chip}`}
+          className={`badge shrink-0 border uppercase tracking-wide ${accent.chip}`}
         >
           {mode}
         </span>
         {activeSession ? (
           <button
             onClick={() => setSessionCloseOpen(true)}
-            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${accent.chip}`}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${accent.chip}`}
             title="Click to end session"
+            aria-label={`End session: ${activeSession.intent}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
             <span className="truncate max-w-[260px]">
               {activeSession.intent}
             </span>
-            <span className="text-gray-400">·</span>
+            <span className="text-gray-400" aria-hidden="true">
+              ·
+            </span>
             <span className="text-gray-500">end</span>
           </button>
         ) : (
           <button
             onClick={() => setSessionDialogOpen(true)}
-            className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1.5"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 transition-colors hover:bg-gray-50"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
             Start session
@@ -273,8 +283,8 @@ export default function WorkspacePage() {
       />
 
       {(askResponse || askError) && (
-        <div className="bg-white border-b border-gray-200 px-4 py-3 max-h-[40vh] overflow-y-auto flex-shrink-0">
-          {askError && <p className="text-xs text-red-600">{askError}</p>}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 max-h-[40vh] overflow-y-auto scrollbar-thin flex-shrink-0">
+          {askError && <div className="alert-error">{askError}</div>}
           {askResponse && (
             <AskResultPanel
               response={askResponse.response}
@@ -295,7 +305,7 @@ export default function WorkspacePage() {
         }}
       >
         {!isMobile && (
-          <aside className="border-r border-gray-200 bg-white overflow-y-auto overflow-x-hidden relative">
+          <aside className="border-r border-gray-200 bg-white overflow-y-auto overflow-x-hidden scrollbar-thin relative">
             <PanelCollapseButton
               open={leftOpen}
               side="left"
@@ -310,13 +320,18 @@ export default function WorkspacePage() {
           </aside>
         )}
 
-        <section className="bg-white overflow-y-auto min-w-0 min-h-0">
-          <div className="border-b border-gray-200 px-4 flex items-center gap-1 sticky top-0 bg-white z-10">
+        <section className="bg-white overflow-y-auto scrollbar-thin min-w-0 min-h-0">
+          <div
+            role="tablist"
+            className="border-b border-gray-200 px-4 flex items-center gap-1 overflow-x-auto scrollbar-thin sticky top-0 bg-white z-10"
+          >
             {tabs.map((t) => (
               <button
                 key={t.id}
+                role="tab"
+                aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-3 py-2 text-xs ${
+                className={`whitespace-nowrap px-3 py-2 text-xs transition-colors ${
                   tab === t.id
                     ? "border-b-2 border-indigo-500 text-indigo-700 font-medium"
                     : "text-gray-500 hover:text-gray-700"
@@ -344,9 +359,7 @@ export default function WorkspacePage() {
             {tab === "learning-map" && (
               <LearningMapPanel scope={project.scope} />
             )}
-            {tab === "story-dump" && (
-              <StoryDumpPanel scope={project.scope} />
-            )}
+            {tab === "story-dump" && <StoryDumpPanel scope={project.scope} />}
             {tab === "characters" && (
               <NarrativeRoleList
                 tagName={NARRATIVE_TAGS.CHARACTER}
@@ -579,11 +592,12 @@ function WriteTab({
       >
         <textarea
           id="draft-pad"
+          aria-label="Free-writing pad"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={18}
           placeholder="Start writing… nothing here is committed to the graph until you promote it."
-          className="w-full rounded border border-gray-200 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+          className="textarea font-mono"
         />
         {hasMermaidFence && <DraftMermaidPreview content={content} />}
       </div>
@@ -596,7 +610,7 @@ function WriteTab({
         <button
           onClick={handlePromoteSelection}
           disabled={promotionState?.pending}
-          className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="btn btn-primary btn-sm shrink-0"
         >
           {promotionState?.pending ? "Promoting…" : "Promote selection"}
         </button>
@@ -705,12 +719,9 @@ function AskResultPanel({
   return (
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-gray-500">Answer</p>
-        <button
-          onClick={onDismiss}
-          className="text-xs text-gray-400 hover:text-gray-600"
-        >
-          dismiss
+        <p className="section-label">Answer</p>
+        <button onClick={onDismiss} className="btn btn-ghost btn-sm">
+          Dismiss
         </button>
       </div>
       <div className="prose prose-sm max-w-none text-sm">
@@ -718,7 +729,7 @@ function AskResultPanel({
       </div>
       {response.provenance.length > 0 && (
         <div className="text-xs">
-          <p className="text-gray-400 mb-1">
+          <p className="section-label mb-1.5">
             Sources ({response.provenance.length})
           </p>
           <ul className="space-y-0.5">
@@ -733,7 +744,7 @@ function AskResultPanel({
                     {p.title}
                   </Link>
                   {out && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                    <span className="badge shrink-0 bg-amber-100 text-amber-800">
                       out of scope
                     </span>
                   )}
@@ -782,21 +793,15 @@ function ImplicitSessionToast({
   onDismiss: () => void;
 }) {
   return (
-    <div className="fixed bottom-4 right-4 z-40 max-w-sm rounded-lg border border-indigo-200 bg-white px-4 py-3 shadow-lg">
+    <div className="card fixed bottom-4 right-4 z-40 max-w-sm border-indigo-200 px-4 py-3 shadow-lg">
       <p className="text-sm text-gray-800 mb-2">
         You've been working for 15 minutes — log this as a session?
       </p>
       <div className="flex justify-end gap-2">
-        <button
-          onClick={onDismiss}
-          className="rounded px-3 py-1 text-xs text-gray-600 hover:bg-gray-100"
-        >
+        <button onClick={onDismiss} className="btn btn-ghost btn-sm">
           Not now
         </button>
-        <button
-          onClick={onConfirm}
-          className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
-        >
+        <button onClick={onConfirm} className="btn btn-primary btn-sm">
           Start session
         </button>
       </div>

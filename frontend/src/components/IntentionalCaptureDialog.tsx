@@ -22,7 +22,15 @@ import type {
 import { EDGE_TYPES, EDGE_TYPE_META } from "@/lib/edgeTypes";
 import { MarkdownTextarea } from "./MarkdownTextarea";
 
-const SOURCE_TYPES = ["datasheet", "manual", "book", "article", "video", "podcast", "other"] as const;
+const SOURCE_TYPES = [
+  "datasheet",
+  "manual",
+  "book",
+  "article",
+  "video",
+  "podcast",
+  "other",
+] as const;
 
 // ADR-062: capture-time dedup thresholds.
 // - DEDUP_SHOW_THRESHOLD: anything ≥ this is offered as a potential link.
@@ -63,14 +71,17 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
 
   // Source picker
   const [allSources, setAllSources] = useState<SourceSummary[]>([]);
-  const [selectedSource, setSelectedSource] = useState<SourceSummary | null>(null);
+  const [selectedSource, setSelectedSource] = useState<SourceSummary | null>(
+    null,
+  );
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
 
   // Inline source creation
   const [showNewSource, setShowNewSource] = useState(false);
   const [newSourceTitle, setNewSourceTitle] = useState("");
-  const [newSourceType, setNewSourceType] = useState<(typeof SOURCE_TYPES)[number]>("article");
+  const [newSourceType, setNewSourceType] =
+    useState<(typeof SOURCE_TYPES)[number]>("article");
   const [newSourceUrl, setNewSourceUrl] = useState("");
   const [newSourceSaving, setNewSourceSaving] = useState(false);
   const [newSourceError, setNewSourceError] = useState<string | null>(null);
@@ -85,8 +96,12 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
   useEffect(() => {
     if (open) {
       requestAnimationFrame(() => titleRef.current?.focus());
-      listTags().then(setAllTags).catch(() => {});
-      listSources().then(setAllSources).catch(() => {});
+      listTags()
+        .then(setAllTags)
+        .catch(() => {});
+      listSources()
+        .then(setAllSources)
+        .catch(() => {});
     } else {
       // Reset on close
       setTitle("");
@@ -146,7 +161,9 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
   // Tag helpers
   const selectedTagIds = new Set(selectedTags.map((t) => t.id));
   const tagSuggestions = allTags.filter(
-    (t) => !selectedTagIds.has(t.id) && t.name.toLowerCase().includes(tagInput.toLowerCase()),
+    (t) =>
+      !selectedTagIds.has(t.id) &&
+      t.name.toLowerCase().includes(tagInput.toLowerCase()),
   );
 
   function addTag(tag: TagRef) {
@@ -161,7 +178,9 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
   async function createAndAddTag() {
     const name = tagInput.trim();
     if (!name) return;
-    const existing = allTags.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    const existing = allTags.find(
+      (t) => t.name.toLowerCase() === name.toLowerCase(),
+    );
     const tag = existing ?? (await createTag(name));
     if (!existing) setAllTags((ts) => [...ts, tag]);
     addTag(tag);
@@ -183,13 +202,17 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
         type: newSourceType,
         url: newSourceUrl.trim() || undefined,
       });
-      setAllSources((prev) => [...prev, created].sort((a, b) => a.title.localeCompare(b.title)));
+      setAllSources((prev) =>
+        [...prev, created].sort((a, b) => a.title.localeCompare(b.title)),
+      );
       setSelectedSource(created);
       setShowNewSource(false);
       setNewSourceTitle("");
       setNewSourceUrl("");
     } catch (err) {
-      setNewSourceError(err instanceof Error ? err.message : "Failed to create source");
+      setNewSourceError(
+        err instanceof Error ? err.message : "Failed to create source",
+      );
     } finally {
       setNewSourceSaving(false);
     }
@@ -251,7 +274,10 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
     }
   }
 
-  function addPendingLink(node: { id: string; title: string }, edge_type: EdgeType) {
+  function addPendingLink(
+    node: { id: string; title: string },
+    edge_type: EdgeType,
+  ) {
     setPendingLinks((prev) =>
       prev.some((l) => l.node_id === node.id)
         ? prev
@@ -271,37 +297,56 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/50 overflow-y-auto"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16 bg-black/50 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       onKeyDown={handleKeyDown}
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-2xl bg-white rounded-lg shadow-xl p-5 flex flex-col gap-4 mb-8"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Intentional capture"
+        className="scrollbar-thin w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-5 flex flex-col gap-4 mb-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-700">Intentional capture</p>
-          <span className="text-xs text-gray-400 font-mono">Ctrl+⇧+Space</span>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="page-title text-base">Intentional capture</h2>
+          <kbd className="text-xs text-gray-400 font-mono shrink-0">
+            Ctrl+⇧+Space
+          </kbd>
         </div>
 
-        <input
-          ref={titleRef}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title"
-          required
-          className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        />
+        <div>
+          <label htmlFor="ic-title" className="label">
+            Title
+          </label>
+          <input
+            id="ic-title"
+            ref={titleRef}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title"
+            required
+            className="input font-medium"
+          />
+        </div>
 
-        <MarkdownTextarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Content"
-          required
-          rows={6}
-          className="w-full resize-none border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        />
+        <div>
+          <label htmlFor="ic-content" className="label">
+            Content
+          </label>
+          <MarkdownTextarea
+            id="ic-content"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Content"
+            required
+            rows={6}
+            className="textarea resize-none"
+          />
+        </div>
 
         {/* ADR-062: dedup panel — surfaces existing notes close to what's
             being captured so the user can avoid duplicates and link at
@@ -315,42 +360,78 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
           contentLength={content.trim().length}
         />
 
-        <input
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          placeholder="One-sentence summary (optional)"
-          className="w-full border border-gray-100 rounded px-3 py-1.5 text-xs text-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-        />
+        <div>
+          <label htmlFor="ic-summary" className="label">
+            Summary{" "}
+            <span className="font-normal text-gray-400">(optional)</span>
+          </label>
+          <input
+            id="ic-summary"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="One-sentence summary"
+            className="input text-gray-600"
+          />
+        </div>
 
         {/* Tags */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-gray-500">Tags</label>
-          <div className="flex flex-wrap gap-1">
-            {selectedTags.map((t) => (
-              <span key={t.id} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-                {t.name}
-                <button type="button" onClick={() => removeTag(t.id)} className="text-indigo-400 hover:text-indigo-700">×</button>
-              </span>
-            ))}
-          </div>
+          <label htmlFor="ic-tag-input" className="label mb-0">
+            Tags
+          </label>
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedTags.map((t) => (
+                <span key={t.id} className="badge bg-indigo-50 text-indigo-700">
+                  {t.name}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(t.id)}
+                    className="ml-1 text-indigo-400 hover:text-indigo-700"
+                    aria-label={`Remove tag ${t.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="relative">
             <input
+              id="ic-tag-input"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createAndAddTag(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  createAndAddTag();
+                }
+              }}
               placeholder="Add tag…"
-              className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+              className="input"
             />
             {tagInput && (
-              <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-xs max-h-32 overflow-y-auto">
+              <ul className="card scrollbar-thin absolute z-10 mt-1 w-full text-sm max-h-32 overflow-y-auto shadow-lg">
                 {tagSuggestions.map((t) => (
                   <li key={t.id}>
-                    <button type="button" onClick={() => addTag(t)} className="w-full text-left px-2 py-1.5 hover:bg-indigo-50">{t.name}</button>
+                    <button
+                      type="button"
+                      onClick={() => addTag(t)}
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50"
+                    >
+                      {t.name}
+                    </button>
                   </li>
                 ))}
-                {!allTags.some((t) => t.name.toLowerCase() === tagInput.trim().toLowerCase()) && (
+                {!allTags.some(
+                  (t) => t.name.toLowerCase() === tagInput.trim().toLowerCase(),
+                ) && (
                   <li>
-                    <button type="button" onClick={createAndAddTag} className="w-full text-left px-2 py-1.5 text-indigo-600 hover:bg-indigo-50">
+                    <button
+                      type="button"
+                      onClick={createAndAddTag}
+                      className="w-full text-left px-3 py-2 font-medium text-indigo-600 hover:bg-indigo-50"
+                    >
                       + Create &ldquo;{tagInput.trim()}&rdquo;
                     </button>
                   </li>
@@ -362,16 +443,26 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
 
         {/* Source */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-gray-500">
-            Source <span className="font-normal text-gray-400">(optional — creates a literature note)</span>
+          <label htmlFor="ic-source" className="label mb-0">
+            Source{" "}
+            <span className="font-normal text-gray-400">
+              (optional — creates a literature note)
+            </span>
           </label>
           {selectedSource ? (
-            <div className="flex items-center justify-between border border-blue-200 bg-blue-50 rounded px-3 py-2 text-sm">
-              <span className="truncate text-blue-800">{selectedSource.title}</span>
+            <div className="flex items-center justify-between gap-2 border border-blue-200 bg-blue-50 rounded-md px-3 py-2 text-sm">
+              <span className="truncate text-blue-800">
+                {selectedSource.title}
+              </span>
               <button
                 type="button"
-                onClick={() => { setSelectedSource(null); setSourceQuery(""); setShowNewSource(false); }}
-                className="text-blue-400 hover:text-blue-700 ml-2 shrink-0"
+                onClick={() => {
+                  setSelectedSource(null);
+                  setSourceQuery("");
+                  setShowNewSource(false);
+                }}
+                className="shrink-0 text-gray-400 hover:text-gray-600"
+                aria-label="Clear selected source"
               >
                 ×
               </button>
@@ -380,23 +471,37 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
             <div className="space-y-2">
               <div className="relative">
                 <input
+                  id="ic-source"
                   value={sourceQuery}
-                  onChange={(e) => { setSourceQuery(e.target.value); setSourceOpen(true); }}
+                  onChange={(e) => {
+                    setSourceQuery(e.target.value);
+                    setSourceOpen(true);
+                  }}
                   onFocus={() => setSourceOpen(true)}
                   placeholder="Search sources…"
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  className="input"
                 />
                 {sourceOpen && filteredSources.length > 0 && (
-                  <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow text-sm max-h-40 overflow-y-auto">
+                  <ul className="card scrollbar-thin absolute z-10 mt-1 w-full text-sm max-h-40 overflow-y-auto shadow-lg">
                     {filteredSources.map((s) => (
                       <li key={s.id}>
                         <button
                           type="button"
-                          onClick={() => { setSelectedSource(s); setSourceQuery(""); setSourceOpen(false); }}
+                          onClick={() => {
+                            setSelectedSource(s);
+                            setSourceQuery("");
+                            setSourceOpen(false);
+                          }}
                           className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex flex-col"
                         >
-                          <span className="font-medium truncate">{s.title}</span>
-                          {s.author && <span className="text-xs text-gray-400">{s.author}</span>}
+                          <span className="font-medium truncate">
+                            {s.title}
+                          </span>
+                          {s.author && (
+                            <span className="text-xs text-gray-400">
+                              {s.author}
+                            </span>
+                          )}
                         </button>
                       </li>
                     ))}
@@ -408,7 +513,7 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
               <button
                 type="button"
                 onClick={() => setShowNewSource((v) => !v)}
-                className="text-xs text-indigo-600 hover:text-indigo-800"
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
               >
                 {showNewSource ? "▲ Cancel new source" : "+ New source"}
               </button>
@@ -416,10 +521,12 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
               {showNewSource && (
                 <form
                   onSubmit={handleCreateSource}
-                  className="space-y-2 rounded border border-indigo-200 bg-indigo-50 p-3"
+                  className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-3"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {newSourceError && <p className="text-xs text-red-600">{newSourceError}</p>}
+                  {newSourceError && (
+                    <div className="alert-error">{newSourceError}</div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="col-span-2">
                       <input
@@ -427,28 +534,39 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
                         onChange={(e) => setNewSourceTitle(e.target.value)}
                         placeholder="Title *"
                         required
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                        aria-label="Source title"
+                        className="input"
                       />
                     </div>
                     <select
                       value={newSourceType}
-                      onChange={(e) => setNewSourceType(e.target.value as (typeof SOURCE_TYPES)[number])}
-                      className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                      onChange={(e) =>
+                        setNewSourceType(
+                          e.target.value as (typeof SOURCE_TYPES)[number],
+                        )
+                      }
+                      aria-label="Source type"
+                      className="input"
                     >
-                      {SOURCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      {SOURCE_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
                     </select>
                     <input
                       value={newSourceUrl}
                       onChange={(e) => setNewSourceUrl(e.target.value)}
                       placeholder="URL or file:// path"
-                      className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                      aria-label="Source URL"
+                      className="input"
                     />
                   </div>
                   <div className="flex justify-end">
                     <button
                       type="submit"
                       disabled={newSourceSaving || !newSourceTitle.trim()}
-                      className="text-xs bg-indigo-600 text-white rounded px-3 py-1 hover:bg-indigo-700 disabled:opacity-50"
+                      className="btn btn-primary btn-sm"
                     >
                       {newSourceSaving ? "Creating…" : "Create & select"}
                     </button>
@@ -459,11 +577,11 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
           )}
         </div>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <div className="alert-error">{error}</div>}
 
         {pendingLinks.length > 0 && (
-          <div className="rounded border border-indigo-200 bg-indigo-50 px-3 py-2">
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-indigo-700">
+          <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <p className="section-label mb-1.5 text-indigo-700">
               Will create on save
             </p>
             <ul className="space-y-1 text-xs text-indigo-800">
@@ -488,11 +606,13 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          <button type="button" onClick={onClose} className="btn btn-ghost">
+            Cancel
+          </button>
           <button
             type="submit"
             disabled={saving || !title.trim() || !content.trim()}
-            className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {saving
               ? "Saving…"
@@ -506,7 +626,6 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // DedupPanel (ADR-062)
 // ---------------------------------------------------------------------------
@@ -514,7 +633,6 @@ export function IntentionalCaptureDialog({ open, onClose }: Props) {
 // content being captured. Each match offers an inline "+ Link" action with
 // an edge-type picker; selected matches become pending edges that are
 // created at save time.
-
 
 function DedupPanelRow({
   result,
@@ -530,14 +648,20 @@ function DedupPanelRow({
   return (
     <li
       className={`flex items-center gap-2 text-xs rounded px-2 py-1.5 ${
-        isLikelyDuplicate ? "bg-amber-50 border border-amber-200" : "bg-white border border-gray-200"
+        isLikelyDuplicate
+          ? "bg-amber-50 border border-amber-200"
+          : "bg-white border border-gray-200"
       }`}
     >
       <span
         className={`shrink-0 font-mono text-[10px] rounded px-1.5 py-0.5 ${
-          isLikelyDuplicate ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"
+          isLikelyDuplicate
+            ? "bg-amber-100 text-amber-800"
+            : "bg-gray-100 text-gray-600"
         }`}
-        title={isLikelyDuplicate ? "Looks like a possible duplicate" : undefined}
+        title={
+          isLikelyDuplicate ? "Looks like a possible duplicate" : undefined
+        }
       >
         {Math.round(result.similarity * 100)}%
       </span>
@@ -557,7 +681,7 @@ function DedupPanelRow({
           <select
             value={edgeType}
             onChange={(e) => setEdgeType(e.target.value as EdgeType)}
-            className="text-[10px] border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+            className="text-[10px] border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             aria-label="Edge type"
           >
             {EDGE_TYPES.map((t) => (
@@ -568,8 +692,13 @@ function DedupPanelRow({
           </select>
           <button
             type="button"
-            onClick={() => onAddLink({ id: result.node.id, title: result.node.title }, edgeType)}
-            className="text-[10px] rounded bg-indigo-600 text-white px-2 py-0.5 hover:bg-indigo-700"
+            onClick={() =>
+              onAddLink(
+                { id: result.node.id, title: result.node.title },
+                edgeType,
+              )
+            }
+            className="btn btn-primary btn-sm text-[10px]"
           >
             + Link
           </button>
@@ -578,7 +707,6 @@ function DedupPanelRow({
     </li>
   );
 }
-
 
 function DedupPanel({
   loading,
@@ -600,15 +728,17 @@ function DedupPanel({
   if (contentLength < DEDUP_MIN_CONTENT_CHARS) return null;
 
   const linkedIds = new Set(pendingLinks.map((l) => l.node_id));
-  const duplicates = results.filter((r) => r.similarity >= DEDUP_DUPLICATE_THRESHOLD);
+  const duplicates = results.filter(
+    (r) => r.similarity >= DEDUP_DUPLICATE_THRESHOLD,
+  );
 
   return (
-    <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
-          Compare to corpus
-        </p>
-        {loading && <span className="text-[10px] text-gray-400">searching…</span>}
+        <p className="section-label">Compare to corpus</p>
+        {loading && (
+          <span className="text-[10px] text-gray-400">searching…</span>
+        )}
       </div>
       {duplicates.length > 0 && (
         <p className="mt-1 text-xs text-amber-700">
@@ -618,7 +748,9 @@ function DedupPanel({
         </p>
       )}
       {results.length === 0 && !loading && (
-        <p className="mt-1 text-xs text-gray-400">No notes above the similarity threshold.</p>
+        <p className="mt-1 text-xs text-gray-400">
+          No notes above the similarity threshold.
+        </p>
       )}
       {results.length > 0 && (
         <ul className="mt-2 space-y-1">
