@@ -4559,6 +4559,57 @@ adopt a component library:
 
 ---
 
+## ADR-074 — Shared UI primitives via a Tailwind `@layer components` layer
+
+**Status:** Accepted
+
+**Context:** ADR-073 unified the global chrome, but each page still styled
+buttons, inputs, cards, badges, and empty/loading/error states with bespoke
+inline Tailwind strings. The same button appeared as `px-3 py-1 rounded
+bg-indigo-600 …` on one page and `px-3 py-1.5 rounded-md bg-indigo-600 …` on
+another; "no results" states ranged from italic gray text to dashed cards.
+Applying a consistent visual language across ~30 page/component files needed
+a single source of truth.
+
+**Decision:** Add a `@layer components` block in `globals.css` defining
+reusable primitives via `@apply`, and compose pages from them:
+
+- Buttons: `.btn` + `.btn-primary` / `.btn-secondary` / `.btn-ghost` /
+  `.btn-danger`, with `.btn-sm`.
+- Form controls: `.input`, `.textarea`, `.label`, `.field-hint`.
+- Surfaces: `.card`, `.card-interactive`.
+- Misc: `.badge`, `.page-title`, `.section-label`, `.empty-state`,
+  `.skeleton`, `.alert-error`.
+
+Layout (width, margins, grid placement) stays at the call site; the classes
+own only the visual identity. No React component library was introduced.
+
+**Rationale:**
+
+- A CSS component layer gives app-wide consistency with the smallest possible
+  footprint — no new dependency, no prop API to design, no migration of every
+  element into wrapper components. Pages keep using Tailwind utilities for
+  layout and just swap visual strings for a class name.
+- `@apply` keeps the primitives co-located with the rest of the design tokens
+  in `globals.css`, so the brand accent, focus ring, and component styles
+  evolve together.
+- Semantic colors that encode meaning (note-type chips, success/warning/error,
+  user tag colors) stay as explicit utilities and are deliberately *not*
+  folded into the primitives, so meaning is never accidentally restyled.
+
+**Consequences:**
+
+- New UI should reach for these classes first; bespoke button/input strings
+  are now the exception, not the norm.
+- The primitives are intentionally minimal. Variants beyond the current set
+  (e.g. icon-only button sizing, input error state) can be added to the layer
+  rather than re-invented per page.
+- Because layout stays at the call site, the classes never fight the page —
+  but callers must still supply `w-full`, `ml-auto`, etc. where needed.
+- Purely presentational: no routes, data, or component APIs changed.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
