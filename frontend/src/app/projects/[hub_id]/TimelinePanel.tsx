@@ -13,7 +13,7 @@
  * after every mutation. No cached timeline state at any layer.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   createActSpan,
@@ -39,19 +39,33 @@ import {
   useNodeInteraction,
 } from "@/components/NodeInteractionPopup";
 import { SceneContextView } from "./SceneContextView";
+import {
+  type PositionRange,
+  X_PADDING,
+  canvasWidth,
+  clampZoomIndex,
+  sharedPositionRange,
+  zoomScale,
+  ZOOM_LEVELS,
+  DEFAULT_ZOOM_INDEX,
+} from "./timelineLayout";
+import {
+  type TimelineFilter,
+  eventDimmed,
+  hasActiveEventFilter,
+  visibleLanes as filterVisibleLanes,
+} from "./filterTimeline";
 
 interface Props {
   scope: ProjectScope;
 }
 
 // SVG geometry constants. The canvas is logical — `discourse_position` units
-// map directly to SVG x-coordinates via the scale below.
+// map to SVG x-coordinates via the active zoom scale (see ./timelineLayout).
+// X_PADDING and the scale live in timelineLayout so all lanes share one axis.
 const LANE_HEIGHT = 140;
-const LANE_PAD_Y = 16;
 const EVENT_CARD_WIDTH = 160;
 const EVENT_CARD_HEIGHT = 70;
-const POSITION_SCALE = 0.4; // px per discourse_position unit
-const X_PADDING = 60;
 const ACT_BAND_HEIGHT = 22;
 const ACT_BAND_Y = 4;
 
@@ -114,6 +128,15 @@ export function TimelinePanel({ scope }: Props) {
   const [sceneContextEventId, setSceneContextEventId] = useState<string | null>(
     null,
   );
+  // Canon audit pass: full-screen mode, zoom level, and the broadened filter
+  // set (prose-status chips + free-text search) layered on top of the
+  // existing lane-toggle + character-highlight filters.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+  const [proseStatuses, setProseStatuses] = useState<Set<ProseStatus>>(
+    new Set(),
+  );
+  const [query, setQuery] = useState("");
 
   // Slice 5: cross-lane drag. Lifted from TimelineLaneCanvas (where it
   // lived for Slice 4's intra-lane-only drag) — the parent sees all
@@ -232,6 +255,16 @@ export function TimelinePanel({ scope }: Props) {
     refresh();
   }, [refresh]);
 
+  // Esc exits full-screen mode.
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
   if (error) {
     return <div className="alert-error">{error}</div>;
   }
@@ -276,12 +309,29 @@ export function TimelinePanel({ scope }: Props) {
     );
   }
 
-  const visibleLanes = timeline.lanes.filter(
-    (l) => !hiddenLanes.has(l.timeline.id),
-  );
+  // One TimelineFilter object feeds the pure helpers (./filterTimeline).
+  const filter: TimelineFilter = {
+    hiddenLaneIds: hiddenLanes,
+    highlightedCharacterId,
+    proseStatuses,
+    query,
+  };
+  const shownLanes = filterVisibleLanes(timeline.lanes, filter);
+  // Shared axis: every visible lane uses the SAME position range + zoom scale
+  // so parallel timelines line up and scroll together (Canon audit fix).
+  const range = sharedPositionRange(shownLanes);
+  const scale = zoomScale(zoomIndex);
 
-  return (
-    <div className="space-y-3">
+  const toggleProseStatus = (s: ProseStatus) =>
+    setProseStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+
+  const body = (
+    <div className={fullscreen ? "space-y-3 p-4" : "space-y-3"}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="section-label">Narrative timeline</h2>
@@ -291,10 +341,49 @@ export function TimelinePanel({ scope }: Props) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* Zoom controls — shared scale across all lanes. */}
+          <div className="flex items-center rounded-md border border-gray-200">
+            <button
+              onClick={() => setZoomIndex((i) => clampZoomIndex(i - 1))}
+              disabled={zoomIndex === 0}
+              className="btn btn-ghost btn-sm rounded-r-none disabled:opacity-30"
+              title="Zoom out"
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <button
+              onClick={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
+              className="px-2 text-[11px] font-mono text-gray-500 tabular-nums hover:text-gray-700"
+              title="Reset zoom"
+              aria-label="Reset zoom"
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              onClick={() => setZoomIndex((i) => clampZoomIndex(i + 1))}
+              disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+              className="btn btn-ghost btn-sm rounded-l-none disabled:opacity-30"
+              title="Zoom in"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+          </div>
+          <button
+            onClick={() => setFullscreen((f) => !f)}
+            className="btn btn-secondary btn-sm"
+            title={
+              fullscreen ? "Exit full screen (Esc)" : "Full-screen timeline"
+            }
+            aria-pressed={fullscreen}
+          >
+            {fullscreen ? "Exit full screen" : "⤢ Full screen"}
+          </button>
           <button
             onClick={() => setNewTimelineOpen(true)}
             className="btn btn-secondary btn-sm"
-            title="Create a parallel timeline (Slice 5)"
+            title="Create a parallel timeline (a layer: external plot, dreams, history…)"
           >
             + Timeline
           </button>
@@ -307,7 +396,7 @@ export function TimelinePanel({ scope }: Props) {
         </div>
       </div>
 
-      {/* Slice 5: lane toggle + character highlight filter */}
+      {/* Lane toggle + character highlight (Slice 5) */}
       {(timeline.lanes.length > 1 || highlightedCharacterId) && (
         <LaneToggle
           lanes={timeline.lanes}
@@ -325,25 +414,45 @@ export function TimelinePanel({ scope }: Props) {
         />
       )}
 
-      {visibleLanes.map((lane) => (
-        <TimelineLaneCanvas
-          key={lane.timeline.id}
-          lane={lane}
-          highlightedCharacterId={highlightedCharacterId}
-          onSelectEvent={setSelectedEventId}
-          onRequestCreate={(pos) =>
-            setCreateDialog({
-              laneId: lane.timeline.id,
-              discoursePosition: pos,
-            })
-          }
-          onEventEdited={refresh}
-          drag={drag}
-          onStartDrag={startDrag}
-          onRegisterLane={registerLane}
-          onUnregisterLane={unregisterLane}
-        />
-      ))}
+      {/* Canon audit: prose-status + free-text filters (dim, don't hide). */}
+      <TimelineFilterBar
+        query={query}
+        onQuery={setQuery}
+        proseStatuses={proseStatuses}
+        onToggleProseStatus={toggleProseStatus}
+        active={hasActiveEventFilter(filter)}
+        onClear={() => {
+          setQuery("");
+          setProseStatuses(new Set());
+          setHighlightedCharacterId(null);
+        }}
+      />
+
+      {/* Single horizontal scroll container so all lanes scroll together and
+          stay aligned on the shared axis. */}
+      <div className="scrollbar-thin overflow-x-auto rounded-lg border border-gray-200 bg-gray-50">
+        {shownLanes.map((lane) => (
+          <TimelineLaneCanvas
+            key={lane.timeline.id}
+            lane={lane}
+            range={range}
+            scale={scale}
+            filter={filter}
+            onSelectEvent={setSelectedEventId}
+            onRequestCreate={(pos) =>
+              setCreateDialog({
+                laneId: lane.timeline.id,
+                discoursePosition: pos,
+              })
+            }
+            onEventEdited={refresh}
+            drag={drag}
+            onStartDrag={startDrag}
+            onRegisterLane={registerLane}
+            onUnregisterLane={unregisterLane}
+          />
+        ))}
+      </div>
 
       {selectedEvent && selectedLane && (
         <EventSidePanel
@@ -395,6 +504,82 @@ export function TimelinePanel({ scope }: Props) {
             await refresh();
           }}
         />
+      )}
+    </div>
+  );
+
+  // Full-screen mode lifts the timeline out of the cramped center column into
+  // a viewport-filling overlay — essential once a story world has hundreds of
+  // events across several parallel layers (Canon audit, ADR-076).
+  if (fullscreen) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Timeline (full screen)"
+        className="scrollbar-thin fixed inset-0 z-40 overflow-y-auto bg-white"
+      >
+        {body}
+      </div>
+    );
+  }
+  return body;
+}
+
+// ---------------------------------------------------------------------------
+// Timeline filter bar — prose-status chips + free-text search (Canon audit)
+// ---------------------------------------------------------------------------
+
+function TimelineFilterBar({
+  query,
+  onQuery,
+  proseStatuses,
+  onToggleProseStatus,
+  active,
+  onClear,
+}: {
+  query: string;
+  onQuery: (q: string) => void;
+  proseStatuses: Set<ProseStatus>;
+  onToggleProseStatus: (s: ProseStatus) => void;
+  active: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        placeholder="Find scenes by title or story-time…"
+        aria-label="Filter timeline events"
+        className="input py-1 text-xs w-56"
+      />
+      <span className="section-label">Status</span>
+      {(Object.keys(PROSE_STATUS_COLORS) as ProseStatus[]).map((s) => {
+        const on = proseStatuses.has(s);
+        return (
+          <button
+            key={s}
+            onClick={() => onToggleProseStatus(s)}
+            aria-pressed={on}
+            className={`badge border transition-colors ${
+              on
+                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                : "border-gray-200 text-gray-400"
+            }`}
+          >
+            <span
+              className={`mr-1 inline-block h-2 w-2 rounded-full ${PROSE_STATUS_COLORS[s].dot}`}
+            />
+            {PROSE_STATUS_COLORS[s].label}
+          </button>
+        );
+      })}
+      {active && (
+        <button onClick={onClear} className="btn btn-ghost btn-sm ml-auto">
+          Clear filters
+        </button>
       )}
     </div>
   );
@@ -462,9 +647,14 @@ function LaneToggle({
 
 interface LaneProps {
   lane: TimelineLane;
+  // Canon audit: shared axis — range + zoom scale come from the parent so
+  // every lane uses identical x-coordinates and width (lanes align + scroll
+  // together). `filter` drives per-event dimming.
+  range: PositionRange;
+  scale: number;
+  filter: TimelineFilter;
   onSelectEvent: (id: string) => void;
   onRequestCreate: (discoursePosition: number) => void;
-  highlightedCharacterId?: string | null;
   onEventEdited?: () => void;
   // Slice 5 — drag orchestration is now owned by the parent.
   drag: DragState | null;
@@ -479,9 +669,11 @@ interface LaneProps {
 
 function TimelineLaneCanvas({
   lane,
+  range,
+  scale,
+  filter,
   onSelectEvent,
   onRequestCreate,
-  highlightedCharacterId,
   onEventEdited,
   drag,
   onStartDrag,
@@ -502,34 +694,21 @@ function TimelineLaneCanvas({
   // Cross-lane target = a target lane that isn't the source.
   const isCrossLaneTarget = isDragTarget && !isDragSource;
 
-  // Range of positions in this lane — used to set SVG viewBox width.
-  const { minPos, maxPos } = useMemo(() => {
-    const positions = [
-      ...lane.events.map((e) => e.discourse_position),
-      ...lane.act_spans.flatMap((s) => [s.start_position, s.end_position]),
-    ];
-    if (positions.length === 0) return { minPos: 0, maxPos: 1000 };
-    return {
-      minPos: Math.min(0, ...positions),
-      maxPos: Math.max(1000, ...positions),
-    };
-  }, [lane.events, lane.act_spans]);
-
-  const canvasWidth =
-    X_PADDING * 2 + Math.max(800, (maxPos - minPos) * POSITION_SCALE);
+  const minPos = range.minPos;
+  const cw = canvasWidth(range, scale);
 
   function positionToX(pos: number): number {
-    return X_PADDING + (pos - minPos) * POSITION_SCALE;
+    return X_PADDING + (pos - minPos) * scale;
   }
 
   function xToPosition(x: number): number {
-    return Math.round(minPos + (x - X_PADDING) / POSITION_SCALE);
+    return Math.round(minPos + (x - X_PADDING) / scale);
   }
 
   // Slice 5: register this lane with the parent so the orchestrator can
   // hit-test the cursor against it during cross-lane drags. The lane
   // supplies its SVG element + a `clientX → discourse_position` converter
-  // so the parent doesn't need to know about canvasWidth or minPos.
+  // so the parent doesn't need to know about the canvas width or minPos.
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
@@ -538,14 +717,14 @@ function TimelineLaneCanvas({
       xToPosition: (clientX: number) => {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0) return minPos;
-        const xInViewBox = ((clientX - rect.left) / rect.width) * canvasWidth;
-        return Math.round(minPos + (xInViewBox - X_PADDING) / POSITION_SCALE);
+        const xInViewBox = ((clientX - rect.left) / rect.width) * cw;
+        return Math.round(minPos + (xInViewBox - X_PADDING) / scale);
       },
     };
     const laneId = lane.timeline.id;
     onRegisterLane(laneId, reg);
     return () => onUnregisterLane(laneId);
-  }, [lane.timeline.id, canvasWidth, minPos, onRegisterLane, onUnregisterLane]);
+  }, [lane.timeline.id, cw, minPos, scale, onRegisterLane, onUnregisterLane]);
 
   function handleCanvasClick(e: React.MouseEvent<SVGSVGElement>) {
     if (drag) return; // Don't create while dragging
@@ -555,7 +734,7 @@ function TimelineLaneCanvas({
       return;
     }
     const rect = svgRef.current!.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * canvasWidth;
+    const x = ((e.clientX - rect.left) / rect.width) * cw;
     const pos = xToPosition(x);
     if (pos < minPos) return;
     onRequestCreate(pos);
@@ -576,9 +755,12 @@ function TimelineLaneCanvas({
 
   return (
     <div
-      className={`border rounded-lg overflow-x-auto bg-gray-50 transition-shadow ${containerBorder}`}
+      className={`border-b border-l-2 bg-gray-50 transition-shadow ${containerBorder}`}
+      style={{ width: cw }}
     >
-      <div className="px-3 py-2 border-b border-gray-200 bg-white text-xs text-gray-500 flex items-center gap-2">
+      {/* Sticky-left header keeps the lane label visible while the shared
+          horizontal scroll moves the canvas. */}
+      <div className="sticky left-0 z-10 inline-flex max-w-full items-center gap-2 px-3 py-2 border-b border-gray-200 bg-white text-xs text-gray-500">
         <span className="font-medium text-gray-700 truncate min-w-0">
           {lane.timeline.title}
         </span>
@@ -607,8 +789,8 @@ function TimelineLaneCanvas({
       </div>
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${canvasWidth} ${LANE_HEIGHT}`}
-        width={canvasWidth}
+        viewBox={`0 0 ${cw} ${LANE_HEIGHT}`}
+        width={cw}
         height={LANE_HEIGHT}
         onClick={handleCanvasClick}
         className="block bg-white"
@@ -619,7 +801,7 @@ function TimelineLaneCanvas({
           data-background="true"
           x={0}
           y={0}
-          width={canvasWidth}
+          width={cw}
           height={LANE_HEIGHT}
           fill="#fafaf9"
         />
@@ -658,7 +840,7 @@ function TimelineLaneCanvas({
         <line
           x1={0}
           y1={LANE_HEIGHT / 2 + 8}
-          x2={canvasWidth}
+          x2={cw}
           y2={LANE_HEIGHT / 2 + 8}
           stroke="#d4d4d8"
           strokeWidth={1}
@@ -687,10 +869,9 @@ function TimelineLaneCanvas({
 
         {/* Event cards */}
         {lane.events.map((event) => {
-          const dimmed =
-            highlightedCharacterId !== null &&
-            highlightedCharacterId !== undefined &&
-            !event.character_ids?.includes(highlightedCharacterId);
+          // Dimming now covers lane-highlight + prose-status + text search
+          // (Canon audit) via the shared pure helper.
+          const dimmed = eventDimmed(event, filter);
           // Ghost rendering: the dragged event card follows the cursor
           // in whichever lane the cursor is over. In the source lane,
           // the original card dims and disappears (ghost=true) so the

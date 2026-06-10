@@ -59,7 +59,10 @@ type CenterTab =
   | "characters"
   | "world-lore"
   | "locations"
-  | "themes";
+  | "themes"
+  | "symbols"
+  | "factions"
+  | "open-questions";
 
 const DEFAULT_TAB: Record<ProjectMode, CenterTab> = {
   research: "write",
@@ -82,6 +85,9 @@ const ALL_TABS: { id: CenterTab; label: string }[] = [
   { id: "world-lore", label: "World / Lore" },
   { id: "locations", label: "Locations" },
   { id: "themes", label: "Themes" },
+  { id: "symbols", label: "Symbols" },
+  { id: "factions", label: "Factions" },
+  { id: "open-questions", label: "Open questions" },
 ];
 
 const DRAFT_DEBOUNCE_MS = 2000;
@@ -387,6 +393,11 @@ export default function WorkspacePage() {
                     label: "Backstory",
                   },
                   { value: NARRATIVE_TAGS.LORE_SECRET, label: "Secret" },
+                  { value: NARRATIVE_TAGS.LORE_ABILITY, label: "Ability" },
+                  {
+                    value: NARRATIVE_TAGS.LORE_ARTIFACT,
+                    label: "Artifact / Text",
+                  },
                 ]}
               />
             )}
@@ -404,6 +415,30 @@ export default function WorkspacePage() {
                 roleLabel="Theme"
                 roleLabelPlural="Themes"
                 nodeKind="structure"
+              />
+            )}
+            {tab === "symbols" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.SYMBOL}
+                roleLabel="Symbol"
+                roleLabelPlural="Symbols"
+                nodeKind="structure"
+              />
+            )}
+            {tab === "factions" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.FACTION}
+                roleLabel="Faction"
+                roleLabelPlural="Factions"
+                nodeKind="structure"
+              />
+            )}
+            {tab === "open-questions" && (
+              <NarrativeRoleList
+                tagName={NARRATIVE_TAGS.OPEN_QUESTION}
+                roleLabel="Open question"
+                roleLabelPlural="Open questions"
+                nodeKind="permanent"
               />
             )}
           </div>

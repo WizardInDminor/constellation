@@ -598,9 +598,14 @@ character/lore/location/theme quick-create flows:
 - `narrative:character` — character structure nodes
 - `narrative:theme` — theme structure nodes
 - `narrative:location` — location structure nodes
+- `narrative:symbol` — recurring symbol / metaphor structure nodes (ADR-077)
+- `narrative:faction` — faction / authority / underground structure nodes (ADR-077)
+- `narrative:open-question` — unresolved-thread permanent notes (ADR-077)
 - `narrative:lore-world-rule`, `narrative:lore-history`,
   `narrative:lore-power`, `narrative:lore-fabric`,
-  `narrative:lore-backstory`, `narrative:lore-secret` — lore categories
+  `narrative:lore-backstory`, `narrative:lore-secret`,
+  `narrative:lore-ability`, `narrative:lore-artifact` — lore categories
+  (the last two added in ADR-077)
 
 The Notes list (`GET /nodes`) gains `hide_story_events: bool` (ADR-064)
 in addition to the existing B2 filter predicates.

@@ -4673,6 +4673,119 @@ for inline verification of formatting and math.
 
 ---
 
+## ADR-076 — Timeline full-screen mode, shared axis + zoom, dim-not-hide filters
+
+**Status:** Accepted
+
+**Context:** The narrative timeline (ADR-066) renders inside the workspace
+center column, sandwiched between the 260 px left rail and 280 px right rail —
+roughly half the viewport on a laptop. For a trilogy-scale story world with
+hundreds of events across several parallel layers (external plot, a dream
+progression, a history 50 years prior), that column is far too cramped. Three
+concrete defects surfaced in the Canon stress-test audit:
+
+1. No way to give the timeline the full screen.
+2. A fixed zoom (`POSITION_SCALE = 0.4`) with no control — a long story runs
+   off-canvas with no way to compress, and dense regions can't be expanded.
+3. Each lane computed its **own** `minPos`/`maxPos`/`canvasWidth` and lived in
+   its **own** horizontal scroll container, so parallel lanes neither aligned
+   on a common axis nor scrolled together. A writer could not see "where the
+   dream beat falls relative to the external scene".
+
+Filtering was also thin: only a lane-visibility toggle and a single
+character-highlight.
+
+**Decision:**
+
+- Add a **full-screen mode**: a toggle promotes the timeline into a
+  `fixed inset-0 z-40` overlay (Esc to exit). State is local to the panel; no
+  routing change.
+- Introduce **discrete zoom levels** (`ZOOM_LEVELS`, default index → 0.4, the
+  prior constant) with −/percentage/+ controls. The percentage label resets to
+  default on click.
+- Compute **one shared position range** across all visible lanes and pass it
+  plus the active zoom scale to every lane, so lanes use identical
+  x-coordinates and width. Wrap all lanes in a **single** horizontal scroll
+  container; lane headers are `sticky left-0` so labels stay visible. Result:
+  parallel timelines align and scroll together.
+- Broaden filtering with a **prose-status chip set** and a **free-text search**
+  over title + story_time. These, plus the existing character-highlight, **dim**
+  non-matching events rather than **hiding** them.
+
+**Rationale:**
+
+- Dim-not-hide matches the existing character-highlight philosophy (ADR-066 /
+  philosophy doc §6.8) and avoids leaving gaps in the FOLLOWS_FROM connector
+  chain or losing the writer's sense of where a beat sits on the axis.
+- A shared axis is the minimum needed for parallel-timeline comparison, which is
+  the entire point of having parallel lanes.
+- Discrete zoom levels (vs. continuous) keep the control trivial and the axis
+  math integer-clean for the cross-lane drag hit-test.
+- The geometry (`sharedPositionRange`, `canvasWidth`, `positionToX`/
+  `xToPosition`, `zoomScale`) and the filter predicate (`eventDimmed`,
+  `visibleLanes`) are extracted as pure functions in `timelineLayout.ts` /
+  `filterTimeline.ts` and unit-tested, following the repo convention
+  (`filterGraph.ts`, `filterPool.ts`).
+
+**Consequences:**
+
+- A single-lane project renders identically to before (range still floors at 0,
+  ceils at 1000; default zoom unchanged).
+- Cross-lane drag continues to work: each lane registers a `clientX →
+  discourse_position` converter built from the shared range + scale.
+- No backend change. Lane "kind" (dream vs external vs historical) is still
+  expressed only by the timeline structure-node's title; a typed `kind` column
+  remains a candidate for a future pass and is noted as a remaining gap.
+
+---
+
+## ADR-077 — Story-specific narrative role types via reserved tags (symbol, faction, open-question)
+
+**Status:** Accepted
+
+**Context:** Slice 5 (ADR-065) modeled narrative roles — character, theme,
+location, lore — as reserved `narrative:*` tag names on structure/permanent
+nodes rather than as new node types, deliberately avoiding schema churn. The
+Canon audit found three high-value roles with **no** representation at all:
+**symbols/metaphors** (which recur and accrete meaning — a central concern for
+the project), **factions** (authority structures / underground groups), and
+**open questions** (the writer's unresolved threads). Ability and Artifact/Text
+were also unrepresented.
+
+**Decision:** Extend the reserved-tag vocabulary rather than the schema:
+
+- `narrative:symbol`, `narrative:faction`, `narrative:open-question` — surfaced
+  as new workspace tabs (Symbols, Factions, Open questions) reusing the existing
+  `NarrativeRoleList` (list + quick-create + Ctrl-edit). Symbols/factions are
+  `structure` nodes; open questions are `permanent`.
+- `narrative:lore-ability`, `narrative:lore-artifact` — added as quick-create
+  categories under the existing World / Lore tab (no new tab).
+
+**Rationale:**
+
+- Consistent with ADR-065's decision to use tags, not types: a node's "role" is
+  a classification, and tags already drive the list views and quick-create.
+- Purely additive and UI-only: tags are created on demand via the existing
+  `createTag` flow; no migration, no model change.
+- Symbols and open questions link into scenes via ordinary typed edges
+  (`ELABORATES`, `EXPLAINS`, `COLLECTS`, `QUESTIONS`), so a symbol's node-detail
+  page already answers "which scenes use this symbol" through its edge list.
+
+**Consequences:**
+
+- The scene-context assembler (`timeline_repo`) does not yet special-case
+  symbols/factions/open-questions — they appear as generic arc-notes in scene
+  context, not in dedicated buckets. Promoting them to first-class
+  scene-context groups is a small backend follow-up, recorded as a remaining
+  gap.
+- Backend `timeline_repo` narrative-tag constants and the frontend
+  `NARRATIVE_TAGS` map can drift; they are mirrored by convention. A future pass
+  should add the new constants backend-side if scene-context surfacing is built.
+- The workspace tab bar now carries 13 tabs and wraps; acceptable for a
+  power-user planning tool.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
