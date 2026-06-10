@@ -4879,6 +4879,45 @@ kind from its tags and powers the filter.
 
 ---
 
+## ADR-080 — Lifecycle status via reserved `status:*` tags; question resolution reuses ADR-059
+
+**Status:** Accepted
+
+**Context:** Phase B Objective 2 asks for an Open-Question lifecycle (Open /
+Developing / Resolved) plus create/complicate/hint/resolve relationships. Two
+ways to model it: (a) add first-class edge types
+(`CREATES_QUESTION`/`HINTS_AT`/`COMPLICATES`/`RESOLVES`) and a status column, or
+(b) reuse what exists. The product direction (confirmed with the user) is to
+prefer additive, graph-native changes and avoid backend complexity.
+
+**Decision:** Reuse existing primitives.
+
+- **Relationship side:** a question relates to scenes/notes via the existing
+  `QUESTIONS` edge; "resolved by X" is the edge's resolved-state
+  (`resolved_at` / `resolved_by_node_id`, ADR-059) — surfaced in the
+  Relationship Explorer. No new edge types; `RESOLVES` stays intentionally
+  absent (ADR-059).
+- **Node side:** a coarse lifecycle status is a reserved `status:{open,
+  developing,resolved}` tag (mirrors `narrative:*` / `layer:*`). A generic
+  `lib/lifecycleStatus.ts` parses it; `LifecycleStatusControl` sets it (rewrites
+  the node's tag set); the Explorer shows the status badge on connected
+  questions. Generic across domains (research hypotheses, etc.).
+
+**Rationale:** Adding edge types means a CHECK-constraint table rebuild
+migration and would reverse ADR-059. Tags + the existing resolved-state give the
+full lifecycle with zero schema change and reuse the resolution semantics
+already built and tested.
+
+**Consequences:**
+
+- "Complicate / hint at" nuance is not separately typed; such links use
+  `QUESTIONS`/`ELABORATES` with an edge `note`. If finer verbs are needed later,
+  that is a deliberate ADR-059 reversal, not an accident.
+- Status is a single coarse state per node; richer history (when it moved
+  open→resolved) is not tracked — acceptable for the lifecycle's intent.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

@@ -23,6 +23,7 @@ import {
   connectionsFromDetail,
   groupConnectionsByRole,
 } from "@/lib/connectionsByRole";
+import { STATUS_META, statusFromTags } from "@/lib/lifecycleStatus";
 
 interface NodeDetailLike {
   tags?: { name: string }[];
@@ -143,34 +144,48 @@ function RoleSection({
       </button>
       {open && (
         <ul className="divide-y divide-gray-100 border-t border-gray-100">
-          {items.map((c) => (
-            <li key={c.edgeId} className="px-3 py-1.5 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <Link
-                  href={`/nodes/${c.neighbor.id}`}
-                  className="truncate text-indigo-600 hover:underline"
-                  title={c.neighbor.title}
-                >
-                  {c.neighbor.title}
-                </Link>
-                <span
-                  className={`shrink-0 font-mono text-[10px] ${
-                    c.resolvedAt ? "text-emerald-600" : "text-gray-400"
-                  }`}
-                >
-                  {connectionReason(c)}
-                </span>
-              </div>
-              {c.note && (
-                <p
-                  className="mt-0.5 truncate text-[11px] text-gray-400"
-                  title={c.note}
-                >
-                  {c.note}
-                </p>
-              )}
-            </li>
-          ))}
+          {items.map((c) => {
+            // Surface the lifecycle status of connected Open Questions inline.
+            const status =
+              roleKey === "openQuestions"
+                ? statusFromTags(c.neighborTags)
+                : null;
+            return (
+              <li key={c.edgeId} className="px-3 py-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/nodes/${c.neighbor.id}`}
+                    className="truncate text-indigo-600 hover:underline"
+                    title={c.neighbor.title}
+                  >
+                    {c.neighbor.title}
+                  </Link>
+                  {status && (
+                    <span
+                      className={`badge shrink-0 ${STATUS_META[status].badge}`}
+                    >
+                      {STATUS_META[status].label}
+                    </span>
+                  )}
+                  <span
+                    className={`shrink-0 font-mono text-[10px] ${
+                      c.resolvedAt ? "text-emerald-600" : "text-gray-400"
+                    }`}
+                  >
+                    {connectionReason(c)}
+                  </span>
+                </div>
+                {c.note && (
+                  <p
+                    className="mt-0.5 truncate text-[11px] text-gray-400"
+                    title={c.note}
+                  >
+                    {c.note}
+                  </p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

@@ -610,6 +610,10 @@ character/lore/location/theme quick-create flows:
   `layer:historical`, `layer:dream`, `layer:metaphysical`,
   `layer:character-arc`, `layer:theme-arc` (open set). Applied to a timeline
   structure node; surfaced on `TimelineLane.timeline_tags`.
+- `status:{open,developing,resolved}` — generic lifecycle status (ADR-080),
+  used by Open Questions (and any node tracking an unresolved→resolved
+  trajectory). Relationship-level resolution stays on the `QUESTIONS` edge's
+  resolved-state (ADR-059).
 
 `EdgeSummary` denormalises `neighbor_tags` + `neighbor_is_story_event`
 (ADR-078) so the Relationship Explorer (`ConnectionsByRole`) can group a node's

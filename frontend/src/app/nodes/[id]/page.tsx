@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { NoteContent } from "@/components/NoteContent";
 import { ConnectionsByRole } from "@/components/ConnectionsByRole";
+import { LifecycleStatusControl } from "@/components/LifecycleStatusControl";
 import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
 import type {
@@ -1142,6 +1143,11 @@ export default function NodePage() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
+          {/* Lifecycle status — Open Questions (and any node carrying a
+              status:* tag) track open → developing → resolved. */}
+          {(node.tags ?? []).some(
+            (t) => t.name === "narrative:open-question",
+          ) && <LifecycleStatusControl node={node} onChange={reload} />}
           {/* Relationship Explorer — connections grouped by role (ADR-078). */}
           <ConnectionsByRole detail={node} />
           {node.type !== "fleeting" && (
