@@ -4786,6 +4786,99 @@ were also unrepresented.
 
 ---
 
+## ADR-078 — Relationship Explorer: role metadata on edge summaries + ConnectionsByRole
+
+**Status:** Accepted
+
+**Context:** Constellation stores rich typed relationships but exposed them
+poorly. The node detail page grouped *outgoing* edges by edge type and listed
+*incoming* edges flat — useful for a researcher reading author-stance verbs,
+useless for answering "what is this connected to, and what role does each
+connection play?". A symbol can't show "the scenes I appear in"; a claim can't
+show "the observations that demonstrate me". The blocker was data shape:
+`EdgeSummary.neighbor` was a bare `NodeRef` (id/title/type), so the frontend
+could not tell a Character from a Symbol from a Source without an N+1 fetch per
+neighbor. This is a **general** knowledge-graph need (Canon is the validator),
+not a narrative feature.
+
+**Decision:**
+
+- Denormalise two fields onto `EdgeSummary` (additive, defaulted): the
+  neighbor's `neighbor_tags: list[TagRef]` and `neighbor_is_story_event: bool`.
+  `get_outgoing` / `get_incoming` select the story flag and bulk-fetch neighbor
+  tags in one query (`_neighbor_tags_bulk`), so a node's full neighbourhood is
+  categorisable from a single `GET /nodes/{id}` with no extra round-trips —
+  which is the explicit Phase-B backend requirement.
+- Add a pure, generic grouping module `lib/connectionsByRole.ts`
+  (`roleForConnection`, `groupConnectionsByRole`, `connectionsFromDetail`,
+  `connectionReason`). Role assignment degrades gracefully: story-event →
+  Scenes; reserved `narrative:*` tag → Characters/Symbols/World Rules/…; else
+  the node's base type → Sources/Maps & Structures/Notes/…. So it is equally
+  useful for a research corpus and a dense story world.
+- Add a reusable `ConnectionsByRole` component (collapsible groups, counts,
+  direction-aware "why" labels, resolved badges) and mount it on the node
+  detail page. The `EdgePanel` editor is retained (no functionality removed).
+
+**Rationale:**
+
+- Denormalising onto the summary (vs. a new endpoint or a graph query) is the
+  smallest additive change that removes the N+1; the fields are cheap and
+  already in the same row join.
+- A pure grouping helper keeps the role taxonomy testable and reusable across
+  surfaces (node detail now; workspace/graph later).
+- The "Demonstrated In" relabel for world-rules is pushed to the **caller** via
+  a `labelOverrides` option, keeping the core helper domain-agnostic — an
+  evidence/consequence framing that generalises (a hypothesis is "supported
+  by" its evidence).
+
+**Consequences:**
+
+- The *read* side of the Open-Question and Scene-metadata objectives now works
+  for free: a question node's related scenes, and a scene's connected open
+  questions, both render through `ConnectionsByRole`.
+- `bulk` tag fetch is duplicated in `edge_repo` rather than reusing
+  `node_repo`'s private helper, to avoid a `node_repo → edge_repo → node_repo`
+  import cycle.
+- Other `EdgeSummary` consumers are unaffected (fields default empty/false).
+  After `pnpm types` the new fields appear in the generated API types
+  automatically.
+
+---
+
+## ADR-079 — Typed timeline layers via reserved `layer:*` tags
+
+**Status:** Accepted
+
+**Context:** Parallel timelines (ADR-065) are structure nodes; their "kind"
+(external plot vs. a dream progression vs. a history 50 years prior) was
+expressed only in the lane title — a naming convention, not data. The audit
+asked for typed lane classifications that are filterable and visually distinct,
+and extensible.
+
+**Decision:** Classify a timeline by a reserved `layer:<kind>` tag on its
+structure node (mirrors the `narrative:*` role-tag pattern; no schema change).
+Seed kinds: `external`, `historical`, `dream`, `metaphysical`, `character-arc`,
+`theme-arc`; the set is open. Expose the timeline node's tags on `TimelineLane`
+(`timeline_tags`) so the frontend can derive the kind, colour/label each lane,
+and filter lanes by kind. A pure `timelineLayers.ts` helper resolves a lane's
+kind from its tags and powers the filter.
+
+**Rationale:**
+
+- Consistent with the established reserved-tag convention; additive and
+  extensible without migrations.
+- Surfacing `timeline_tags` (like ADR-078's neighbor tags) avoids a per-lane
+  fetch.
+
+**Consequences:**
+
+- Lanes without a `layer:*` tag fall back to an "Unspecified" kind and remain
+  fully usable — backward compatible.
+- A future pass could let the New-timeline dialog pick a kind directly
+  (currently the tag is applied like any other narrative role tag).
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

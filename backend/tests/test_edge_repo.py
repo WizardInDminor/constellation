@@ -1,7 +1,7 @@
 import pytest
 
-from app.models import EdgeCreate, FleetingCreate, PermanentCreate
-from app.repositories import edge_repo, node_repo
+from app.models import EdgeCreate, FleetingCreate, PermanentCreate, TagCreate
+from app.repositories import edge_repo, node_repo, tag_repo
 
 
 async def _two_nodes(db):
@@ -153,3 +153,32 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
     incoming = await edge_repo.get_incoming(db, b.id)
     assert len(incoming) == 1
     assert incoming[0].classifier_rationale == rationale
+
+
+async def test_edge_summary_carries_neighbor_tags_and_story_flag(db):
+    """ADR-078: EdgeSummary denormalises neighbor tags + is_story_event so the
+    Relationship Explorer can group connections by role without N+1 fetches."""
+    # A symbol-tagged structure node connected to a story-event scene.
+    symbol = await node_repo.create_permanent(
+        db, PermanentCreate(title="Fire", content="recurring symbol")
+    )
+    scene = await node_repo.create_story_event(
+        db, title="Cathedral Dream", content="fire fills the nave"
+    )
+    tag = await tag_repo.create(db, TagCreate(name="narrative:symbol"))
+    await db.execute("INSERT INTO node_tags(node_id, tag_id) VALUES (?, ?)", (symbol.id, tag.id))
+    await edge_repo.create(db, EdgeCreate(from_id=symbol.id, to_id=scene.id, type="ELABORATES"))
+
+    # From the symbol's side, the scene neighbor reports the story-event flag.
+    outgoing = await edge_repo.get_outgoing(db, symbol.id)
+    assert len(outgoing) == 1
+    assert outgoing[0].neighbor.id == scene.id
+    assert outgoing[0].neighbor_is_story_event is True
+    assert outgoing[0].neighbor_tags == []
+
+    # From the scene's side, the symbol neighbor reports its narrative:symbol tag.
+    incoming = await edge_repo.get_incoming(db, scene.id)
+    assert len(incoming) == 1
+    assert incoming[0].neighbor.id == symbol.id
+    assert incoming[0].neighbor_is_story_event is False
+    assert [t.name for t in incoming[0].neighbor_tags] == ["narrative:symbol"]

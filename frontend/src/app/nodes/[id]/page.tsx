@@ -18,6 +18,7 @@ import {
   ragQuery,
 } from "@/lib/api";
 import { NoteContent } from "@/components/NoteContent";
+import { ConnectionsByRole } from "@/components/ConnectionsByRole";
 import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
 import type {
@@ -1141,6 +1142,8 @@ export default function NodePage() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
+          {/* Relationship Explorer — connections grouped by role (ADR-078). */}
+          <ConnectionsByRole detail={node} />
           {node.type !== "fleeting" && (
             <div className="card p-4">
               <SourcePanel node={node} onChange={reload} />

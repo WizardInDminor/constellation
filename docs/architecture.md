@@ -606,6 +606,14 @@ character/lore/location/theme quick-create flows:
   `narrative:lore-backstory`, `narrative:lore-secret`,
   `narrative:lore-ability`, `narrative:lore-artifact` — lore categories
   (the last two added in ADR-077)
+- `layer:<kind>` — timeline lane classification (ADR-079): `layer:external`,
+  `layer:historical`, `layer:dream`, `layer:metaphysical`,
+  `layer:character-arc`, `layer:theme-arc` (open set). Applied to a timeline
+  structure node; surfaced on `TimelineLane.timeline_tags`.
+
+`EdgeSummary` denormalises `neighbor_tags` + `neighbor_is_story_event`
+(ADR-078) so the Relationship Explorer (`ConnectionsByRole`) can group a node's
+connections by role from a single `GET /nodes/{id}` — no per-neighbor fetch.
 
 The Notes list (`GET /nodes`) gains `hide_story_events: bool` (ADR-064)
 in addition to the existing B2 filter predicates.

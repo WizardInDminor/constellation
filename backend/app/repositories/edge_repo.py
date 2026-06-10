@@ -1,9 +1,18 @@
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime
 
 import aiosqlite
 
-from app.models import EdgeCreate, EdgeDetail, EdgeSummary, NeighborResult, NodeRef, RecentEdge
+from app.models import (
+    EdgeCreate,
+    EdgeDetail,
+    EdgeSummary,
+    NeighborResult,
+    NodeRef,
+    RecentEdge,
+    TagRef,
+)
 
 _SELECT_COLUMNS = (
     "id, from_id, to_id, type, note, classifier_rationale, "
@@ -189,17 +198,30 @@ async def get_neighbors(
     return results
 
 
-async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSummary]:
+async def _neighbor_tags_bulk(
+    db: aiosqlite.Connection, node_ids: list[str]
+) -> dict[str, list[TagRef]]:
+    """Tags for many neighbor nodes in one query → {node_id: [TagRef]}.
+
+    Kept local to edge_repo (rather than reusing node_repo's private helper) to
+    avoid a node_repo → edge_repo → node_repo import cycle. ADR-078.
+    """
+    result: dict[str, list[TagRef]] = defaultdict(list)
+    if not node_ids:
+        return result
+    placeholders = ",".join("?" for _ in node_ids)
     cursor = await db.execute(
-        """SELECT e.id, e.type, e.note, e.classifier_rationale, e.created_at,
-                  e.resolved_at, e.resolved_by_node_id,
-                  n.id AS nid, n.title, n.type AS ntype
-           FROM edges e JOIN nodes n ON e.to_id = n.id
-           WHERE e.from_id = ? AND n.deleted_at IS NULL
-           ORDER BY e.created_at DESC""",
-        (node_id,),
+        f"""SELECT nt.node_id, t.id, t.name, t.color
+            FROM node_tags nt JOIN tags t ON t.id = nt.tag_id
+            WHERE nt.node_id IN ({placeholders})""",
+        node_ids,
     )
-    rows = await cursor.fetchall()
+    for r in await cursor.fetchall():
+        result[r["node_id"]].append(TagRef(id=r["id"], name=r["name"], color=r["color"]))
+    return result
+
+
+def _build_summaries(rows, tags_by_node: dict[str, list[TagRef]]) -> list[EdgeSummary]:
     return [
         EdgeSummary(
             id=r["id"],
@@ -210,9 +232,26 @@ async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSumma
             resolved_by_node_id=r["resolved_by_node_id"],
             created_at=r["created_at"],
             neighbor=NodeRef(id=r["nid"], title=r["title"], type=r["ntype"]),
+            neighbor_tags=tags_by_node.get(r["nid"], []),
+            neighbor_is_story_event=bool(r["is_story_event"]),
         )
         for r in rows
     ]
+
+
+async def get_outgoing(db: aiosqlite.Connection, node_id: str) -> list[EdgeSummary]:
+    cursor = await db.execute(
+        """SELECT e.id, e.type, e.note, e.classifier_rationale, e.created_at,
+                  e.resolved_at, e.resolved_by_node_id,
+                  n.id AS nid, n.title, n.type AS ntype, n.is_story_event
+           FROM edges e JOIN nodes n ON e.to_id = n.id
+           WHERE e.from_id = ? AND n.deleted_at IS NULL
+           ORDER BY e.created_at DESC""",
+        (node_id,),
+    )
+    rows = await cursor.fetchall()
+    tags_by_node = await _neighbor_tags_bulk(db, [r["nid"] for r in rows])
+    return _build_summaries(rows, tags_by_node)
 
 
 async def list_recent(
@@ -251,23 +290,12 @@ async def get_incoming(db: aiosqlite.Connection, node_id: str) -> list[EdgeSumma
     cursor = await db.execute(
         """SELECT e.id, e.type, e.note, e.classifier_rationale, e.created_at,
                   e.resolved_at, e.resolved_by_node_id,
-                  n.id AS nid, n.title, n.type AS ntype
+                  n.id AS nid, n.title, n.type AS ntype, n.is_story_event
            FROM edges e JOIN nodes n ON e.from_id = n.id
            WHERE e.to_id = ? AND n.deleted_at IS NULL
            ORDER BY e.created_at DESC""",
         (node_id,),
     )
     rows = await cursor.fetchall()
-    return [
-        EdgeSummary(
-            id=r["id"],
-            type=r["type"],
-            note=r["note"],
-            classifier_rationale=r["classifier_rationale"],
-            resolved_at=r["resolved_at"],
-            resolved_by_node_id=r["resolved_by_node_id"],
-            created_at=r["created_at"],
-            neighbor=NodeRef(id=r["nid"], title=r["title"], type=r["ntype"]),
-        )
-        for r in rows
-    ]
+    tags_by_node = await _neighbor_tags_bulk(db, [r["nid"] for r in rows])
+    return _build_summaries(rows, tags_by_node)

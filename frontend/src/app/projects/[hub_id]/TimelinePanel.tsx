@@ -55,6 +55,12 @@ import {
   hasActiveEventFilter,
   visibleLanes as filterVisibleLanes,
 } from "./filterTimeline";
+import {
+  distinctLayerKinds,
+  layerKindForLane,
+  layerMeta,
+  visibleByKind,
+} from "./timelineLayers";
 
 interface Props {
   scope: ProjectScope;
@@ -137,6 +143,8 @@ export function TimelinePanel({ scope }: Props) {
     new Set(),
   );
   const [query, setQuery] = useState("");
+  // ADR-079: hide whole layer kinds (dream / historical / …) at once.
+  const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
 
   // Slice 5: cross-lane drag. Lifted from TimelineLaneCanvas (where it
   // lived for Slice 4's intra-lane-only drag) — the parent sees all
@@ -316,7 +324,13 @@ export function TimelinePanel({ scope }: Props) {
     proseStatuses,
     query,
   };
-  const shownLanes = filterVisibleLanes(timeline.lanes, filter);
+  // Lane visibility = individual lane toggle (filterVisibleLanes) AND the
+  // layer-kind filter (ADR-079).
+  const shownLanes = visibleByKind(
+    filterVisibleLanes(timeline.lanes, filter),
+    hiddenKinds,
+  );
+  const layerKinds = distinctLayerKinds(timeline.lanes);
   // Shared axis: every visible lane uses the SAME position range + zoom scale
   // so parallel timelines line up and scroll together (Canon audit fix).
   const range = sharedPositionRange(shownLanes);
@@ -411,6 +425,22 @@ export function TimelinePanel({ scope }: Props) {
           }
           highlightedCharacterId={highlightedCharacterId}
           onClearHighlight={() => setHighlightedCharacterId(null)}
+        />
+      )}
+
+      {/* ADR-079: layer-kind filter — show only certain lane types. */}
+      {layerKinds.length > 1 && (
+        <LayerKindFilter
+          kinds={layerKinds}
+          hidden={hiddenKinds}
+          onToggle={(k) =>
+            setHiddenKinds((prev) => {
+              const next = new Set(prev);
+              if (next.has(k)) next.delete(k);
+              else next.add(k);
+              return next;
+            })
+          }
         />
       )}
 
@@ -524,6 +554,50 @@ export function TimelinePanel({ scope }: Props) {
     );
   }
   return body;
+}
+
+// ---------------------------------------------------------------------------
+// Layer-kind filter — show/hide whole lane types (ADR-079)
+// ---------------------------------------------------------------------------
+
+function LayerKindFilter({
+  kinds,
+  hidden,
+  onToggle,
+}: {
+  kinds: string[];
+  hidden: Set<string>;
+  onToggle: (kind: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="section-label">Layers</span>
+      {kinds.map((k) => {
+        const meta = layerMeta(k);
+        const isHidden = hidden.has(k);
+        return (
+          <button
+            key={k}
+            onClick={() => onToggle(k)}
+            aria-pressed={!isHidden}
+            className={`badge border transition-colors ${
+              isHidden
+                ? "border-gray-200 text-gray-400 line-through"
+                : "border-gray-300"
+            }`}
+            title={
+              isHidden ? `Show ${meta.label} lanes` : `Hide ${meta.label} lanes`
+            }
+          >
+            <span
+              className={`mr-1 inline-block h-2 w-2 rounded-full ${meta.swatch}`}
+            />
+            {meta.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -696,6 +770,9 @@ function TimelineLaneCanvas({
 
   const minPos = range.minPos;
   const cw = canvasWidth(range, scale);
+  // ADR-079: lane kind drives the header badge + the coloured left border.
+  const kind = layerKindForLane(lane);
+  const kindMeta = layerMeta(kind);
 
   function positionToX(pos: number): number {
     return X_PADDING + (pos - minPos) * scale;
@@ -755,8 +832,8 @@ function TimelineLaneCanvas({
 
   return (
     <div
-      className={`border-b border-l-2 bg-gray-50 transition-shadow ${containerBorder}`}
-      style={{ width: cw }}
+      className={`border-b border-l-4 bg-gray-50 transition-shadow ${containerBorder}`}
+      style={{ width: cw, borderLeftColor: kindMeta.color }}
     >
       {/* Sticky-left header keeps the lane label visible while the shared
           horizontal scroll moves the canvas. */}
@@ -764,6 +841,15 @@ function TimelineLaneCanvas({
         <span className="font-medium text-gray-700 truncate min-w-0">
           {lane.timeline.title}
         </span>
+        {kind !== "unspecified" && (
+          <span
+            className="badge text-white"
+            style={{ backgroundColor: kindMeta.color }}
+            title={`Layer: ${kindMeta.label}`}
+          >
+            {kindMeta.label}
+          </span>
+        )}
         <span className="text-gray-300">·</span>
         <span>
           {lane.events.length} event{lane.events.length === 1 ? "" : "s"}
