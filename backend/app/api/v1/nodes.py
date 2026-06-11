@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.core.deps import DB, EmbedProvider
 from app.models import (
     EdgeCreate,
+    EntityArc,
     FleetingCreate,
     LiteratureCreate,
     NeighborResult,
@@ -20,7 +21,7 @@ from app.models import (
     TimelinePlacementRequest,
     TimelinePositionUpdate,
 )
-from app.repositories import edge_repo, node_repo, source_repo, timeline_repo
+from app.repositories import arc_repo, edge_repo, node_repo, source_repo, timeline_repo
 from app.services import embedding_service
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -204,6 +205,16 @@ async def get_node(node_id: str, db: DB) -> NodeDetail:
     if node is None:
         raise HTTPException(404, "Node not found")
     return node
+
+
+@router.get("/{node_id}/arc")
+async def get_entity_arc(node_id: str, db: DB) -> EntityArc:
+    """Evolution-over-time of any entity (ADR-081): its appearances ordered
+    chronologically, each carrying the edge note as its interpretation."""
+    arc = await arc_repo.assemble(db, node_id)
+    if arc is None:
+        raise HTTPException(404, "Node not found")
+    return arc
 
 
 @router.patch("/{node_id}")

@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.models.node import NodeRef
+from app.models.tag import TagRef
 
 ProseStatus = Literal["planned", "draft", "written", "revised"]
 
@@ -129,6 +130,10 @@ class TimelineLane(BaseModel):
     timeline: NodeRef
     events: list[TimelineEvent]
     act_spans: list[ActSpan]
+    # ADR-079: reserved `layer:*` tags on the timeline structure node classify
+    # the lane's kind (external / historical / dream / metaphysical / …) so the
+    # frontend can colour, label, and filter lanes by type. Empty = unspecified.
+    timeline_tags: list[TagRef] = []
 
 
 class TimelineResponse(BaseModel):

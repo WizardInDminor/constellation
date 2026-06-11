@@ -1,4 +1,5 @@
 from app.models.activity import ActivityFeed, RecentEdge
+from app.models.arc import ArcAppearance, EntityArc
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.discover import (
@@ -14,6 +15,7 @@ from app.models.edge import (
     EdgeResolveRequest,
     EdgeSummary,
     EdgeType,
+    EdgeUpdate,
     NeighborResult,
 )
 from app.models.embedding_job import (
@@ -59,19 +61,6 @@ from app.models.project import (
     WorkSessionCreate,
     WorkSessionUpdate,
 )
-from app.models.timeline import (
-    ActSpan,
-    ActSpanCreate,
-    ProseStatus,
-    SceneContextItem,
-    SceneContextResponse,
-    StoryEventCreate,
-    TimelineEvent,
-    TimelineLane,
-    TimelinePlacementRequest,
-    TimelinePositionUpdate,
-    TimelineResponse,
-)
 from app.models.rag import (
     ClusterLinkProposal,
     ClusterSuggestRequest,
@@ -105,6 +94,20 @@ from app.models.source import (
 )
 from app.models.stats import CorpusStats
 from app.models.tag import TagCreate, TagRef, TagUpdate
+from app.models.threads import ProjectThreads, TensionThread, ThreadItem
+from app.models.timeline import (
+    ActSpan,
+    ActSpanCreate,
+    ProseStatus,
+    SceneContextItem,
+    SceneContextResponse,
+    StoryEventCreate,
+    TimelineEvent,
+    TimelineLane,
+    TimelinePlacementRequest,
+    TimelinePositionUpdate,
+    TimelineResponse,
+)
 
 # EdgeSummary is imported under TYPE_CHECKING in node.py to break the mutual
 # dependency at runtime. Now that both modules are loaded, resolve it.
@@ -160,6 +163,7 @@ __all__ = [
     "EdgeDetail",
     "EdgeResolveRequest",
     "EdgeSummary",
+    "EdgeUpdate",
     "EdgeType",
     "NeighborResult",
     "RESOLVABLE_EDGE_TYPES",
@@ -208,4 +212,9 @@ __all__ = [
     "EmbeddingJobList",
     "EmbeddingJobStatus",
     "RetryAllResponse",
+    "ArcAppearance",
+    "EntityArc",
+    "ProjectThreads",
+    "TensionThread",
+    "ThreadItem",
 ]
