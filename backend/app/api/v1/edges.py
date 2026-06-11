@@ -8,6 +8,7 @@ from app.models import (
     EdgeCreate,
     EdgeDetail,
     EdgeResolveRequest,
+    EdgeUpdate,
 )
 from app.repositories import edge_repo, node_repo
 
@@ -23,6 +24,15 @@ async def create_edge(data: EdgeCreate, db: DB) -> EdgeDetail:
         if "UNIQUE" in detail:
             raise HTTPException(409, "Edge already exists between these nodes with this type")
         raise HTTPException(422, detail)
+
+
+@router.patch("/{edge_id}")
+async def update_edge(edge_id: str, data: EdgeUpdate, db: DB) -> EdgeDetail:
+    """Edit a relationship's note (ADR-082) — the edge-note authoring loop."""
+    updated = await edge_repo.update_note(db, edge_id, data.note)
+    if updated is None:
+        raise HTTPException(404, "Edge not found")
+    return updated
 
 
 @router.delete("/{edge_id}", status_code=204)

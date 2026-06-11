@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import type { EdgeType, GraphNodeRef } from "@/lib/api";
-import { EDGE_TYPES, EDGE_TYPE_META, directionGlyph } from "@/lib/edgeTypes";
+import {
+  EDGE_NOTE_LABEL,
+  EDGE_NOTE_PLACEHOLDER,
+  EDGE_TYPES,
+  EDGE_TYPE_META,
+  directionGlyph,
+} from "@/lib/edgeTypes";
 
 interface Props {
   from: GraphNodeRef;
@@ -90,13 +96,13 @@ export function ConnectPanel({ from, to, onConfirm, onCancel }: Props) {
 
         <div>
           <label htmlFor="connect-note" className="section-label mb-1 block">
-            Note (optional)
+            {EDGE_NOTE_LABEL} <span className="text-gray-500">(optional)</span>
           </label>
           <textarea
             id="connect-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Why does this connection exist?"
+            placeholder={EDGE_NOTE_PLACEHOLDER}
             rows={3}
             className="w-full resize-none rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-200 placeholder:text-gray-600 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />

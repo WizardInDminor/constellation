@@ -497,6 +497,7 @@ GET    /nodes                       # paginated list with filters
 
 ```
 POST   /edges                       # create edge with type + optional note
+PATCH  /edges/{id}                   # edit the relationship note (ADR-082)
 DELETE /edges/{id}
 POST   /edges/{id}/resolve          # mark tension edge resolved (ADR-059)
 DELETE /edges/{id}/resolve          # clear resolved state

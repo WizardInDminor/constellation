@@ -85,6 +85,20 @@ async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
     return result
 
 
+async def update_note(
+    db: aiosqlite.Connection, edge_id: str, note: str | None
+) -> EdgeDetail | None:
+    """Edit an edge's note (ADR-082). Returns None if the edge doesn't exist."""
+    cursor = await db.execute(
+        "UPDATE edges SET note = ? WHERE id = ?",
+        (note, edge_id),
+    )
+    await db.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_by_id(db, edge_id)
+
+
 async def delete(db: aiosqlite.Connection, edge_id: str) -> bool:
     cursor = await db.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
     await db.commit()

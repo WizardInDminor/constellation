@@ -251,6 +251,18 @@ export function deleteEdge(edgeId: string): Promise<void> {
   return request(`/api/v1/edges/${edgeId}`, { method: "DELETE" });
 }
 
+// ADR-082: the edge-note authoring loop. Edit why a relationship exists / what
+// it means; `note: null` clears it.
+export function updateEdge(
+  edgeId: string,
+  data: { note: string | null },
+): Promise<EdgeDetail> {
+  return request(`/api/v1/edges/${edgeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ADR-059: resolve a tension edge (CONTRADICTS / QUESTIONS only). The optional
 // `resolved_by_node_id` points to a synthesis note that supersedes the
 // tension. POST is idempotent; DELETE clears the resolved state.

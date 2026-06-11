@@ -4962,6 +4962,44 @@ gets a chronological arc.
 
 ---
 
+## ADR-082 — Edge-note authoring loop (`PATCH /edges/{id}` + inline editor)
+
+**Status:** Accepted
+
+**Context:** Edge notes are high-value context — they feed EntityArc
+interpretation entries (ADR-081), ConnectionsByRole "why" labels (ADR-078), and
+RAG edge context. Notes could be set at *creation* (node detail, graph
+ConnectPanel) but never *edited* afterward, and there was no API to change a
+note. So the richest signal in the graph could not be refined as understanding
+grew.
+
+**Decision:**
+
+- Add `PATCH /edges/{id}` (`EdgeUpdate{note}`, `edge_repo.update_note`): set or
+  clear an edge's note. `note: null` clears; omitting leaves unchanged.
+- Add a reusable, generic `EdgeNoteEditor` (inline: shows the note or a subtle
+  "+ add note" prompt; click to edit; ⌘↵/Esc). Mounted on every relationship
+  row of the node detail page (outgoing and incoming). Saving refreshes the
+  page so EntityArc / ConnectionsByRole pick up the change immediately.
+- Centralise generic copy (`EDGE_NOTE_LABEL`, `EDGE_NOTE_PLACEHOLDER`) used by
+  the editor, the node-detail add form, and the graph ConnectPanel. Copy is
+  deliberately domain-neutral ("evidence, cause, example, dependency, a shift in
+  meaning") so it reads well for research, learning, project, and story nodes.
+
+**Rationale:** A note is just a column on `edges`; a PATCH is the minimal
+additive change. An inline editor keeps the prompt lightweight (no modal) and
+puts editing exactly where the relationship is shown.
+
+**Consequences:**
+
+- The graph EdgePanel (dark-themed, read-oriented) was left as-is; creation
+  there still flows through ConnectPanel. The node detail page is the canonical
+  create+edit surface.
+- Notes remain free text; no structured templating. The generic placeholder
+  nudges toward useful content without constraining it.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

@@ -155,6 +155,25 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
     assert incoming[0].classifier_rationale == rationale
 
 
+async def test_update_note_edits_and_clears(db):
+    """ADR-082: the edge-note authoring loop can set and clear a note."""
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    assert edge.note is None
+
+    updated = await edge_repo.update_note(db, edge.id, "evidence from the 1943 log")
+    assert updated is not None
+    assert updated.note == "evidence from the 1943 log"
+
+    cleared = await edge_repo.update_note(db, edge.id, None)
+    assert cleared is not None
+    assert cleared.note is None
+
+
+async def test_update_note_missing_returns_none(db):
+    assert await edge_repo.update_note(db, "ghost", "x") is None
+
+
 async def test_edge_summary_carries_neighbor_tags_and_story_flag(db):
     """ADR-078: EdgeSummary denormalises neighbor tags + is_story_event so the
     Relationship Explorer can group connections by role without N+1 fetches."""

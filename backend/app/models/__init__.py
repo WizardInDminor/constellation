@@ -15,6 +15,7 @@ from app.models.edge import (
     EdgeResolveRequest,
     EdgeSummary,
     EdgeType,
+    EdgeUpdate,
     NeighborResult,
 )
 from app.models.embedding_job import (
@@ -161,6 +162,7 @@ __all__ = [
     "EdgeDetail",
     "EdgeResolveRequest",
     "EdgeSummary",
+    "EdgeUpdate",
     "EdgeType",
     "NeighborResult",
     "RESOLVABLE_EDGE_TYPES",

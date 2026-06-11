@@ -81,6 +81,17 @@ class EdgeCreate(BaseModel):
     classifier_rationale: str | None = None
 
 
+class EdgeUpdate(BaseModel):
+    """Edit a relationship's note — the edge-note authoring loop (ADR-082).
+
+    Generic: the note explains why a link exists / what the connection means,
+    feeding EntityArc, ConnectionsByRole, and RAG edge context. `None` clears
+    the note; omitting the field leaves it unchanged.
+    """
+
+    note: str | None = None
+
+
 class EdgeResolveRequest(BaseModel):
     """Mark a tension edge resolved (ADR-059).
 
