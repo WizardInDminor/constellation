@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { NoteContent } from "@/components/NoteContent";
 import { ConnectionsByRole } from "@/components/ConnectionsByRole";
+import { EntityArc } from "@/components/EntityArc";
 import { LifecycleStatusControl } from "@/components/LifecycleStatusControl";
 import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
@@ -1150,6 +1151,9 @@ export default function NodePage() {
           ) && <LifecycleStatusControl node={node} onChange={reload} />}
           {/* Relationship Explorer — connections grouped by role (ADR-078). */}
           <ConnectionsByRole detail={node} />
+          {/* Entity Arc — how this entity evolved over time (ADR-081). Hides
+              itself when there's no sequence worth showing. */}
+          <EntityArc nodeId={nodeId} />
           {node.type !== "fleeting" && (
             <div className="card p-4">
               <SourcePanel node={node} onChange={reload} />

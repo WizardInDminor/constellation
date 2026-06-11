@@ -4918,6 +4918,50 @@ already built and tested.
 
 ---
 
+## ADR-081 — Entity Arc: derived evolution-over-time (`GET /nodes/{id}/arc`)
+
+**Status:** Accepted
+
+**Context:** After the Relationship Explorer (ADR-078) the app answers "what is
+X connected to" but not "how has X *changed*". Meaning in a serious knowledge
+base is a trajectory: a symbol accretes interpretations, a research concept's
+understanding deepens, a character develops, an open question moves toward
+resolution. This is a **generic** knowledge-system capability — Entity Evolution
+Tracking — not a narrative SymbolArc feature.
+
+**Decision:** Add a read-only derivation, `GET /nodes/{id}/arc`, returning an
+`EntityArc`: the entity's connected nodes as ordered *appearances*, each
+carrying the **edge note** as its interpretation at that point.
+
+- **Ordering is derived, not stored.** Story-event appearances sort by their
+  timeline `discourse_position` (the narrative clock); everything else sorts by
+  the connected node's `created_at` (the knowledge clock). `ordering_basis`
+  reports `timeline` / `chronological` / `mixed`.
+- **Future payoff points** are derived: a connected story event with
+  `prose_status = 'planned'` is `is_pending`.
+- Pure ordering helpers (`ordering_basis`, `sort_appearance_rows`) are unit
+  tested; assembly is one SQL query (no N+1). Frontend `EntityArc` component
+  renders a vertical stepper and hides itself when there's no sequence worth
+  showing.
+
+**Rationale:** Everything needed already exists — edges, edge notes, timeline
+positions, timestamps — so evolution is a *view*, not new state. No schema
+change. Generic by construction: a research concept with no story events still
+gets a chronological arc.
+
+**Consequences:**
+
+- "Interpretation" reuses the edge `note`; entities whose links have no notes
+  show appearances without meaning text (still ordered). Encouraging note-on-
+  link authoring increases arc richness.
+- Ordering across mixed story/non-story appearances is bucketed (events first by
+  position, then others by date) rather than interleaved on a single axis —
+  the two clocks aren't directly comparable; documented in `ordering_basis`.
+- A coarse single status (ADR-080) plus the arc gives "trajectory" without a
+  full event-sourced history table, which remains out of scope.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

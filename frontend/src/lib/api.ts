@@ -730,6 +730,14 @@ export function narrativeDump(
   });
 }
 
+// Entity Arc — evolution-over-time of any node (ADR-081).
+export type EntityArc = components["schemas"]["EntityArc"];
+export type ArcAppearance = components["schemas"]["ArcAppearance"];
+
+export function getEntityArc(id: string): Promise<EntityArc> {
+  return request(`/api/v1/nodes/${id}/arc`);
+}
+
 // Reserved narrative tag names — mirror backend constants. Used by the
 // character/theme/lore/location list views to identify narrative-role nodes.
 export const NARRATIVE_TAGS = {

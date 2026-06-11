@@ -487,6 +487,7 @@ POST   /nodes/permanent             # create permanent directly
 POST   /nodes/literature            # create literature note (requires source_id)
 POST   /nodes/structure             # create MOC / structure note
 GET    /nodes/{id}                  # NodeDetail with edges + neighbors
+GET    /nodes/{id}/arc              # EntityArc: evolution-over-time (ADR-081)
 PATCH  /nodes/{id}
 DELETE /nodes/{id}                  # soft delete
 GET    /nodes                       # paginated list with filters
