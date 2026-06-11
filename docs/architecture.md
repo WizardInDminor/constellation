@@ -578,6 +578,7 @@ PATCH  /projects/{hub_id}/sessions/{id}       # progress notes, blockers, or clo
 GET    /projects/{hub_id}/sessions/{id}/wrap  # nodes/edges/fleetings created during the session
 POST   /projects/{hub_id}/sessions/{id}/attach-node  # idempotent session-attribution row
 GET    /projects/{hub_id}/coverage            # per-tag note count + avg edge count (thin-to-dense)
+GET    /projects/{hub_id}/threads             # open threads + pending payoffs (ADR-083)
 POST   /projects/{hub_id}/learning-map        # ADR-070: phased plan with AI-suggested sources
 GET    /projects/{hub_id}/timeline            # ADR-065: lanes (events + act spans); lazy-creates default
 POST   /projects/{hub_id}/timelines           # Slice 5: create parallel timeline structure node

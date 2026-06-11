@@ -5000,6 +5000,48 @@ puts editing exactly where the relationship is shown.
 
 ---
 
+## ADR-083 — Open Threads & Pending Payoffs dashboard (`GET /projects/{hub_id}/threads`)
+
+**Status:** Accepted
+
+**Context:** ADR-080/081 gave per-node lifecycle status and per-entity arcs, but
+there was no project-level view of "what still needs attention." A writer or
+researcher wants one place answering: which questions are still open, which
+tensions are unresolved, and which set-ups haven't paid off yet. This is generic
+situational awareness, not a narrative feature.
+
+**Decision:** Add a derived, read-only dashboard `GET /projects/{hub_id}/threads`
+returning three buckets, all scoped to the project:
+
+- **Open questions** — nodes carrying a `status:open` / `status:developing` tag
+  (ADR-080 lifecycle).
+- **Unresolved tensions** — `CONTRADICTS` / `QUESTIONS` edges with
+  `resolved_at IS NULL` (ADR-059) touching a project member.
+- **Pending payoffs** — story events with `prose_status = 'planned'` (set up,
+  not yet written).
+
+Project membership (`project_member_ids`) = pinned nodes ∪ nodes tagged with a
+project tag ∪ story events on timelines COLLECTS-linked from the hub. The last
+term ensures narrative scenes count even though they attach via COLLECTS, not
+tags. Surfaced as a workspace "Threads" tab.
+
+**Rationale:** Everything is derived from existing state (status tags, resolved
+edges, prose_status); no schema change. Membership reuses the established
+pinned/tag notion, extended minimally for timeline-attached events. Corpus-wide
+queries filtered to the member set are fine at single-user scale and avoid giant
+`IN (…)` clauses.
+
+**Consequences:**
+
+- A project with no scope tags, no pins, and no timelines yields an empty
+  dashboard — expected; membership is what scopes it.
+- Pending payoffs are narrative-specific by nature (they need story events);
+  research/learning projects simply show none, which is correct.
+- The three buckets are independent lists, not a unified priority queue;
+  ranking/sorting across buckets is a future enhancement.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

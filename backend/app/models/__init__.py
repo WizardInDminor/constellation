@@ -94,6 +94,7 @@ from app.models.source import (
 )
 from app.models.stats import CorpusStats
 from app.models.tag import TagCreate, TagRef, TagUpdate
+from app.models.threads import ProjectThreads, TensionThread, ThreadItem
 from app.models.timeline import (
     ActSpan,
     ActSpanCreate,
@@ -213,4 +214,7 @@ __all__ = [
     "RetryAllResponse",
     "ArcAppearance",
     "EntityArc",
+    "ProjectThreads",
+    "TensionThread",
+    "ThreadItem",
 ]

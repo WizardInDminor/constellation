@@ -790,6 +790,15 @@ export function getCoverage(hubId: string): Promise<CoverageResponse> {
   return request(`/api/v1/projects/${hubId}/coverage`);
 }
 
+// Open Threads & Pending Payoffs dashboard (ADR-083).
+export type ProjectThreads = components["schemas"]["ProjectThreads"];
+export type ThreadItem = components["schemas"]["ThreadItem"];
+export type TensionThread = components["schemas"]["TensionThread"];
+
+export function getProjectThreads(hubId: string): Promise<ProjectThreads> {
+  return request(`/api/v1/projects/${hubId}/threads`);
+}
+
 export function getSessionWrap(
   hubId: string,
   sessionId: string,

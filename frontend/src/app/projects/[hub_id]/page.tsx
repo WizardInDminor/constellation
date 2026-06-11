@@ -29,6 +29,7 @@ import { RightPanel } from "./RightPanel";
 import { ResumeBriefing } from "./ResumeBriefing";
 import { LearningMapPanel } from "./LearningMapPanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { ThreadsPanel } from "./ThreadsPanel";
 import { StoryDumpPanel } from "./StoryDumpPanel";
 import { NarrativeRoleList } from "./NarrativeRoleList";
 import { NoteContent } from "@/components/NoteContent";
@@ -54,6 +55,7 @@ type CenterTab =
   | "notes"
   | "synthesize"
   | "timeline"
+  | "threads"
   | "learning-map"
   | "story-dump"
   | "characters"
@@ -79,6 +81,7 @@ const ALL_TABS: { id: CenterTab; label: string }[] = [
   { id: "notes", label: "Notes" },
   { id: "synthesize", label: "Synthesize" },
   { id: "timeline", label: "Timeline" },
+  { id: "threads", label: "Threads" },
   { id: "learning-map", label: "Learning map" },
   { id: "story-dump", label: "Story Dump" },
   { id: "characters", label: "Characters" },
@@ -362,6 +365,7 @@ export default function WorkspacePage() {
               />
             )}
             {tab === "timeline" && <TimelinePanel scope={project.scope} />}
+            {tab === "threads" && <ThreadsPanel scope={project.scope} />}
             {tab === "learning-map" && (
               <LearningMapPanel scope={project.scope} />
             )}
