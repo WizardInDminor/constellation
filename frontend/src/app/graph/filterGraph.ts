@@ -22,6 +22,26 @@ export const ALL_EDGE_TYPES = [
   "MEASURES",
   "EXTENDS",
   "REFINES",
+  // Evolution / D1 (ADR-060) + narrative (ADR-052 Slice 4).
+  "SUPERSEDED_BY",
+  "SCOPED_TO",
+  "REGIME_OF",
+  "FOLLOWS_FROM",
+  "EXPLAINS",
+  // Canon symbolic / resonance verbs (ADR-074).
+  "HOLDS_OPEN",
+  "REFUSES_TO_NAME",
+  "CARRIES_CHARGE_FOR",
+  "FORESHADOWS",
+  "MIRRORS",
+  "INVERSION_OF",
+  "PROTOTYPE_OF",
+  "AMPLIFIES",
+  "CORRUPTS",
+  "DESTABILIZES",
+  "STABILIZES",
+  "PROTECTS",
+  "THREATENS",
 ] as const;
 
 export interface FilterState {

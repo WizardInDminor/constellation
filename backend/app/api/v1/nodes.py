@@ -168,6 +168,20 @@ async def list_nodes(
     hide_story_events: Annotated[
         bool, Query(description="Exclude is_story_event=1 nodes (ADR-064)")
     ] = False,
+    canon_status: Annotated[
+        str | None, Query(description="Filter by canon_status (ADR-073)")
+    ] = None,
+    node_status: Annotated[str | None, Query(description="Filter by node_status (ADR-073)")] = None,
+    charge_in: Annotated[
+        list[str] | None,
+        Query(description="Filter to nodes whose charge is one of these values (ADR-073)"),
+    ] = None,
+    do_not_name_yet: Annotated[
+        bool, Query(description="Only nodes with the do_not_name_yet flag set (ADR-073)")
+    ] = False,
+    no_scene: Annotated[
+        bool, Query(description="Only nodes with no edge to a story event (ADR-073)")
+    ] = False,
 ) -> Paginated[NodeSummary]:
     items, total = await node_repo.list_nodes(
         db,
@@ -179,6 +193,11 @@ async def list_nodes(
         no_edges=no_edges,
         summary_max_length=summary_max_length,
         hide_story_events=hide_story_events,
+        canon_status=canon_status,
+        node_status=node_status,
+        charge_in=charge_in,
+        do_not_name_yet=do_not_name_yet,
+        no_scene=no_scene,
     )
     return Paginated(
         items=items,
@@ -338,9 +357,7 @@ async def update_timeline_position(
 
 
 @router.post("/{node_id}/timeline-placement")
-async def place_on_timeline(
-    node_id: str, data: TimelinePlacementRequest, db: DB
-) -> NodeDetail:
+async def place_on_timeline(node_id: str, data: TimelinePlacementRequest, db: DB) -> NodeDetail:
     """Phase 9 Slice 5 — cross-lane drag-and-drop endpoint.
 
     Two modes, distinguished by whether `remove_from_timeline_node_id` is

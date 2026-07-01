@@ -1,6 +1,6 @@
 import pytest
 
-from app.models import EdgeCreate, FleetingCreate, PermanentCreate
+from app.models import EdgeCreate, FleetingCreate
 from app.repositories import edge_repo, node_repo
 
 
@@ -153,3 +153,55 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
     incoming = await edge_repo.get_incoming(db, b.id)
     assert len(incoming) == 1
     assert incoming[0].classifier_rationale == rationale
+
+
+# ── Canon symbolic / resonance verbs (ADR-074) ──────────────────────────────
+
+
+async def test_canon_edge_types_holds_open_and_prototype(db):
+    a, b = await _two_nodes(db)
+    e1 = await edge_repo.create(
+        db,
+        EdgeCreate(
+            from_id=a.id,
+            to_id=b.id,
+            type="HOLDS_OPEN",
+            note="Michael sustains openness against collective collapse pressure.",
+        ),
+    )
+    assert e1.type == "HOLDS_OPEN"
+    assert e1.note.startswith("Michael sustains")
+
+    e2 = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="PROTOTYPE_OF"))
+    assert e2.type == "PROTOTYPE_OF"
+
+
+async def test_canon_edge_note_is_queryable_on_neighbors(db):
+    a, b = await _two_nodes(db)
+    await edge_repo.create(
+        db,
+        EdgeCreate(from_id=a.id, to_id=b.id, type="FORESHADOWS", note="plants the final image"),
+    )
+    neighbors = await edge_repo.get_neighbors(db, a.id)
+    assert neighbors[0].edge_type == "FORESHADOWS"
+    assert neighbors[0].edge_note == "plants the final image"
+
+
+async def test_bad_edge_type_rejected_at_model():
+    # Pydantic rejects unknown edge types before they reach the DB.
+    with pytest.raises(ValueError):
+        EdgeCreate(from_id="a", to_id="b", type="NOT_A_TYPE")
+
+
+async def test_bad_edge_type_rejected_at_db(db):
+    # The migration CHECK is the backstop if a raw insert bypasses the model.
+    import uuid
+    from datetime import UTC, datetime
+    from sqlite3 import IntegrityError
+
+    a, b = await _two_nodes(db)
+    with pytest.raises(IntegrityError):
+        await db.execute(
+            "INSERT INTO edges(id, from_id, to_id, type, created_at) VALUES (?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), a.id, b.id, "NOT_A_TYPE", datetime.now(UTC).isoformat()),
+        )
