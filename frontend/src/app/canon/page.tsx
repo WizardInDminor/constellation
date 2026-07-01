@@ -14,7 +14,7 @@ import {
 import { NoteContent } from "@/components/NoteContent";
 import { EDGE_COLORS, EDGE_TYPE_META } from "@/lib/edgeTypes";
 
-// The Canon saved-views (ADR-073). Each maps to a deterministic backend filter;
+// The Canon saved-views (ADR-076). Each maps to a deterministic backend filter;
 // "open_threads" has its own richer shape (tensions + unresolved nodes).
 const VIEWS: { key: CanonView; label: string; blurb: string }[] = [
   {

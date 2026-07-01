@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 NodeType = Literal["fleeting", "literature", "permanent", "structure"]
 
-# Canon readiness (ADR-073): uncertainty / canon-status vocabularies. These
+# Canon readiness (ADR-076): uncertainty / canon-status vocabularies. These
 # specialise a node's epistemic state without adding node types (ADR-006 kept).
 CanonStatus = Literal["canon", "provisional", "speculative", "discarded", "image_only"]
 NodeStatus = Literal["emerging", "stable", "contradicted", "retired", "unresolved"]
@@ -36,7 +36,7 @@ class NodeSummary(BaseModel):
     # Slice 4 (ADR-064): surfaced for the Notes "hide story events" filter
     # and for the workspace's narrative-mode lists.
     is_story_event: bool = False
-    # Canon uncertainty metadata (ADR-073). Surfaced on summaries so list views
+    # Canon uncertainty metadata (ADR-076). Surfaced on summaries so list views
     # and the Canon saved-views can badge/filter without a detail fetch.
     canon_status: CanonStatus | None = None
     node_status: NodeStatus | None = None
@@ -61,7 +61,7 @@ class NodeDetail(BaseModel):
     story_time: str | None = None
     prose_status: str | None = None
     manuscript_location: str | None = None
-    # Canon uncertainty metadata (ADR-073).
+    # Canon uncertainty metadata (ADR-076).
     canon_status: CanonStatus | None = None
     node_status: NodeStatus | None = None
     charge: Charge | None = None
@@ -75,7 +75,7 @@ class NodeDetail(BaseModel):
 
 
 class CanonFields(BaseModel):
-    """Mixin of optional Canon uncertainty metadata (ADR-073).
+    """Mixin of optional Canon uncertainty metadata (ADR-076).
 
     All optional so research capture is unaffected. Attaching these at create
     time lets an import set charge / canon_status / do_not_name_yet in one shot
@@ -131,7 +131,7 @@ class NodeUpdate(BaseModel):
     story_time: str | None = None
     prose_status: str | None = None
     manuscript_location: str | None = None
-    # Canon uncertainty metadata (ADR-073). Same model_fields_set convention:
+    # Canon uncertainty metadata (ADR-076). Same model_fields_set convention:
     # omit to leave unchanged, send null to clear.
     canon_status: CanonStatus | None = None
     node_status: NodeStatus | None = None

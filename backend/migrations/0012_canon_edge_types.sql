@@ -1,7 +1,7 @@
--- Canon readiness Phase 2: symbolic / resonance edge vocabulary (ADR-074).
+-- Canon readiness Phase 2: symbolic / resonance edge vocabulary (ADR-077).
 --
 -- ADR-007 fixed the edge vocabulary and reserved extension for cases where
--- typed filtering earns its keep. ADR-074 records the decision that
+-- typed filtering earns its keep. ADR-077 records the decision that
 -- narrative/worldbuilding projects (Canon) qualify: a filterable "show me every
 -- FORESHADOWS edge" or "everything that HOLDS_OPEN this moment" is exactly the
 -- symbolic web such projects are made of. Nuance still lives in the edge `note`
@@ -34,7 +34,7 @@ CREATE TABLE edges_new (
                               'REGIME_OF', 'FOLLOWS_FROM',
                               -- Narrative lore (0010).
                               'EXPLAINS',
-                              -- Canon symbolic / resonance (ADR-074).
+                              -- Canon symbolic / resonance (ADR-077).
                               'HOLDS_OPEN', 'REFUSES_TO_NAME', 'CARRIES_CHARGE_FOR',
                               'FORESHADOWS', 'MIRRORS', 'INVERSION_OF',
                               'PROTOTYPE_OF', 'AMPLIFIES', 'CORRUPTS',

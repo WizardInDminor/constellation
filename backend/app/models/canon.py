@@ -1,4 +1,4 @@
-"""Canon readiness (ADR-073) — models for the uncertainty saved-views and the
+"""Canon readiness (ADR-076) — models for the uncertainty saved-views and the
 deterministic AI narration endpoint.
 
 These sit on top of the node uncertainty metadata: the views are backed by

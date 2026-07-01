@@ -145,7 +145,7 @@ async def create_fleeting(db: aiosqlite.Connection, data: FleetingCreate) -> Nod
 
 
 def _canon_kwargs(data: PermanentCreate | LiteratureCreate | StructureCreate) -> dict[str, Any]:
-    """Extract the Canon uncertainty fields (ADR-073) shared by the create DTOs."""
+    """Extract the Canon uncertainty fields (ADR-076) shared by the create DTOs."""
     return {
         "canon_status": data.canon_status,
         "node_status": data.node_status,
@@ -297,7 +297,7 @@ async def list_nodes(
     - hide_story_events: excludes nodes with is_story_event = 1 (ADR-064).
       Default off — events are visible in Notes by default.
 
-    Canon filters (ADR-073) — power the Canon saved-views:
+    Canon filters (ADR-076) — power the Canon saved-views:
     - canon_status / node_status: exact match on the uncertainty enums.
     - charge_in: charge is one of the given values (e.g. high/goosebump).
     - do_not_name_yet: only nodes with the protected flag set.
@@ -657,7 +657,7 @@ async def update(db: aiosqlite.Connection, node_id: str, data: NodeUpdate) -> No
         updates["prose_status"] = data.prose_status
     if "manuscript_location" in data.model_fields_set:
         updates["manuscript_location"] = data.manuscript_location
-    # Canon uncertainty metadata (ADR-073). do_not_name_yet stores as 0/1.
+    # Canon uncertainty metadata (ADR-076). do_not_name_yet stores as 0/1.
     if "canon_status" in data.model_fields_set:
         updates["canon_status"] = data.canon_status
     if "node_status" in data.model_fields_set:

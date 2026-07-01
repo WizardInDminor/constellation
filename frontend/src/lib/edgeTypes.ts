@@ -24,7 +24,7 @@ export const EDGE_TYPES: EdgeType[] = [
   "FOLLOWS_FROM",
   // Narrative (ADR-052 Slice 4 addendum).
   "EXPLAINS",
-  // Canon symbolic / resonance verbs (ADR-074).
+  // Canon symbolic / resonance verbs (ADR-077).
   "HOLDS_OPEN",
   "REFUSES_TO_NAME",
   "CARRIES_CHARGE_FOR",
@@ -66,7 +66,7 @@ export const EDGE_COLORS: Record<EdgeType, string> = {
   REGIME_OF: "bg-fuchsia-100 text-fuchsia-700",
   FOLLOWS_FROM: "bg-lime-100 text-lime-700",
   EXPLAINS: "bg-amber-100 text-amber-800",
-  // Canon symbolic / resonance verbs (ADR-074).
+  // Canon symbolic / resonance verbs (ADR-077).
   HOLDS_OPEN: "bg-violet-100 text-violet-700",
   REFUSES_TO_NAME: "bg-stone-100 text-stone-700",
   CARRIES_CHARGE_FOR: "bg-red-100 text-red-800",
@@ -216,7 +216,7 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     example:
       "Use from a lore note to a character whose behavior the lore makes sense of, or to a location whose atmosphere the lore underwrites.",
   },
-  // Canon symbolic / resonance verbs (ADR-074). Nuance lives in the edge note.
+  // Canon symbolic / resonance verbs (ADR-077). Nuance lives in the edge note.
   HOLDS_OPEN: {
     label: "Holds open",
     directional: true,

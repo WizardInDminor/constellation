@@ -28,7 +28,7 @@ export const ALL_EDGE_TYPES = [
   "REGIME_OF",
   "FOLLOWS_FROM",
   "EXPLAINS",
-  // Canon symbolic / resonance verbs (ADR-074).
+  // Canon symbolic / resonance verbs (ADR-077).
   "HOLDS_OPEN",
   "REFUSES_TO_NAME",
   "CARRIES_CHARGE_FOR",

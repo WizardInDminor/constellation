@@ -1,4 +1,4 @@
-"""Canon readiness Phase 1 (ADR-073): node uncertainty metadata.
+"""Canon readiness Phase 1 (ADR-076): node uncertainty metadata.
 
 Covers create, update (set + clear), CHECK-constraint validation, list filters,
 and backward-compatibility for nodes created without the fields.

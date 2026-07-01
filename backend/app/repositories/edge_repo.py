@@ -249,7 +249,7 @@ async def list_recent(
 
 
 async def list_open_tensions(db: aiosqlite.Connection, *, limit: int = 100) -> list[OpenThreadEdge]:
-    """Unresolved tension edges (ADR-073 Open Threads view).
+    """Unresolved tension edges (ADR-076 Open Threads view).
 
     Returns CONTRADICTS / QUESTIONS edges with `resolved_at IS NULL` — the
     tensions the author is still sitting with — newest first, with both endpoint

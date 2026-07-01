@@ -1,4 +1,4 @@
--- Canon readiness Phase 1: uncertainty metadata on nodes (ADR-073).
+-- Canon readiness Phase 1: uncertainty metadata on nodes (ADR-076).
 --
 -- Canon (the trilogy this schema addition supports) treats "not yet knowing"
 -- as a first-class state: an image can carry charge before it has a scene, a
@@ -15,7 +15,7 @@
 -- CHECK-constraint table-recreate ceremony is required.
 
 -- ================================================================
--- NODES: uncertainty / canon-status columns (ADR-073)
+-- NODES: uncertainty / canon-status columns (ADR-076)
 -- ================================================================
 
 -- canon_status — where a node sits on the fixed↔speculative axis.

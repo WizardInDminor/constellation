@@ -1,4 +1,4 @@
-"""Canon readiness Phase 3/4 (ADR-073): uncertainty AI-visibility + saved views.
+"""Canon readiness Phase 3/4 (ADR-076): uncertainty AI-visibility + saved views.
 
 Covers the context-assembly Status line, the deterministic /canon/views and
 /canon/open-threads endpoints, and the /canon/ask narration path (fake gen).

@@ -118,7 +118,7 @@ export function getNode(id: string): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`);
 }
 
-// Canon uncertainty vocabularies (ADR-073), extracted from the generated schema.
+// Canon uncertainty vocabularies (ADR-076), extracted from the generated schema.
 export type CanonStatus = NonNullable<NodeDetail["canon_status"]>;
 export type NodeStatusValue = NonNullable<NodeDetail["node_status"]>;
 export type Charge = NonNullable<NodeDetail["charge"]>;
@@ -136,7 +136,7 @@ export function updateNode(
     story_time?: string | null;
     prose_status?: string | null;
     manuscript_location?: string | null;
-    // Canon uncertainty metadata (ADR-073). Same semantics: null clears.
+    // Canon uncertainty metadata (ADR-076). Same semantics: null clears.
     canon_status?: CanonStatus | null;
     node_status?: NodeStatusValue | null;
     charge?: Charge | null;
@@ -181,7 +181,7 @@ export interface ListNodesFilters {
   noOutgoing?: boolean;
   noEdges?: boolean;
   summaryMaxLength?: number;
-  // Canon uncertainty filters (ADR-073).
+  // Canon uncertainty filters (ADR-076).
   canonStatus?: CanonStatus;
   nodeStatus?: NodeStatusValue;
   chargeIn?: Charge[];
@@ -244,7 +244,7 @@ export function searchNodes(q: string, limit = 10): Promise<NodeRef[]> {
   return request(`/api/v1/nodes/search?${params}`);
 }
 
-// ── Canon views (ADR-073) ─────────────────────────────────────────────────────
+// ── Canon views (ADR-076) ─────────────────────────────────────────────────────
 export type CanonView = components["schemas"]["CanonAskRequest"]["view"];
 export type CanonViewResponse = components["schemas"]["CanonViewResponse"];
 export type CanonAskResponse = components["schemas"]["CanonAskResponse"];

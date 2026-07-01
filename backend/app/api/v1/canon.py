@@ -1,4 +1,4 @@
-"""Canon readiness (ADR-073) — routes for the uncertainty saved-views and the
+"""Canon readiness (ADR-076) — routes for the uncertainty saved-views and the
 deterministic AI narration endpoint.
 
 - GET  /canon/views/{view}   → deterministic node list (no AI). Backs the

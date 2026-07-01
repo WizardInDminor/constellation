@@ -1,4 +1,4 @@
-"""Canon readiness (ADR-073) — deterministic uncertainty views + AI narration.
+"""Canon readiness (ADR-076) — deterministic uncertainty views + AI narration.
 
 The node set for every view is chosen by structured SQL filters, never by asking
 the model to infer epistemic status from prose. The `ask` path then narrates that

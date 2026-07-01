@@ -172,7 +172,7 @@ def _excerpt(text: str) -> str:
 
 
 def _uncertainty_line(node: object) -> str | None:
-    """Render a node's Canon uncertainty metadata (ADR-073) as a context line.
+    """Render a node's Canon uncertainty metadata (ADR-076) as a context line.
 
     Returns None when nothing is set (the common research case) so plain notes
     stay clean. The AI reads structured fields here rather than inferring

@@ -169,18 +169,18 @@ async def list_nodes(
         bool, Query(description="Exclude is_story_event=1 nodes (ADR-064)")
     ] = False,
     canon_status: Annotated[
-        str | None, Query(description="Filter by canon_status (ADR-073)")
+        str | None, Query(description="Filter by canon_status (ADR-076)")
     ] = None,
-    node_status: Annotated[str | None, Query(description="Filter by node_status (ADR-073)")] = None,
+    node_status: Annotated[str | None, Query(description="Filter by node_status (ADR-076)")] = None,
     charge_in: Annotated[
         list[str] | None,
-        Query(description="Filter to nodes whose charge is one of these values (ADR-073)"),
+        Query(description="Filter to nodes whose charge is one of these values (ADR-076)"),
     ] = None,
     do_not_name_yet: Annotated[
-        bool, Query(description="Only nodes with the do_not_name_yet flag set (ADR-073)")
+        bool, Query(description="Only nodes with the do_not_name_yet flag set (ADR-076)")
     ] = False,
     no_scene: Annotated[
-        bool, Query(description="Only nodes with no edge to a story event (ADR-073)")
+        bool, Query(description="Only nodes with no edge to a story event (ADR-076)")
     ] = False,
 ) -> Paginated[NodeSummary]:
     items, total = await node_repo.list_nodes(

@@ -29,7 +29,7 @@ EdgeType = Literal[
     "FOLLOWS_FROM",
     # Narrative (ADR-052 Slice 4 addendum). Lore → character/location/event.
     "EXPLAINS",
-    # Canon symbolic / resonance verbs (ADR-074). Narrative/worldbuilding
+    # Canon symbolic / resonance verbs (ADR-077). Narrative/worldbuilding
     # projects extend the vocabulary where typed filtering is valuable; nuance
     # still lives in the edge note.
     "HOLDS_OPEN",

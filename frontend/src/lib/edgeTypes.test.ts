@@ -4,7 +4,7 @@ import { EDGE_TYPES, EDGE_COLORS, EDGE_TYPE_META } from "./edgeTypes";
 
 // Locks the three parallel edge-type tables in sync — a new verb added to
 // EDGE_TYPES without a color or meta entry would render as `undefined` classes
-// / crash the label lookup. Also asserts the Canon verbs (ADR-074) are present.
+// / crash the label lookup. Also asserts the Canon verbs (ADR-077) are present.
 describe("edge type tables", () => {
   it("every edge type has a color and metadata entry", () => {
     for (const t of EDGE_TYPES) {

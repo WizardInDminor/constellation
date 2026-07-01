@@ -155,7 +155,7 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
     assert incoming[0].classifier_rationale == rationale
 
 
-# ── Canon symbolic / resonance verbs (ADR-074) ──────────────────────────────
+# ── Canon symbolic / resonance verbs (ADR-077) ──────────────────────────────
 
 
 async def test_canon_edge_types_holds_open_and_prototype(db):
