@@ -106,13 +106,15 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     label: "Elaborates",
     directional: true,
     description: "A zooms in on an aspect of B.",
-    example: "Use when this note adds detail or nuance to a broader idea in the other note.",
+    example:
+      "Use when this note adds detail or nuance to a broader idea in the other note.",
   },
   ANALOGOUS_TO: {
     label: "Analogous to",
     directional: false,
     description: "A and B share structural similarity, often across domains.",
-    example: "Use when two ideas mirror each other even though they come from different fields.",
+    example:
+      "Use when two ideas mirror each other even though they come from different fields.",
   },
   QUESTIONS: {
     label: "Questions",
@@ -124,7 +126,8 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     label: "Inspired by",
     directional: true,
     description: "A is a looser creative or associative link from B.",
-    example: "Use when the other note sparked this one but isn't strictly evidence for it.",
+    example:
+      "Use when the other note sparked this one but isn't strictly evidence for it.",
   },
   COLLECTS: {
     label: "Collects",
@@ -136,66 +139,80 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     label: "Cites",
     directional: true,
     description: "A references B as a specific reference, footnote-shaped.",
-    example: "Use when this note (often a synthesis) points at the other as one of its sources.",
+    example:
+      "Use when this note (often a synthesis) points at the other as one of its sources.",
   },
   BUILDS_ON: {
     label: "Builds on",
     directional: true,
     description: "A advances or extends B's framework.",
-    example: "Use when this note picks up where the other left off and develops it further.",
+    example:
+      "Use when this note picks up where the other left off and develops it further.",
   },
   APPLIES_TO: {
     label: "Applies to",
     directional: true,
     description: "A applies B's idea to a new domain or instance.",
-    example: "Use when this note takes the other's concept and uses it in a different context.",
+    example:
+      "Use when this note takes the other's concept and uses it in a different context.",
   },
   MEASURES: {
     label: "Measures",
     directional: true,
     description: "A is an empirical measurement of B's claim or quantity.",
-    example: "Use when this note records a measurement that tests the other note's claim.",
+    example:
+      "Use when this note records a measurement that tests the other note's claim.",
   },
   EXTENDS: {
     label: "Extends",
     directional: true,
-    description: "A adds scope or generality to B (dimension-ward rather than depth-ward).",
-    example: "Use when this note broadens the conditions under which the other note's idea holds.",
+    description:
+      "A adds scope or generality to B (dimension-ward rather than depth-ward).",
+    example:
+      "Use when this note broadens the conditions under which the other note's idea holds.",
   },
   REFINES: {
     label: "Refines",
     directional: true,
     description: "A sharpens or specializes B without contradicting it.",
-    example: "Use when this note narrows or qualifies the other note without disagreeing.",
+    example:
+      "Use when this note narrows or qualifies the other note without disagreeing.",
   },
   SUPERSEDED_BY: {
     label: "Superseded by",
     directional: true,
-    description: "A has been replaced or outdated by B; the current view lives in B.",
-    example: "Use when your thinking has moved on from this note to a later one.",
+    description:
+      "A has been replaced or outdated by B; the current view lives in B.",
+    example:
+      "Use when your thinking has moved on from this note to a later one.",
   },
   SCOPED_TO: {
     label: "Scoped to",
     directional: true,
-    description: "A applies only within the scope or boundary established by B.",
-    example: "Use when this note's claim or method is valid only inside the other note's regime or domain.",
+    description:
+      "A applies only within the scope or boundary established by B.",
+    example:
+      "Use when this note's claim or method is valid only inside the other note's regime or domain.",
   },
   REGIME_OF: {
     label: "Regime of",
     directional: true,
     description: "A defines the regime or frame under which B is meaningful.",
-    example: "Use when this note sets the operative conditions or assumptions that the other note depends on.",
+    example:
+      "Use when this note sets the operative conditions or assumptions that the other note depends on.",
   },
   FOLLOWS_FROM: {
     label: "Follows from",
     directional: true,
     description: "A follows from B causally, logically, or temporally.",
-    example: "Use for sequencing: when this note is a consequence of, or comes after, the other.",
+    example:
+      "Use for sequencing: when this note is a consequence of, or comes after, the other.",
   },
   EXPLAINS: {
     label: "Explains",
     directional: true,
-    description: "A (lore) provides backdrop/history/cause that explains B (character/location/event).",
+    description:
+      "A (lore) provides backdrop/history/cause that explains B (character/location/event).",
     example:
       "Use from a lore note to a character whose behavior the lore makes sense of, or to a location whose atmosphere the lore underwrites.",
   },
@@ -203,20 +220,25 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
   HOLDS_OPEN: {
     label: "Holds open",
     directional: true,
-    description: "A sustains B's openness / unresolvedness rather than closing or naming it.",
-    example: "Michael → HOLDS_OPEN → Final Shared Moment: he preserves the channel, he doesn't project truth.",
+    description:
+      "A sustains B's openness / unresolvedness rather than closing or naming it.",
+    example:
+      "Michael → HOLDS_OPEN → Final Shared Moment: he preserves the channel, he doesn't project truth.",
   },
   REFUSES_TO_NAME: {
     label: "Refuses to name",
     directional: true,
-    description: "A deliberately withholds a name/definition from B, keeping it load-bearing.",
-    example: "Use when a character or scene declines to pin down a mystery that must stay unnamed.",
+    description:
+      "A deliberately withholds a name/definition from B, keeping it load-bearing.",
+    example:
+      "Use when a character or scene declines to pin down a mystery that must stay unnamed.",
   },
   CARRIES_CHARGE_FOR: {
     label: "Carries charge for",
     directional: true,
     description: "A holds emotional/symbolic charge on behalf of B.",
-    example: "Use from a charged image to the theme or character it electrifies.",
+    example:
+      "Use from a charged image to the theme or character it electrifies.",
   },
   FORESHADOWS: {
     label: "Foreshadows",
@@ -227,26 +249,31 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
   MIRRORS: {
     label: "Mirrors",
     directional: false,
-    description: "A and B reflect each other — parallel structure, inverted or echoed.",
+    description:
+      "A and B reflect each other — parallel structure, inverted or echoed.",
     example: "Use between two scenes or images that rhyme across the story.",
   },
   INVERSION_OF: {
     label: "Inversion of",
     directional: false,
-    description: "A is the inverse/negative of B — same shape, opposite valence.",
-    example: "Use between a symbol and its dark counterpart (natural light / artificial light).",
+    description:
+      "A is the inverse/negative of B — same shape, opposite valence.",
+    example:
+      "Use between a symbol and its dark counterpart (natural light / artificial light).",
   },
   PROTOTYPE_OF: {
     label: "Prototype of",
     directional: true,
     description: "A is an early/partial version that B fully realizes.",
-    example: "The Clearing → PROTOTYPE_OF → Final Shared Moment: the first, smaller instance of the later thing.",
+    example:
+      "The Clearing → PROTOTYPE_OF → Final Shared Moment: the first, smaller instance of the later thing.",
   },
   AMPLIFIES: {
     label: "Amplifies",
     directional: true,
     description: "A intensifies or magnifies B.",
-    example: "Use when a force, character, or image turns up the intensity of another.",
+    example:
+      "Use when a force, character, or image turns up the intensity of another.",
   },
   CORRUPTS: {
     label: "Corrupts",
@@ -276,7 +303,8 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
     label: "Threatens",
     directional: true,
     description: "A endangers or menaces B.",
-    example: "Use when a force, institution, or character imperils another node.",
+    example:
+      "Use when a force, institution, or character imperils another node.",
   },
 };
 

@@ -27,6 +27,9 @@ import type {
   LinkSuggestion,
   NodeRef,
   SourceSummary,
+  CanonStatus,
+  NodeStatusValue,
+  Charge,
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
 import {
@@ -262,6 +265,145 @@ function TagEditor({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── CanonPanel (ADR-073) ──────────────────────────────────────────────────────
+
+const CANON_STATUS_OPTIONS = [
+  ["", "—"],
+  ["canon", "Canon"],
+  ["provisional", "Provisional"],
+  ["speculative", "Speculative"],
+  ["image_only", "Image only"],
+  ["discarded", "Discarded"],
+] as const;
+
+const NODE_STATUS_OPTIONS = [
+  ["", "—"],
+  ["emerging", "Emerging"],
+  ["stable", "Stable"],
+  ["contradicted", "Contradicted"],
+  ["unresolved", "Unresolved"],
+  ["retired", "Retired"],
+] as const;
+
+const CHARGE_OPTIONS = [
+  ["", "—"],
+  ["low", "Low"],
+  ["medium", "Medium"],
+  ["high", "High"],
+  ["goosebump", "Goosebump"],
+] as const;
+
+/**
+ * Editor for a node's Canon uncertainty metadata. Every control writes through
+ * `updateNode`; an empty select value sends null (clears the column) so the
+ * author can un-set a status without deleting the note.
+ */
+function CanonPanel({
+  node,
+  onChange,
+}: {
+  node: NodeDetail;
+  onChange: (n: NodeDetail) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  async function save(patch: Parameters<typeof updateNode>[1]) {
+    setSaving(true);
+    try {
+      onChange(await updateNode(node.id, patch));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="section-label">Canon status</h3>
+        {node.do_not_name_yet && (
+          <span
+            className="badge bg-stone-200 text-stone-700"
+            title="Load-bearing mystery — kept open on purpose"
+          >
+            do not name yet
+          </span>
+        )}
+      </div>
+
+      <label className="flex flex-col gap-1 text-xs text-gray-500">
+        Canon status
+        <select
+          value={node.canon_status ?? ""}
+          disabled={saving}
+          aria-label="Canon status"
+          className="input"
+          onChange={(e) =>
+            save({
+              canon_status: (e.target.value || null) as CanonStatus | null,
+            })
+          }
+        >
+          {CANON_STATUS_OPTIONS.map(([v, label]) => (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-gray-500">
+        Development status
+        <select
+          value={node.node_status ?? ""}
+          disabled={saving}
+          aria-label="Development status"
+          className="input"
+          onChange={(e) =>
+            save({
+              node_status: (e.target.value || null) as NodeStatusValue | null,
+            })
+          }
+        >
+          {NODE_STATUS_OPTIONS.map(([v, label]) => (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-gray-500">
+        Charge
+        <select
+          value={node.charge ?? ""}
+          disabled={saving}
+          aria-label="Charge"
+          className="input"
+          onChange={(e) =>
+            save({ charge: (e.target.value || null) as Charge | null })
+          }
+        >
+          {CHARGE_OPTIONS.map(([v, label]) => (
+            <option key={v} value={v}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex items-center gap-2 text-xs text-gray-600">
+        <input
+          type="checkbox"
+          checked={!!node.do_not_name_yet}
+          disabled={saving}
+          onChange={(e) => save({ do_not_name_yet: e.target.checked })}
+        />
+        Do not name yet (protect this mystery)
+      </label>
     </div>
   );
 }
@@ -1144,6 +1286,11 @@ export default function NodePage() {
           {node.type !== "fleeting" && (
             <div className="card p-4">
               <SourcePanel node={node} onChange={reload} />
+            </div>
+          )}
+          {node.type !== "fleeting" && (
+            <div className="card p-4">
+              <CanonPanel node={node} onChange={setNode} />
             </div>
           )}
           <div className="card p-4">
