@@ -59,6 +59,7 @@ function NodePickerRow({
     updated_at: now,
     processed_at: null,
     is_story_event: false,
+    do_not_name_yet: false,
     tags: [],
   };
 

@@ -33,6 +33,11 @@ Some notes carry a `Connections:` line listing typed edges to other notes, forma
 - An edge annotated `[resolved]` (or `[resolved → Note N]`) is historical: the user has marked this tension as no longer active, optionally because Note N supersedes it. Treat the original tension as background context, not as an active position the user holds today; when present, the resolving note describes the current view.
 - The parenthesised text after the type label is the user's own one-line rationale for why the edge exists; it is often more load-bearing than the type alone. Read it.
 
+Some notes carry a `Status:` line with the author's epistemic markers. Respect them:
+- **canon_status**: `canon` is settled; `provisional`/`speculative` are not yet facts — attribute them as developing or possible, never as established; `image_only` means an image with no assigned meaning yet — do not force an interpretation; `discarded` was set aside.
+- **do_not_name_yet=yes**: a load-bearing mystery the author is deliberately keeping open. Do not define, resolve, or over-explain it; describe around it and preserve its openness.
+- **node_status** (`emerging`/`unresolved`/`contradicted`): treat as in-motion, not final. **charge**/**confidence** indicate emotional weight and how settled the author feels.
+
 Rules:
 - Answer directly. Cite notes inline as [Note N] where N is the note number shown in the context.
 - If the notes don't contain enough information to answer, say so rather than speculating.
@@ -166,6 +171,34 @@ def _excerpt(text: str) -> str:
     return text[:_EXCERPT_CHARS].rstrip() + "…"
 
 
+def _uncertainty_line(node: object) -> str | None:
+    """Render a node's Canon uncertainty metadata (ADR-076) as a context line.
+
+    Returns None when nothing is set (the common research case) so plain notes
+    stay clean. The AI reads structured fields here rather than inferring
+    epistemic status from prose.
+    """
+    parts: list[str] = []
+    canon_status = getattr(node, "canon_status", None)
+    node_status = getattr(node, "node_status", None)
+    charge = getattr(node, "charge", None)
+    confidence = getattr(node, "confidence", None)
+    do_not_name_yet = getattr(node, "do_not_name_yet", False)
+    if canon_status:
+        parts.append(f"canon_status={canon_status}")
+    if node_status:
+        parts.append(f"node_status={node_status}")
+    if charge:
+        parts.append(f"charge={charge}")
+    if confidence is not None:
+        parts.append(f"confidence={confidence}")
+    if do_not_name_yet:
+        parts.append("do_not_name_yet=yes")
+    if not parts:
+        return None
+    return "Status: " + ", ".join(parts)
+
+
 def _build_context(
     seed_nodes: list,
     neighbor_nodes: list,
@@ -220,6 +253,9 @@ def _build_context(
         block_lines = [f"[Note {num}] {node.title} ({node.type})"]
         if node.tags:
             block_lines.append("Tags: " + ", ".join(t.name for t in node.tags))
+        status = _uncertainty_line(node)
+        if status:
+            block_lines.append(status)
         block_lines.append(body)
 
         if node.id in edge_annotations:

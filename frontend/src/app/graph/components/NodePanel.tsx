@@ -166,7 +166,7 @@ function NotePanel({
             </div>
           ) : detail?.content || detail?.summary ? (
             <NoteContent
-              content={detail.content || detail.summary}
+              content={detail.content || detail.summary || ""}
               className="prose prose-sm prose-invert max-w-none text-sm text-gray-300 leading-relaxed"
             />
           ) : (

@@ -5,7 +5,11 @@ import { applyPoolFilters } from "./filterPool";
 
 const NOW = new Date("2026-05-15T12:00:00Z").getTime();
 
-function mkNode(id: string, tagIds: string[], createdDaysAgo: number): NodeSummary {
+function mkNode(
+  id: string,
+  tagIds: string[],
+  createdDaysAgo: number,
+): NodeSummary {
   const createdMs = NOW - createdDaysAgo * 24 * 60 * 60 * 1000;
   return {
     id,
@@ -16,6 +20,7 @@ function mkNode(id: string, tagIds: string[], createdDaysAgo: number): NodeSumma
     updated_at: new Date(createdMs).toISOString(),
     processed_at: null,
     is_story_event: false,
+    do_not_name_yet: false,
     tags: tagIds.map((t) => ({ id: t, name: t, color: null })),
   };
 }

@@ -3,9 +3,11 @@ import type { components } from "./api-types";
 export type NodeDetail = components["schemas"]["NodeDetail"];
 export type NodeSummary = components["schemas"]["NodeSummary"];
 export type NodeRef = components["schemas"]["NodeRef"];
-export type SuggestPermanentResponse = components["schemas"]["SuggestPermanentResponse"];
+export type SuggestPermanentResponse =
+  components["schemas"]["SuggestPermanentResponse"];
 export type PermanentCandidate = components["schemas"]["PermanentCandidate"];
-export type SuggestLinksResponse = components["schemas"]["SuggestLinksResponse"];
+export type SuggestLinksResponse =
+  components["schemas"]["SuggestLinksResponse"];
 export type LinkSuggestion = components["schemas"]["LinkSuggestion"];
 export type PaginatedNodes = components["schemas"]["Paginated_NodeSummary_"];
 export type TagRef = components["schemas"]["TagRef"];
@@ -32,7 +34,8 @@ export type ProjectDetail = components["schemas"]["ProjectDetail"];
 export type ProjectScope = components["schemas"]["ProjectScope"];
 export type ProjectScopeUpdate = components["schemas"]["ProjectScopeUpdate"];
 export type ProjectCreate = components["schemas"]["ProjectCreate"];
-export type ProjectResolveResponse = components["schemas"]["ProjectResolveResponse"];
+export type ProjectResolveResponse =
+  components["schemas"]["ProjectResolveResponse"];
 export type Draft = components["schemas"]["Draft"];
 export type WorkSession = components["schemas"]["WorkSession"];
 export type WorkSessionCreate = components["schemas"]["WorkSessionCreate"];
@@ -42,7 +45,8 @@ export type WorkSessionUpdate = components["schemas"]["WorkSessionUpdate"];
 export type ProjectMode = ProjectScope["mode"];
 export type SessionMode = WorkSession["mode"];
 export type SessionStatus = WorkSession["status"];
-export type ClusterSuggestResponse = components["schemas"]["ClusterSuggestResponse"];
+export type ClusterSuggestResponse =
+  components["schemas"]["ClusterSuggestResponse"];
 export type ClusterLinkProposal = components["schemas"]["ClusterLinkProposal"];
 export type TriangleCandidate = components["schemas"]["TriangleCandidate"];
 export type NodeUsed = components["schemas"]["NodeUsed"];
@@ -50,11 +54,13 @@ export type EdgeTraversed = components["schemas"]["EdgeTraversed"];
 export type GraphData = components["schemas"]["GraphData"];
 export type GraphNodeRef = components["schemas"]["GraphNodeRef"];
 export type GraphEdgeRef = components["schemas"]["GraphEdgeRef"];
-export type IngestDocumentResponse = components["schemas"]["IngestDocumentResponse"];
+export type IngestDocumentResponse =
+  components["schemas"]["IngestDocumentResponse"];
 export type IngestSourceCreate = components["schemas"]["IngestSourceCreate"];
 export type ChunkResult = components["schemas"]["ChunkResult"];
 export type LiteratureCandidate = components["schemas"]["LiteratureCandidate"];
-export type PendingIngestResponse = components["schemas"]["PendingIngestResponse"];
+export type PendingIngestResponse =
+  components["schemas"]["PendingIngestResponse"];
 export type EmbeddingJob = components["schemas"]["EmbeddingJob"];
 export type EmbeddingJobCounts = components["schemas"]["EmbeddingJobCounts"];
 export type EmbeddingJobList = components["schemas"]["EmbeddingJobList"];
@@ -70,8 +76,13 @@ export type CorpusStats = {
   last_processed_at: string | null;
 };
 // BridgeCandidate is not yet in the generated schema — define manually from backend model
-export type BridgeCandidate = { node_a: NodeRef; node_b: NodeRef; similarity: number };
-export type BridgeClassification = components["schemas"]["BridgeClassification"];
+export type BridgeCandidate = {
+  node_a: NodeRef;
+  node_b: NodeRef;
+  similarity: number;
+};
+export type BridgeClassification =
+  components["schemas"]["BridgeClassification"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -89,7 +100,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function createFleetingNode(title: string, content: string): Promise<NodeDetail> {
+export function createFleetingNode(
+  title: string,
+  content: string,
+): Promise<NodeDetail> {
   return request("/api/v1/nodes/fleeting", {
     method: "POST",
     body: JSON.stringify({ title, content }),
@@ -104,6 +118,11 @@ export function getNode(id: string): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`);
 }
 
+// Canon uncertainty vocabularies (ADR-076), extracted from the generated schema.
+export type CanonStatus = NonNullable<NodeDetail["canon_status"]>;
+export type NodeStatusValue = NonNullable<NodeDetail["node_status"]>;
+export type Charge = NonNullable<NodeDetail["charge"]>;
+
 export function updateNode(
   id: string,
   patch: {
@@ -117,6 +136,12 @@ export function updateNode(
     story_time?: string | null;
     prose_status?: string | null;
     manuscript_location?: string | null;
+    // Canon uncertainty metadata (ADR-076). Same semantics: null clears.
+    canon_status?: CanonStatus | null;
+    node_status?: NodeStatusValue | null;
+    charge?: Charge | null;
+    do_not_name_yet?: boolean | null;
+    confidence?: number | null;
   },
 ): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`, {
@@ -133,7 +158,9 @@ export function deleteNode(id: string): Promise<void> {
   return request(`/api/v1/nodes/${id}`, { method: "DELETE" });
 }
 
-export function suggestPermanent(id: string): Promise<SuggestPermanentResponse> {
+export function suggestPermanent(
+  id: string,
+): Promise<SuggestPermanentResponse> {
   return request(`/api/v1/rag/suggest-permanent/${id}`, { method: "POST" });
 }
 
@@ -154,6 +181,12 @@ export interface ListNodesFilters {
   noOutgoing?: boolean;
   noEdges?: boolean;
   summaryMaxLength?: number;
+  // Canon uncertainty filters (ADR-076).
+  canonStatus?: CanonStatus;
+  nodeStatus?: NodeStatusValue;
+  chargeIn?: Charge[];
+  doNotNameYet?: boolean;
+  noScene?: boolean;
 }
 
 export function listNodes(
@@ -162,7 +195,10 @@ export function listNodes(
   pageSize = 50,
   filters: ListNodesFilters = {},
 ): Promise<PaginatedNodes> {
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
   if (type) params.set("type", type);
   if (filters.noSummary) params.set("no_summary", "true");
   if (filters.noOutgoing) params.set("no_outgoing", "true");
@@ -170,6 +206,12 @@ export function listNodes(
   if (filters.summaryMaxLength !== undefined) {
     params.set("summary_max_length", String(filters.summaryMaxLength));
   }
+  if (filters.canonStatus) params.set("canon_status", filters.canonStatus);
+  if (filters.nodeStatus) params.set("node_status", filters.nodeStatus);
+  if (filters.chargeIn)
+    for (const c of filters.chargeIn) params.append("charge_in", c);
+  if (filters.doNotNameYet) params.set("do_not_name_yet", "true");
+  if (filters.noScene) params.set("no_scene", "true");
   return request(`/api/v1/nodes?${params}`);
 }
 
@@ -200,6 +242,28 @@ export function createStructureNode(data: {
 export function searchNodes(q: string, limit = 10): Promise<NodeRef[]> {
   const params = new URLSearchParams({ q, limit: String(limit) });
   return request(`/api/v1/nodes/search?${params}`);
+}
+
+// ── Canon views (ADR-076) ─────────────────────────────────────────────────────
+export type CanonView = components["schemas"]["CanonAskRequest"]["view"];
+export type CanonViewResponse = components["schemas"]["CanonViewResponse"];
+export type CanonAskResponse = components["schemas"]["CanonAskResponse"];
+export type OpenThreadsResponse = components["schemas"]["OpenThreadsResponse"];
+export type OpenThreadEdge = components["schemas"]["OpenThreadEdge"];
+
+export function getCanonView(view: CanonView): Promise<CanonViewResponse> {
+  return request(`/api/v1/canon/views/${view}`);
+}
+
+export function getOpenThreads(): Promise<OpenThreadsResponse> {
+  return request("/api/v1/canon/open-threads");
+}
+
+export function canonAsk(view: CanonView): Promise<CanonAskResponse> {
+  return request("/api/v1/canon/ask", {
+    method: "POST",
+    body: JSON.stringify({ view }),
+  });
 }
 
 // Tags
@@ -267,7 +331,9 @@ export function getSource(id: string): Promise<SourceDetail> {
 // it when they explicitly want a different status (e.g. learning-map flow
 // marks suggestions with status="suggested").
 export function createSource(
-  data: Omit<SourceCreate, "id" | "status"> & { status?: SourceCreate["status"] },
+  data: Omit<SourceCreate, "id" | "status"> & {
+    status?: SourceCreate["status"];
+  },
 ): Promise<SourceDetail> {
   return request("/api/v1/sources", {
     method: "POST",
@@ -275,7 +341,10 @@ export function createSource(
   });
 }
 
-export function updateSource(id: string, data: SourceUpdate): Promise<SourceDetail> {
+export function updateSource(
+  id: string,
+  data: SourceUpdate,
+): Promise<SourceDetail> {
   return request(`/api/v1/sources/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -286,26 +355,37 @@ export function deleteSource(id: string): Promise<void> {
   return request(`/api/v1/sources/${id}`, { method: "DELETE" });
 }
 
-export function openSource(id: string): Promise<{ opened: string; warning?: string }> {
+export function openSource(
+  id: string,
+): Promise<{ opened: string; warning?: string }> {
   return request(`/api/v1/sources/${id}/open`);
 }
 
 // Search
-export function searchSemantic(query: string, limit = 20): Promise<SearchResponse> {
+export function searchSemantic(
+  query: string,
+  limit = 20,
+): Promise<SearchResponse> {
   return request("/api/v1/search/semantic", {
     method: "POST",
     body: JSON.stringify({ query, limit }),
   });
 }
 
-export function searchFulltext(query: string, limit = 20): Promise<SearchResponse> {
+export function searchFulltext(
+  query: string,
+  limit = 20,
+): Promise<SearchResponse> {
   return request("/api/v1/search/fulltext", {
     method: "POST",
     body: JSON.stringify({ query, limit }),
   });
 }
 
-export function searchHybrid(query: string, limit = 20): Promise<SearchResponse> {
+export function searchHybrid(
+  query: string,
+  limit = 20,
+): Promise<SearchResponse> {
   return request("/api/v1/search/hybrid", {
     method: "POST",
     body: JSON.stringify({ query, limit }),
@@ -339,7 +419,9 @@ export function ingestDocument(body: {
   });
 }
 
-export function getPendingIngest(sourceId: string): Promise<PendingIngestResponse> {
+export function getPendingIngest(
+  sourceId: string,
+): Promise<PendingIngestResponse> {
   return request(`/api/v1/ingest/pending/${sourceId}`);
 }
 
@@ -348,11 +430,13 @@ export function clearPendingIngest(sourceId: string): Promise<void> {
 }
 
 // Discover
-export function listOrphans(opts: {
-  limit?: number;
-  offset?: number;
-  nodeType?: string;
-} = {}): Promise<NodeSummary[]> {
+export function listOrphans(
+  opts: {
+    limit?: number;
+    offset?: number;
+    nodeType?: string;
+  } = {},
+): Promise<NodeSummary[]> {
   const params = new URLSearchParams();
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.offset !== undefined) params.set("offset", String(opts.offset));
@@ -361,12 +445,14 @@ export function listOrphans(opts: {
   return request(`/api/v1/discover/orphans${qs ? `?${qs}` : ""}`);
 }
 
-export function listStale(opts: {
-  limit?: number;
-  offset?: number;
-  nodeType?: string;
-  excludeFleeting?: boolean;
-} = {}): Promise<NodeSummary[]> {
+export function listStale(
+  opts: {
+    limit?: number;
+    offset?: number;
+    nodeType?: string;
+    excludeFleeting?: boolean;
+  } = {},
+): Promise<NodeSummary[]> {
   const params = new URLSearchParams();
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.offset !== undefined) params.set("offset", String(opts.offset));
@@ -377,11 +463,13 @@ export function listStale(opts: {
   return request(`/api/v1/discover/stale${qs ? `?${qs}` : ""}`);
 }
 
-export function listBridges(opts: {
-  limit?: number;
-  minSimilarity?: number;
-  crossTag?: boolean;
-} = {}): Promise<BridgeCandidate[]> {
+export function listBridges(
+  opts: {
+    limit?: number;
+    minSimilarity?: number;
+    crossTag?: boolean;
+  } = {},
+): Promise<BridgeCandidate[]> {
   const params = new URLSearchParams();
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.minSimilarity !== undefined)
@@ -391,10 +479,12 @@ export function listBridges(opts: {
   return request(`/api/v1/discover/bridges${qs ? `?${qs}` : ""}`);
 }
 
-export function listTriangles(opts: {
-  limit?: number;
-  minIntermediates?: number;
-} = {}): Promise<TriangleCandidate[]> {
+export function listTriangles(
+  opts: {
+    limit?: number;
+    minIntermediates?: number;
+  } = {},
+): Promise<TriangleCandidate[]> {
   const params = new URLSearchParams();
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
   if (opts.minIntermediates !== undefined)
@@ -413,9 +503,10 @@ export function classifyBridge(
   });
 }
 
-export function clusterSuggestLinks(
-  body: { node_ids?: string[]; tag_id?: string },
-): Promise<ClusterSuggestResponse> {
+export function clusterSuggestLinks(body: {
+  node_ids?: string[];
+  tag_id?: string;
+}): Promise<ClusterSuggestResponse> {
   return request("/api/v1/rag/suggest-links/cluster", {
     method: "POST",
     body: JSON.stringify(body),
@@ -440,7 +531,8 @@ export function ragQuery(
       query,
       depth: opts.depth ?? 1,
       mode: opts.mode,
-      tag_filter: opts.tag_filter && opts.tag_filter.length > 0 ? opts.tag_filter : null,
+      tag_filter:
+        opts.tag_filter && opts.tag_filter.length > 0 ? opts.tag_filter : null,
       since: opts.since ?? null,
     }),
   });
@@ -475,17 +567,23 @@ export function saveAnswer(data: {
 }
 
 // Admin / embedding jobs
-export function getEmbeddingJobs(status?: EmbeddingJobStatus): Promise<EmbeddingJobList> {
+export function getEmbeddingJobs(
+  status?: EmbeddingJobStatus,
+): Promise<EmbeddingJobList> {
   const qs = status ? `?status=${status}` : "";
   return request(`/api/v1/config/embedding-jobs${qs}`);
 }
 
 export function retryEmbeddingJob(jobId: string): Promise<EmbeddingJob> {
-  return request(`/api/v1/config/embedding-jobs/${jobId}/retry`, { method: "POST" });
+  return request(`/api/v1/config/embedding-jobs/${jobId}/retry`, {
+    method: "POST",
+  });
 }
 
 export function retryAllFailedEmbeddingJobs(): Promise<{ retried: number }> {
-  return request("/api/v1/config/embedding-jobs/retry-all-failed", { method: "POST" });
+  return request("/api/v1/config/embedding-jobs/retry-all-failed", {
+    method: "POST",
+  });
 }
 
 export function getAdminStatus(): Promise<AdminStatus> {
@@ -587,7 +685,8 @@ export type TimelineResponse = components["schemas"]["TimelineResponse"];
 export type TimelineLane = components["schemas"]["TimelineLane"];
 export type TimelineEvent = components["schemas"]["TimelineEvent"];
 export type StoryEventCreate = components["schemas"]["StoryEventCreate"];
-export type TimelinePositionUpdate = components["schemas"]["TimelinePositionUpdate"];
+export type TimelinePositionUpdate =
+  components["schemas"]["TimelinePositionUpdate"];
 export type ActSpan = components["schemas"]["ActSpan"];
 export type ActSpanCreate = components["schemas"]["ActSpanCreate"];
 export type ProseStatus = NonNullable<TimelineEvent["prose_status"]>;
@@ -718,10 +817,13 @@ export function attachNodeToSession(
   nodeId: string,
   sessionTagged = true,
 ): Promise<{ attached: boolean }> {
-  return request(`/api/v1/projects/${hubId}/sessions/${sessionId}/attach-node`, {
-    method: "POST",
-    body: JSON.stringify({ node_id: nodeId, session_tagged: sessionTagged }),
-  });
+  return request(
+    `/api/v1/projects/${hubId}/sessions/${sessionId}/attach-node`,
+    {
+      method: "POST",
+      body: JSON.stringify({ node_id: nodeId, session_tagged: sessionTagged }),
+    },
+  );
 }
 
 export function generateLearningMap(

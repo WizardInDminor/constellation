@@ -24,6 +24,7 @@ async def _fetch_full(db: aiosqlite.Connection, node_id: str) -> NodeDetail | No
         """SELECT id, type, title, content, summary, source_id,
                   embedding_model, processed_at,
                   is_story_event, story_time, prose_status, manuscript_location,
+                  canon_status, node_status, charge, do_not_name_yet, confidence,
                   created_at, updated_at
            FROM nodes WHERE id = ? AND deleted_at IS NULL""",
         (node_id,),
@@ -49,6 +50,11 @@ async def _fetch_full(db: aiosqlite.Connection, node_id: str) -> NodeDetail | No
         story_time=row["story_time"],
         prose_status=row["prose_status"],
         manuscript_location=row["manuscript_location"],
+        canon_status=row["canon_status"],
+        node_status=row["node_status"],
+        charge=row["charge"],
+        do_not_name_yet=bool(row["do_not_name_yet"]),
+        confidence=row["confidence"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         outgoing_edges=outgoing,
@@ -87,13 +93,35 @@ async def _create_node(
     summary: str | None = None,
     source_id: str | None = None,
     tag_ids: list[str] | None = None,
+    canon_status: str | None = None,
+    node_status: str | None = None,
+    charge: str | None = None,
+    do_not_name_yet: bool = False,
+    confidence: int | None = None,
 ) -> NodeDetail:
     node_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
     await db.execute(
-        """INSERT INTO nodes(id, type, title, content, summary, source_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (node_id, type_, title, content, summary, source_id, now, now),
+        """INSERT INTO nodes(
+                id, type, title, content, summary, source_id,
+                canon_status, node_status, charge, do_not_name_yet, confidence,
+                created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            node_id,
+            type_,
+            title,
+            content,
+            summary,
+            source_id,
+            canon_status,
+            node_status,
+            charge,
+            int(do_not_name_yet),
+            confidence,
+            now,
+            now,
+        ),
     )
     if tag_ids:
         await db.executemany(
@@ -116,6 +144,17 @@ async def create_fleeting(db: aiosqlite.Connection, data: FleetingCreate) -> Nod
     )
 
 
+def _canon_kwargs(data: PermanentCreate | LiteratureCreate | StructureCreate) -> dict[str, Any]:
+    """Extract the Canon uncertainty fields (ADR-076) shared by the create DTOs."""
+    return {
+        "canon_status": data.canon_status,
+        "node_status": data.node_status,
+        "charge": data.charge,
+        "do_not_name_yet": data.do_not_name_yet,
+        "confidence": data.confidence,
+    }
+
+
 async def create_permanent(db: aiosqlite.Connection, data: PermanentCreate) -> NodeDetail:
     return await _create_node(
         db,
@@ -124,6 +163,7 @@ async def create_permanent(db: aiosqlite.Connection, data: PermanentCreate) -> N
         content=data.content,
         summary=data.summary,
         tag_ids=data.tag_ids,
+        **_canon_kwargs(data),
     )
 
 
@@ -136,6 +176,7 @@ async def create_literature(db: aiosqlite.Connection, data: LiteratureCreate) ->
         summary=data.summary,
         source_id=data.source_id,
         tag_ids=data.tag_ids,
+        **_canon_kwargs(data),
     )
 
 
@@ -147,6 +188,7 @@ async def create_structure(db: aiosqlite.Connection, data: StructureCreate) -> N
         content=data.content,
         summary=data.summary,
         tag_ids=data.tag_ids,
+        **_canon_kwargs(data),
     )
 
 
@@ -239,6 +281,11 @@ async def list_nodes(
     no_edges: bool = False,
     summary_max_length: int | None = None,
     hide_story_events: bool = False,
+    canon_status: str | None = None,
+    node_status: str | None = None,
+    charge_in: list[str] | None = None,
+    do_not_name_yet: bool = False,
+    no_scene: bool = False,
 ) -> tuple[list[NodeSummary], int]:
     """Paginated node list. ADR-055 — schema-level filters AND-compose.
 
@@ -249,6 +296,13 @@ async def list_nodes(
     - summary_max_length: non-null summaries shorter than the given length.
     - hide_story_events: excludes nodes with is_story_event = 1 (ADR-064).
       Default off — events are visible in Notes by default.
+
+    Canon filters (ADR-076) — power the Canon saved-views:
+    - canon_status / node_status: exact match on the uncertainty enums.
+    - charge_in: charge is one of the given values (e.g. high/goosebump).
+    - do_not_name_yet: only nodes with the protected flag set.
+    - no_scene: only nodes with no edge (either direction) to a story event —
+      the "charged image with no scene yet" filter.
     """
     offset = (page - 1) * page_size
 
@@ -268,6 +322,28 @@ async def list_nodes(
         params.append(summary_max_length)
     if hide_story_events:
         where_clauses.append("is_story_event = 0")
+    if canon_status is not None:
+        where_clauses.append("canon_status = ?")
+        params.append(canon_status)
+    if node_status is not None:
+        where_clauses.append("node_status = ?")
+        params.append(node_status)
+    if charge_in:
+        placeholders = ",".join("?" * len(charge_in))
+        where_clauses.append(f"charge IN ({placeholders})")
+        params.extend(charge_in)
+    if do_not_name_yet:
+        where_clauses.append("do_not_name_yet = 1")
+    if no_scene:
+        where_clauses.append(
+            "id NOT IN ("
+            "  SELECT e.from_id FROM edges e JOIN nodes ev ON ev.id = e.to_id"
+            "  WHERE ev.is_story_event = 1"
+            "  UNION"
+            "  SELECT e.to_id FROM edges e JOIN nodes ev ON ev.id = e.from_id"
+            "  WHERE ev.is_story_event = 1"
+            ")"
+        )
 
     where_sql = " AND ".join(where_clauses)
 
@@ -279,7 +355,8 @@ async def list_nodes(
 
     cursor = await db.execute(
         f"""SELECT id, type, title, summary, created_at, updated_at,
-                   processed_at, is_story_event
+                   processed_at, is_story_event,
+                   canon_status, node_status, charge, do_not_name_yet, confidence
             FROM nodes
             WHERE {where_sql}
             ORDER BY created_at DESC
@@ -299,6 +376,11 @@ async def list_nodes(
             updated_at=r["updated_at"],
             processed_at=r["processed_at"],
             is_story_event=bool(r["is_story_event"]),
+            canon_status=r["canon_status"],
+            node_status=r["node_status"],
+            charge=r["charge"],
+            do_not_name_yet=bool(r["do_not_name_yet"]),
+            confidence=r["confidence"],
             tags=tags_map.get(r["id"], []),
         )
         for r in rows
@@ -575,6 +657,17 @@ async def update(db: aiosqlite.Connection, node_id: str, data: NodeUpdate) -> No
         updates["prose_status"] = data.prose_status
     if "manuscript_location" in data.model_fields_set:
         updates["manuscript_location"] = data.manuscript_location
+    # Canon uncertainty metadata (ADR-076). do_not_name_yet stores as 0/1.
+    if "canon_status" in data.model_fields_set:
+        updates["canon_status"] = data.canon_status
+    if "node_status" in data.model_fields_set:
+        updates["node_status"] = data.node_status
+    if "charge" in data.model_fields_set:
+        updates["charge"] = data.charge
+    if "do_not_name_yet" in data.model_fields_set:
+        updates["do_not_name_yet"] = int(bool(data.do_not_name_yet))
+    if "confidence" in data.model_fields_set:
+        updates["confidence"] = data.confidence
 
     if updates:
         now = datetime.now(UTC).isoformat()

@@ -4673,6 +4673,110 @@ for inline verification of formatting and math.
 
 ---
 
+## ADR-076 — Uncertainty metadata on nodes (Canon readiness)
+
+**Status:** Accepted
+
+**Context:** Constellation is being readied to develop *Canon*, an exploratory
+philosophical fiction trilogy (see `docs/canon-readiness-audit.md`). Canon's
+working method treats "not yet knowing" as first-class: an image can carry charge
+before it has a scene, a truth can be *emerging* before it is canon, a mystery can
+be deliberately *held open* so that naming it now would collapse it. The
+implemented schema had nowhere to record any of this except prose, so it could not
+be filtered, browsed, or fed to the AI as structured signal — the readiness audit
+identified this as the single blocking gap (a graph that cannot represent
+"provisional" quietly hardens every "appears to be…" into a fact).
+
+**Decision:** Add five nullable columns to `nodes` (migration 0011), not new node
+types (ADR-006 preserved):
+
+- `canon_status` ∈ `canon | provisional | speculative | discarded | image_only`
+- `node_status` ∈ `emerging | stable | contradicted | retired | unresolved`
+- `charge` ∈ `low | medium | high | goosebump`
+- `do_not_name_yet` — boolean flag (default 0)
+- `confidence` — nullable integer 0–100
+
+All are CHECK-constrained, nullable (the flag defaults to 0), and carried on
+`NodeSummary`/`NodeDetail` plus the create/update DTOs. Partial indexes on the
+four categorical/flag columns keep the Canon saved-views single indexed scans.
+`GET /nodes` gains `canon_status`, `node_status`, `charge_in`, `do_not_name_yet`,
+and `no_scene` filters.
+
+**Rationale:**
+
+- Modelling Canon's ~24 node "types" as base-type + `kind:` tag + these
+  uncertainty fields keeps ADR-006's small, stable node-type vocabulary intact
+  while making the epistemic state *queryable*. This mirrors the existing
+  `is_story_event` flag (0007) and `prose_status` enum (0010) precedents exactly.
+- Nullable columns with CHECK constraints are a pure, backward-compatible add:
+  SQLite evaluates CHECK only on non-NULL values, so every pre-existing row passes
+  without backfill.
+- `confidence` is a small integer rather than an enum so ranges are queryable
+  ("everything under 40"); absence (NULL) means "unrated", distinct from low.
+
+**Consequences:**
+
+- Nodes can be marked speculative / emerging / goosebump / do-not-name-yet and
+  filtered by those states. The Canon saved-views (ADR unnumbered; UI) and the
+  `/canon` endpoints are built entirely on these fields.
+- RAG context assembly emits a per-note `Status:` line from these fields and the
+  prompt instructs the model to respect them (never resolve a `do_not_name_yet`
+  node; treat provisional/speculative as not-yet-fact). Uncertainty is read from
+  structured fields, never inferred from prose.
+- Capture stays deliberately uncluttered: the quick/intentional capture dialogs do
+  not surface these fields; status is set post-capture on the node detail page,
+  consistent with the workspace's "write first, decide ontological status later"
+  stance (Phase 9 concept §3). Import scripts set them at create time via the DTOs.
+
+---
+
+## ADR-077 — Canon symbolic / resonance edge vocabulary
+
+**Status:** Accepted (extends ADR-007)
+
+**Context:** ADR-007 fixed the edge vocabulary (not user-defined) to keep AI
+prompts well-scoped, with an explicit allowance to extend where typed filtering is
+valuable. The existing 19 verbs are research/academic-flavored; Canon's symbolic
+web wants relationships like *foreshadows*, *holds open*, *carries charge for*,
+*mirrors*, *inversion of*, *prototype of* — none of which had a typed equivalent.
+The readiness audit framed the choice: extend the enum (typed, filterable) or keep
+it fixed and push nuance into edge notes.
+
+**Decision:** Extend the `EdgeType` enum (migration 0012) with thirteen high-value
+symbolic/resonance verbs: `HOLDS_OPEN`, `REFUSES_TO_NAME`, `CARRIES_CHARGE_FOR`,
+`FORESHADOWS`, `MIRRORS`, `INVERSION_OF`, `PROTOTYPE_OF`, `AMPLIFIES`, `CORRUPTS`,
+`DESTABILIZES`, `STABILIZES`, `PROTECTS`, `THREATENS`. The long tail of possible
+relations stays as free-text on the edge `note`, which remains the place nuance
+lives (unchanged). `MIRRORS` and `INVERSION_OF` are non-directional; the rest are
+directional. The resolvable tension types (ADR-059) are unchanged.
+
+**Rationale:**
+
+- Canon's Symbol Web / Resonance Map are only useful if you can filter "show every
+  `FORESHADOWS` edge" or "everything that `HOLDS_OPEN` this moment" — that requires
+  typed verbs, which ADR-007's extension clause explicitly permits for exactly this
+  kind of project.
+- Thirteen, not forty: only verbs that will actually be filtered on earn a slot.
+  Psychological/relational nuance (`answers_partially`, character wounds, etc.)
+  rides on edge notes rather than bloating the enum and the AI prompt surface.
+- The migration reuses the established CHECK-constraint table-recreate ceremony
+  (0004 / 0006 / 0010); all existing edge columns and rows are carried through.
+
+**Consequences:**
+
+- `Michael → HOLDS_OPEN → Final Shared Moment` and
+  `The Clearing → PROTOTYPE_OF → Final Shared Moment` are expressible as typed,
+  filterable edges, each still carrying a free-text note explaining why the
+  connection matters.
+- The frontend edge tables (`edgeTypes.ts`: colors + metadata) and the graph
+  filter's `ALL_EDGE_TYPES` gain the new verbs (the latter had also drifted behind
+  the evolution/narrative verbs and is now complete). A test locks the three edge
+  tables in sync.
+- The vocabulary remains fixed/controlled — users still cannot define arbitrary
+  types; extension is a schema decision recorded here, per ADR-007.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
