@@ -1,5 +1,4 @@
 # Constellation — Phase 9 Wrap
-
 ## Project Workspace + Narrative Timeline
 
 *Completed 2026-05-19. Branch `claude/phase-9-workspace-timeline-sZdYq`,
@@ -7,7 +6,7 @@ PR #7, final commit `67a1ad0`. This document is the authoritative
 completion record for Phase 9. It covers what was planned, what
 shipped, what was learned, and what Phase 10 inherits.*
 
------
+---
 
 ## Summary
 
@@ -32,7 +31,7 @@ soft-delete an EXPLAINS edge, reopen the scene, the lore note is gone.
 A pytest (`test_scene_context_surfaces_characters_themes_location_lore`)
 protects this contract against future regression.
 
------
+---
 
 ## What shipped
 
@@ -111,17 +110,17 @@ Context View in Slice 5.
 
 `include_session_fleetings` flag on SynthesizeRequest: adds unprocessed
 fleetings from the current active session to the synthesis pool, labeled
-“from unprocessed session captures.” UI toggle in Synthesize scope
+"from unprocessed session captures." UI toggle in Synthesize scope
 builder.
 
 Learning map generation with web search: the learning map prompt
 researches the topic domain before building phases and sub-topics.
 Source recommendations populated with free links where available,
-labeled “Suggested — not verified.” Ollama graceful degradation.
+labeled "Suggested — not verified." Ollama graceful degradation.
 
 Quick corrections panel: Session 1 only, sourced from `prior_knowledge`
 captured at project creation. Left panel switches to personal notes
-view (“My notes”) from Session 2 onward, with Phase/Recent sort toggle.
+view ("My notes") from Session 2 onward, with Phase/Recent sort toggle.
 
 Three gates fixed in this slice after audit: Learning Map tab was
 hidden in non-learning modes, Quick corrections panel was hidden in
@@ -138,7 +137,7 @@ source workflow) written before their implementations.
 Mermaid rendering in note detail view and synthesis output on /ask and
 /synthesize. Non-mermaid code blocks unaffected — the component
 intercepts only `language-mermaid` className, everything else falls
-through to react-markdown’s default rendering.
+through to react-markdown's default rendering.
 
 Free-writing pad live Mermaid preview: detects fenced blocks, renders
 preview panel alongside textarea, debounced 800ms, collapsible.
@@ -178,10 +177,10 @@ FOLLOWS_FROM auto-edge to preceding event. Drag-to-reorder within lane:
 updates `discourse_position`, rewires FOLLOWS_FROM edges.
 
 Event side panel: title, story_time, prose_status (read-only in this
-slice, writable in Slice 5), act span label, “Open in Scene Context”
+slice, writable in Slice 5), act span label, "Open in Scene Context"
 button (present but disabled — enabled in Slice 5).
 
-Notes view “hide story events” toggle added to B2 filter framework.
+Notes view "hide story events" toggle added to B2 filter framework.
 
 ADR-064, ADR-065, ADR-066, ADR-071, ADR-072 written before
 implementation. ADR-052 extended with EXPLAINS addendum.
@@ -189,7 +188,6 @@ implementation. ADR-052 extended with EXPLAINS addendum.
 **+18 backend tests. 467 total.**
 
 ### Slice 5 — Parallel lanes, thematic layer, Scene Context View
-
 (commits `ce68a0e`, `67a1ad0`)
 
 **Prose_status and manuscript_location write support** (Slice 4
@@ -200,19 +198,19 @@ writes via PATCH /nodes/{id}.
 each lane registers its SVG reference and position-translation function
 with the parent. Parent owns pointer event state, walks registry to
 find which lane the cursor is over during drag. Lane toggle chips.
-“Add timeline” creates a new structure node COLLECTS-linked from hub.
+"Add timeline" creates a new structure node COLLECTS-linked from hub.
 
 **Cross-lane drag**: `POST /nodes/{id}/timeline-placement` endpoint.
 `remove_from_timeline_node_id: null` → crossover (keep source row,
 insert target row). `remove_from_timeline_node_id: set` → move (remove
 source row, insert target, rewire FOLLOWS_FROM in both lanes). Default
 drop = move; Alt-held drop = crossover. Target lane shows blue ring
-(“Drop = move here”) or amber ring (“Drop = copy to both”) based on
+("Drop = move here") or amber ring ("Drop = copy to both") based on
 modifier key. Ghost card renders at would-be drop position before
 release.
 
 **Crossover event rendering**: event appearing in multiple timelines
-renders in each lane with amber dashed border and “crossover · N lanes”
+renders in each lane with amber dashed border and "crossover · N lanes"
 label.
 
 **Prose_status indicator on cards**: colored dot/chip per event card
@@ -235,13 +233,13 @@ on any event card opens the universal popup. Component reused from
 Slice 2, no new implementation.
 
 **Scene Context View**: the central Phase 9 deliverable. Entered from
-“Open in Scene Context” on event side panel. Three-panel reconfiguration:
+"Open in Scene Context" on event side panel. Three-panel reconfiguration:
 left = scene-connected elements (characters, location, lore, themes —
 relevance-weighted Strong/Moderate/Background), center = drill-down
 reading surface, right = arc notes, parallel context, world rules.
 World rules collapsed by default; session-aware hint at session > 10.
 NodeInteractionPopup on all nodes — view refreshes without full reload
-after popup save. “Back to timeline” returns to timeline with event
+after popup save. "Back to timeline" returns to timeline with event
 selected.
 
 Relevance weighting by graph topology: Strong = direct edges to scene
@@ -258,50 +256,50 @@ to `POST /rag/narrative-dump` — returns proposed nodes by type for
 per-candidate accept/dismiss review.
 
 **Slice 4 polish fixes**: act label on event cards now derives from
-the act_span container whose start/end range contains the event’s
+the act_span container whose start/end range contains the event's
 `discourse_position` (was reading `story_time`). `discourse_position`
 value (pos N) removed from production card UI.
 
 **+18 backend tests (Slice 5 base) + 7 backend tests (cross-lane drag
 fix) = +25. 492 total.**
 
------
+---
 
 ## Metrics
 
-|Metric                 |Value                                              |
-|-----------------------|---------------------------------------------------|
-|Slices                 |6 (Slice 0 through Slice 5)                        |
-|Commits                |7 on branch (+ 1 post-completion fix)              |
-|Migrations             |4 (`0007` through `0010`)                          |
-|ADRs written           |10 new (ADR-063 through ADR-072) + ADR-052 addendum|
-|Backend tests          |387 (Phase 8 end) → **492** (Phase 9 end) **+105** |
-|Frontend tests         |39 → 39                                            |
-|Frontend `tsc --noEmit`|Clean throughout                                   |
-|Estimated duration     |~6 weeks clock                                     |
-|Branch                 |`claude/phase-9-workspace-timeline-sZdYq`          |
-|PR                     |#7                                                 |
-|Final commit           |`67a1ad0`                                          |
+| Metric | Value |
+|---|---|
+| Slices | 6 (Slice 0 through Slice 5) |
+| Commits | 7 on branch (+ 1 post-completion fix) |
+| Migrations | 4 (`0007` through `0010`) |
+| ADRs written | 10 new (ADR-063 through ADR-072) + ADR-052 addendum |
+| Backend tests | 387 (Phase 8 end) → **492** (Phase 9 end) **+105** |
+| Frontend tests | 39 → 39 |
+| Frontend `tsc --noEmit` | Clean throughout |
+| Estimated duration | ~6 weeks clock |
+| Branch | `claude/phase-9-workspace-timeline-sZdYq` |
+| PR | #7 |
+| Final commit | `67a1ad0` |
 
------
+---
 
 ## ADR record
 
-|ADR             |Title                                                  |Slice  |
-|----------------|-------------------------------------------------------|-------|
-|ADR-052 addendum|EXPLAINS edge type (narrative-specific addition)       |Slice 4|
-|ADR-063         |Project-as-structure-node                              |Slice 0|
-|ADR-064         |Narrative event node design (flag-on-permanent)        |Slice 4|
-|ADR-065         |Parallel timeline data model                           |Slice 4|
-|ADR-066         |Narrative timeline component choice (custom SVG/Canvas)|Slice 4|
-|ADR-067         |Synthesis history association                          |Slice 2|
-|ADR-068         |Ask scope toggle (Project / Both / Full corpus)        |Slice 1|
-|ADR-069         |Session-scoped fleeting synthesis                      |Slice 2|
-|ADR-070         |Learning mode source material workflow                 |Slice 2|
-|ADR-071         |Manuscript source handling in narrative mode           |Slice 4|
-|ADR-072         |Act span schema for narrative timeline                 |Slice 4|
+| ADR | Title | Slice |
+|---|---|---|
+| ADR-052 addendum | EXPLAINS edge type (narrative-specific addition) | Slice 4 |
+| ADR-063 | Project-as-structure-node | Slice 0 |
+| ADR-064 | Narrative event node design (flag-on-permanent) | Slice 4 |
+| ADR-065 | Parallel timeline data model | Slice 4 |
+| ADR-066 | Narrative timeline component choice (custom SVG/Canvas) | Slice 4 |
+| ADR-067 | Synthesis history association | Slice 2 |
+| ADR-068 | Ask scope toggle (Project / Both / Full corpus) | Slice 1 |
+| ADR-069 | Session-scoped fleeting synthesis | Slice 2 |
+| ADR-070 | Learning mode source material workflow | Slice 2 |
+| ADR-071 | Manuscript source handling in narrative mode | Slice 4 |
+| ADR-072 | Act span schema for narrative timeline | Slice 4 |
 
------
+---
 
 ## Phase 8.2 probe result
 
@@ -317,9 +315,9 @@ kept CONTRADICTS and SUPPORTS edges have cosine similarity > 0.6 —
 three dropped SUPPORTS edges are 0.722, 0.700, 0.698, all above the
 reactivation threshold.
 
-F2 (MCP4922/SUPPORTS): cap doesn’t bind (9 raw < 12 cap).
+F2 (MCP4922/SUPPORTS): cap doesn't bind (9 raw < 12 cap).
 
-F3 (looper/ANALOGOUS_TO): cap doesn’t bind (4 raw < 12 cap).
+F3 (looper/ANALOGOUS_TO): cap doesn't bind (4 raw < 12 cap).
 
 Phase 8.2 (retrieval-side edge-type-aware truncation) remains
 conditionally deferred per ADR-058. The reactivation criterion —
@@ -330,7 +328,7 @@ corpus grows, particularly after lore EXPLAINS edges and theme
 ANALOGOUS_TO edges create genuine cross-domain connections between
 creative and research material.
 
------
+---
 
 ## Design principles: final verification
 
@@ -367,7 +365,7 @@ Pytest `test_scene_context_surfaces_characters_themes_location_lore`
 covers this destructively — any future caching layer that sneaks in
 will fail this test loudly.
 
------
+---
 
 ## What Phase 9 explicitly did not ship
 
@@ -377,7 +375,7 @@ Per the build plan, the following are deferred to Phase 10 or later:
   the full sheet (field structure, arc notes, corpus connections,
   author instructions) is Phase 10.
 - **Full lore library UI** — lore list by category landed; the full
-  library (consistency check, “what does this character know” filter,
+  library (consistency check, "what does this character know" filter,
   lore audit feature) is Phase 10.
 - **Location sheets** — skeleton and quick-create landed; full sheets
   are Phase 10.
@@ -402,7 +400,7 @@ Per the build plan, the following are deferred to Phase 10 or later:
 - **Quick-switcher (Cmd+P / C2)** — still deferred, orthogonal to
   Phase 9.
 
------
+---
 
 ## What Phase 10 inherits
 
@@ -429,8 +427,8 @@ profile is derived on-demand from session history via the RAG pipeline —
 no separate analytics engine needed.
 
 Full lore library (§6.6 of philosophy doc). The consistency check
-(“do any lore notes contradict each other?”), the “what does this
-character know?” filter, and the lore audit feature are the three
+("do any lore notes contradict each other?"), the "what does this
+character know?" filter, and the lore audit feature are the three
 high-value additions beyond the list view that shipped in Phase 9.
 
 Frontend test coverage for visual surfaces. The gap is real and
@@ -459,7 +457,7 @@ the narrative corpus and the research corpus, high-signal edges will
 start getting dropped at the neighbor cap. That is when Phase 8.2
 earns its keep.
 
------
+---
 
 ## Decisions that remain open for Phase 10 planning
 
@@ -468,7 +466,7 @@ resolved:
 
 **Workspace mode as project-level configuration vs. per-session
 override.** Currently mode is set at project creation and stored in
-`project_scopes.mode`. Whether a session can override the project’s
+`project_scopes.mode`. Whether a session can override the project's
 default mode (a narrative project having a research session) is
 supported in the `work_sessions.mode` field but not yet exposed as
 a deliberate UI choice.
@@ -488,7 +486,7 @@ an ADR-level decision that affects the schema.
 held. The `con --project` flag works from the terminal; the mobile
 Shortcut equivalent is blocked on the iOS dev story question.
 
------
+---
 
 *Phase 9 complete. Branch `claude/phase-9-workspace-timeline-sZdYq`
 ready to merge. Phase 10 planning should begin with the use case
