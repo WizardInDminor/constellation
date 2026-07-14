@@ -4777,6 +4777,194 @@ directional. The resolvable tension types (ADR-059) are unchanged.
 
 ---
 
+## ADR-078 — Builder Pipeline layering: Canon = the existing graph; production/render = new tables
+
+**Status:** Accepted
+
+**Context:** The Builder Pipeline (first production framework of the creative-OS
+vision, Handbook Ch. 00) separates Canon (persistent creative truth), Production
+(episode/scene/shot planning), and Render (generated media). The mission brief
+lists Canon-layer components — Projects, Entities, Relationships, Canon Facts,
+Templates, Style Bibles, Context Bundles — and the fork was whether these get
+dedicated new storage or map onto the existing graph. Production concepts
+(pipelines, stage runs, shots, jobs) have no existing equivalent either way.
+
+**Decision:** The Canon layer **is the existing graph**. Projects → project hubs
+(ADR-063); entities → nodes with `narrative:*` tags (Phase 9); relationships →
+typed edges (ADR-007/077); canon facts → nodes with uncertainty metadata
+(ADR-076); style bibles → production docs promotable to nodes. No new canon
+storage. The Production and Render layers get new tables (migration 0013):
+`productions`, `production_stage_runs`, `production_docs`, `production_scenes`,
+`production_shots`, `prompt_specs`, `generation_jobs`, `assets`. Full
+production/render schema lands in one migration (Phase 9 Slice 0 precedent) so
+the data contracts precede the stage implementations — except timeline-assembly
+tables, deferred until the B4 assembler choice, and Templates / stored Context
+Bundles, deferred until real productions show what repeats.
+
+**Rationale:**
+
+- Nearly every Canon-layer concept already exists with accumulated design
+  (uncertainty metadata, symbolic edge vocabulary, live context assembly). A
+  parallel canon store would duplicate it and violate "everything lands in the
+  graph."
+- Production planning is a genuinely different shape — ordered, hierarchical,
+  job-oriented — that would fight the node/edge model. Sidecar tables echo the
+  established `project_scopes` / `event_timeline_positions` pattern.
+- Schema-up-front fixes the traceability chain (asset → job → prompt spec →
+  shot → scene → production → project hub) before any generation code exists.
+
+**Consequences:**
+
+- The Builder consumes canon by node ID (reference, never copy), except where
+  freezing canon into a prompt spec is the point (ADR-080).
+- Production scenes bridge to the canon timeline via `canon_event_node_id`
+  rather than being story events themselves — planning objects and narrative
+  truth stay distinct.
+- SQLite remains the only store (ADR-001); media files live on disk with paths
+  in `assets.file_path`.
+- Deferred pieces (assembly tables, templates, stored context bundles) each
+  require their own ADR when they land.
+
+---
+
+## ADR-079 — Builder stage runs: append-only attempts, versioned outputs, forward-only stage pointer
+
+**Status:** Accepted
+
+**Context:** Every Builder workflow must be restartable and every generation
+reproducible (mission constraints). Stages run LLM workers that can fail or
+produce output the user rejects; re-running must be safe, and the history of how
+a production developed is itself creative knowledge worth keeping.
+
+**Decision:** Stage executions are **append-only**: each run of
+(production, stage) inserts a `production_stage_runs` row with an incrementing
+`attempt`; failures set `status='failed'` + `error` on that row and are never
+mutated afterward. Stage doc outputs are **versioned**: re-runs insert a new
+`production_docs` row with an incrementing `version`, never overwrite. User
+edits (`PATCH /builder/docs/{id}`) update a doc in place *without* a version
+bump — editing is refinement, re-running is regeneration. `current_stage` on the
+production is a convenience pointer that only moves forward; re-running an
+earlier stage refines its output without resetting pipeline position.
+Unimplemented stages return **501** from the run endpoint; worker failures
+return **502** after recording the failed run. Stage runs record `worker`,
+`model_id`, and a `detail_json` audit blob.
+
+**Rationale:**
+
+- Append-only + versioning makes "restartable" trivially true: there is no
+  state to corrupt, and any attempt/version can be inspected later.
+- The edit-vs-re-run distinction keeps the version series meaningful (versions
+  = generations) while giving the user a designed-in refinement step between
+  stages.
+- 501-for-unlanded-stages fixes the API contract for all eleven stages on day
+  one (the Phase 1 `process`-returns-501 precedent), so the frontend and the
+  build plan share one pipeline vocabulary.
+
+**Consequences:**
+
+- Storage grows with attempts/versions; acceptable at personal-tool scale and
+  prunable later if ever needed.
+- "Latest doc of kind" is the default input to the next stage — including user
+  edits, since refinement happens in place.
+- The stage-run table doubles as the production's development journal.
+
+---
+
+## ADR-080 — Builder workers: typed protocols added per slice, LLM workers ride the provider abstraction
+
+**Status:** Accepted
+
+**Context:** Workers (Interpreter, Writer, Storyboard, Prompt Compiler, media
+workers, Timeline Builder) are the replaceable units of the Builder; the
+Director is the non-replaceable orchestrator. Models and media providers will
+churn. The question was how to structure worker interfaces, and when to define
+them.
+
+**Decision:** Each worker sits behind a small **typed Protocol** in
+`app/workers/base.py` (e.g. `Interpreter.interpret(idea) -> CreativeBrief`),
+mirroring the provider abstraction. Protocols are added **when their slice
+lands**, not speculatively — the roster lives in the architecture doc, the code
+contains only validated contracts. LLM-backed workers call the active
+`GenerationProvider` via `generation_service` (ADR-003 — no direct SDK calls);
+future media workers get their own provider protocols (extending ADR-003 to
+media) with **stub implementations first** so the pipeline is testable
+end-to-end before any external media API is wired. Workers signal failure by
+raising `WorkerError`; the Director records it on the stage run. Stage outputs
+carry both markdown (`content`, for humans and promotion) and
+`structured_json` validated by a Pydantic contract model (for the next stage);
+prompt specs freeze both the compiled prompt and the structured context used
+to compile it, so a generation job is fully determined by (spec, provider,
+model, params).
+
+**Rationale:**
+
+- Typed per-worker protocols make replaceability concrete: swap the
+  implementation, keep the contract. A generic `Worker.run(dict) -> dict`
+  would trade away exactly the explicit data contracts the mission demands.
+- Speculative interfaces for unbuilt workers are guesses that harden into
+  constraints; adding them per-slice keeps each contract validated by its
+  first implementation.
+- Stub-first media providers decouple pipeline correctness from the least
+  stable dependency in the stack.
+
+**Consequences:**
+
+- `workers/base.py` grows one protocol per slice (B1: Writer, B2: Storyboard,
+  B3: PromptCompiler + media, B4: TimelineBuilder).
+- Bad model output is loud and recoverable: `WorkerError` → failed stage run
+  (error preserved) → HTTP 502 → re-run is a new attempt.
+- Prompt-spec freezing means canon drift after compilation is visible and
+  fixable by explicit recompilation, never silent.
+
+---
+
+## ADR-081 — Canon promotion: explicit, provisional, hub-linked
+
+**Status:** Accepted
+
+**Context:** "Generated outputs never become canon automatically" is a founding
+Builder constraint. Production docs (briefs, style bibles, scripts) and
+eventually assets need a path *into* the graph — but one the user controls, and
+one that respects the uncertainty layer (ADR-076): freshly generated material is
+not settled truth.
+
+**Decision:** Promotion is a single explicit endpoint
+(`POST /builder/docs/{id}/promote`). It creates a **permanent node** with the
+doc's markdown content, sets **`canon_status='provisional'`**, embeds it via the
+standard embed-or-queue path, links it from the project hub with a **`COLLECTS`
+edge** (note recording the source production, doc kind, and version), and stamps
+`canon_node_id` on the doc. A doc promotes **once** — re-promoting returns 409;
+regenerating and promoting a *new version* creates a new node, and relating the
+two (e.g. `SUPERSEDED_BY`) is the user's call. Finer-grained promotion (brief
+characters/locations as individual entity nodes with `narrative:*` tags, via an
+accept/reject review in the Story Dump pattern) is planned for B5 and will get
+its own ADR.
+
+**Rationale:**
+
+- `provisional` is precisely what ADR-076 built: promoted material is
+  "currently developing as true," upgradeable to `canon` when the author
+  settles it. Auto-`canon` would flatten the uncertainty layer the Canon
+  readiness work just added.
+- `COLLECTS` from the hub matches how projects already gather their material,
+  so promoted docs appear in project scope, retrieval, and the graph view with
+  zero new plumbing.
+- One-shot promotion keeps doc↔node a simple traceable link; letting a doc
+  point at successive nodes would blur which canon text the production layer
+  actually produced.
+
+**Consequences:**
+
+- Promoted docs are immediately retrievable (embedded) and visible in the
+  project workspace like any other node.
+- The graph records provenance in the edge note; the production layer records
+  it in `canon_node_id` — traceability in both directions.
+- Whole-doc nodes are coarse; the B5 entity-level promotion review is the
+  planned refinement, and until then users can decompose promoted docs with
+  the existing suggest/process tooling.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

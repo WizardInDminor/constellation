@@ -620,6 +620,23 @@ A `PATCH /projects/{hub_id}/sessions/{id}` payload with `close: true` sets
 `closed_at` and computes `duration_seconds`; status defaults to
 `'completed'` on close if not otherwise specified.
 
+### Builder Pipeline (Slice B0 — ADR-078/079/080/081)
+
+The Builder Pipeline turns creative intent into structured production work
+(production layer + render layer on top of the canon graph). Full design in
+`builder-pipeline-architecture.md`; phased plan in
+`builder-pipeline-build-plan.md`. Schema: migration `0013_builder_pipeline.sql`.
+
+```
+POST  /builder/productions                          intake: idea → production
+GET   /builder/productions?project_id=              list productions
+GET   /builder/productions/{id}                     detail (stage runs + docs)
+POST  /builder/productions/{id}/stages/{stage}/run  run/re-run a stage (501 if unlanded)
+GET   /builder/docs/{id}                            production doc detail
+PATCH /builder/docs/{id}                            user refinement of a doc
+POST  /builder/docs/{id}/promote                    explicit canon promotion
+```
+
 ---
 
 ## 6. RAG pipeline
