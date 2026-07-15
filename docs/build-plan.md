@@ -379,6 +379,17 @@ These ideas are valid but defer to v2 or beyond:
 
 ---
 
+## Builder Pipeline (creative-OS track)
+
+The Builder Pipeline — Constellation's first production framework under the
+creative-OS vision (see `docs/handbook/00_Project_Vision.md`) — has its own
+phased plan in [`builder-pipeline-build-plan.md`](./builder-pipeline-build-plan.md)
+and architecture in [`builder-pipeline-architecture.md`](./builder-pipeline-architecture.md).
+Slice B0 (foundation: schema, Director, Interpreter worker, canon promotion)
+completed 2026-07-14.
+
+---
+
 ## Working with this plan
 
 When starting a session with Claude Code:
