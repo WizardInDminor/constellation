@@ -29,7 +29,7 @@ from app.models import (
 )
 from app.repositories import tag_repo
 
-# ADR-079: reserved prefix classifying a timeline lane's kind.
+# ADR-085: reserved prefix classifying a timeline lane's kind.
 TIMELINE_LAYER_PREFIX = "layer:"
 
 # Reserved tag names that identify narrative-role nodes (Slice 5).

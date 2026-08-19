@@ -156,7 +156,7 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
 
 
 async def test_update_note_edits_and_clears(db):
-    """ADR-082: the edge-note authoring loop can set and clear a note."""
+    """ADR-088: the edge-note authoring loop can set and clear a note."""
     a, b = await _two_nodes(db)
     edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
     assert edge.note is None
@@ -175,7 +175,7 @@ async def test_update_note_missing_returns_none(db):
 
 
 async def test_edge_summary_carries_neighbor_tags_and_story_flag(db):
-    """ADR-078: EdgeSummary denormalises neighbor tags + is_story_event so the
+    """ADR-084: EdgeSummary denormalises neighbor tags + is_story_event so the
     Relationship Explorer can group connections by role without N+1 fetches."""
     # A symbol-tagged structure node connected to a story-event scene.
     symbol = await node_repo.create_permanent(

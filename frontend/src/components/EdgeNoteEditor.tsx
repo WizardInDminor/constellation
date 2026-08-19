@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EdgeNoteEditor — inline editor for a relationship's note (Phase C, ADR-082).
+ * EdgeNoteEditor — inline editor for a relationship's note (Phase C, ADR-088).
  *
  * The edge-note authoring loop: a lightweight, generic prompt to record WHY a
  * link exists / what the connection means. Feeds EntityArc interpretation

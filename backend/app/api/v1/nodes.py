@@ -228,7 +228,7 @@ async def get_node(node_id: str, db: DB) -> NodeDetail:
 
 @router.get("/{node_id}/arc")
 async def get_entity_arc(node_id: str, db: DB) -> EntityArc:
-    """Evolution-over-time of any entity (ADR-081): its appearances ordered
+    """Evolution-over-time of any entity (ADR-087): its appearances ordered
     chronologically, each carrying the edge note as its interpretation."""
     arc = await arc_repo.assemble(db, node_id)
     if arc is None:

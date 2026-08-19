@@ -1,5 +1,5 @@
 /**
- * Typed timeline layers (Phase B, ADR-079).
+ * Typed timeline layers (Phase B, ADR-085).
  *
  * A timeline lane's "kind" is carried by a reserved `layer:<kind>` tag on its
  * structure node (surfaced as `TimelineLane.timeline_tags`). This module is the

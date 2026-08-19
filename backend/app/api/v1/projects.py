@@ -475,7 +475,7 @@ class CoverageResponse(BaseModel):
 
 @router.get("/{hub_id}/threads")
 async def get_threads(hub_id: str, db: DB) -> ProjectThreads:
-    """Open threads & pending payoffs across the project (ADR-083)."""
+    """Open threads & pending payoffs across the project (ADR-089)."""
     await _require_project(db, hub_id)
     scope = await project_repo.get_scope(db, hub_id)
     if scope is None:

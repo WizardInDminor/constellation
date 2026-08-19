@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the Open Threads & Pending Payoffs dashboard (ADR-083).
+ * Pure helpers for the Open Threads & Pending Payoffs dashboard (ADR-089).
  *
  * The aggregation is server-side; these are the small testable pieces the
  * ThreadsPanel needs — total open count and an empty check.

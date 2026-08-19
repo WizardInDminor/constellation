@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ThreadsPanel — project-wide Open Threads & Pending Payoffs (ADR-083).
+ * ThreadsPanel — project-wide Open Threads & Pending Payoffs (ADR-089).
  *
  * Generic situational awareness: what in this project is still unresolved
  * (open/developing lifecycle nodes + unresolved tension edges) and what is set

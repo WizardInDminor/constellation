@@ -89,7 +89,7 @@ async def create(db: aiosqlite.Connection, data: EdgeCreate) -> EdgeDetail:
 async def update_note(
     db: aiosqlite.Connection, edge_id: str, note: str | None
 ) -> EdgeDetail | None:
-    """Edit an edge's note (ADR-082). Returns None if the edge doesn't exist."""
+    """Edit an edge's note (ADR-088). Returns None if the edge doesn't exist."""
     cursor = await db.execute(
         "UPDATE edges SET note = ? WHERE id = ?",
         (note, edge_id),
@@ -219,7 +219,7 @@ async def _neighbor_tags_bulk(
     """Tags for many neighbor nodes in one query → {node_id: [TagRef]}.
 
     Kept local to edge_repo (rather than reusing node_repo's private helper) to
-    avoid a node_repo → edge_repo → node_repo import cycle. ADR-078.
+    avoid a node_repo → edge_repo → node_repo import cycle. ADR-084.
     """
     result: dict[str, list[TagRef]] = defaultdict(list)
     if not node_ids:

@@ -1,4 +1,4 @@
-"""Open Threads & Pending Payoffs — project-wide situational awareness (ADR-083).
+"""Open Threads & Pending Payoffs — project-wide situational awareness (ADR-089).
 
 Generic across modes: 'open threads' are the project's unresolved lines of
 inquiry (lifecycle status:open / status:developing nodes, plus unresolved

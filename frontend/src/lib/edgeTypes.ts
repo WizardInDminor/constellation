@@ -1,6 +1,6 @@
 import type { EdgeType } from "@/lib/api";
 
-// Generic copy for the edge-note authoring loop (ADR-082). Deliberately
+// Generic copy for the edge-note authoring loop (ADR-088). Deliberately
 // domain-neutral: works for symbols, research concepts, learning topics,
 // project dependencies, and story nodes alike.
 export const EDGE_NOTE_LABEL = "Why this link?";

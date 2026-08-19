@@ -1,5 +1,5 @@
 /**
- * Connections-by-role grouping (Phase B, ADR-078).
+ * Connections-by-role grouping (Phase B, ADR-084).
  *
  * GENERIC knowledge-graph primitive — not a narrative feature. Given a node's
  * edges (each carrying the neighbor's type + tags + story-event flag, now

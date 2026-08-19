@@ -59,7 +59,7 @@ class EdgeSummary(BaseModel):
     """An edge as seen from a specific node's detail view.
 
     `neighbor_tags` and `neighbor_is_story_event` are denormalised onto the
-    summary (ADR-078) so the frontend Relationship Explorer can group a node's
+    summary (ADR-084) so the frontend Relationship Explorer can group a node's
     connections by role — Characters, Symbols, Scenes, etc. for narrative
     projects; Sources, Structures, etc. generally — without an N+1 fetch per
     neighbor. They default empty/false so existing consumers are unaffected.
@@ -98,7 +98,7 @@ class EdgeCreate(BaseModel):
 
 
 class EdgeUpdate(BaseModel):
-    """Edit a relationship's note — the edge-note authoring loop (ADR-082).
+    """Edit a relationship's note — the edge-note authoring loop (ADR-088).
 
     Generic: the note explains why a link exists / what the connection means,
     feeding EntityArc, ConnectionsByRole, and RAG edge context. `None` clears

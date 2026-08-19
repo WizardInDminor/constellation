@@ -1,4 +1,4 @@
-"""Entity Arc assembly + ordering (ADR-081)."""
+"""Entity Arc assembly + ordering (ADR-087)."""
 
 from app.models import EdgeCreate, PermanentCreate
 from app.repositories import arc_repo, edge_repo, node_repo, timeline_repo

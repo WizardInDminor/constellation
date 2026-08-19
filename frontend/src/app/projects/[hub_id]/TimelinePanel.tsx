@@ -143,7 +143,7 @@ export function TimelinePanel({ scope }: Props) {
     new Set(),
   );
   const [query, setQuery] = useState("");
-  // ADR-079: hide whole layer kinds (dream / historical / …) at once.
+  // ADR-085: hide whole layer kinds (dream / historical / …) at once.
   const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
 
   // Slice 5: cross-lane drag. Lifted from TimelineLaneCanvas (where it
@@ -325,7 +325,7 @@ export function TimelinePanel({ scope }: Props) {
     query,
   };
   // Lane visibility = individual lane toggle (filterVisibleLanes) AND the
-  // layer-kind filter (ADR-079).
+  // layer-kind filter (ADR-085).
   const shownLanes = visibleByKind(
     filterVisibleLanes(timeline.lanes, filter),
     hiddenKinds,
@@ -428,7 +428,7 @@ export function TimelinePanel({ scope }: Props) {
         />
       )}
 
-      {/* ADR-079: layer-kind filter — show only certain lane types. */}
+      {/* ADR-085: layer-kind filter — show only certain lane types. */}
       {layerKinds.length > 1 && (
         <LayerKindFilter
           kinds={layerKinds}
@@ -540,7 +540,7 @@ export function TimelinePanel({ scope }: Props) {
 
   // Full-screen mode lifts the timeline out of the cramped center column into
   // a viewport-filling overlay — essential once a story world has hundreds of
-  // events across several parallel layers (Canon audit, ADR-076).
+  // events across several parallel layers (Canon audit, ADR-082).
   if (fullscreen) {
     return (
       <div
@@ -557,7 +557,7 @@ export function TimelinePanel({ scope }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Layer-kind filter — show/hide whole lane types (ADR-079)
+// Layer-kind filter — show/hide whole lane types (ADR-085)
 // ---------------------------------------------------------------------------
 
 function LayerKindFilter({
@@ -770,7 +770,7 @@ function TimelineLaneCanvas({
 
   const minPos = range.minPos;
   const cw = canvasWidth(range, scale);
-  // ADR-079: lane kind drives the header badge + the coloured left border.
+  // ADR-085: lane kind drives the header badge + the coloured left border.
   const kind = layerKindForLane(lane);
   const kindMeta = layerMeta(kind);
 

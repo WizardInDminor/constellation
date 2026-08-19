@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ConnectionsByRole — reusable Relationship Explorer panel (Phase B, ADR-078).
+ * ConnectionsByRole — reusable Relationship Explorer panel (Phase B, ADR-084).
  *
  * Generic: given any node's detail (with edges carrying denormalised neighbor
  * type/tags/story-flag), it shows the node's connections grouped by the role

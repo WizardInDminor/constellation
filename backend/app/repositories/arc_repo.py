@@ -1,4 +1,4 @@
-"""Entity Arc assembly (Phase C, ADR-081).
+"""Entity Arc assembly (Phase C, ADR-087).
 
 Derives an entity's evolution-over-time purely from existing data: the nodes it
 connects to, those nodes' timeline discourse positions / created_at timestamps,

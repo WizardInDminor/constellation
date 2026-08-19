@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EntityArc — generic evolution-over-time view (Phase C, ADR-081).
+ * EntityArc — generic evolution-over-time view (Phase C, ADR-087).
  *
  * Shows how ANY entity changed: its appearances ordered chronologically, each
  * with the edge note read as the interpretation at that point, plus future

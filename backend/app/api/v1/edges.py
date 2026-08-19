@@ -28,7 +28,7 @@ async def create_edge(data: EdgeCreate, db: DB) -> EdgeDetail:
 
 @router.patch("/{edge_id}")
 async def update_edge(edge_id: str, data: EdgeUpdate, db: DB) -> EdgeDetail:
-    """Edit a relationship's note (ADR-082) — the edge-note authoring loop."""
+    """Edit a relationship's note (ADR-088) — the edge-note authoring loop."""
     updated = await edge_repo.update_note(db, edge_id, data.note)
     if updated is None:
         raise HTTPException(404, "Edge not found")

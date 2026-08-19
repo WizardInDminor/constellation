@@ -1,5 +1,5 @@
 /**
- * Entity Arc presentation helpers (Phase C, ADR-081).
+ * Entity Arc presentation helpers (Phase C, ADR-087).
  *
  * Ordering is computed server-side (arc_repo); these are the small pure pieces
  * the EntityArc component needs — a per-appearance time label, a human label

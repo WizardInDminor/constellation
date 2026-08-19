@@ -296,7 +296,7 @@ export function deleteEdge(edgeId: string): Promise<void> {
   return request(`/api/v1/edges/${edgeId}`, { method: "DELETE" });
 }
 
-// ADR-082: the edge-note authoring loop. Edit why a relationship exists / what
+// ADR-088: the edge-note authoring loop. Edit why a relationship exists / what
 // it means; `note: null` clears it.
 export function updateEdge(
   edgeId: string,
@@ -787,7 +787,7 @@ export function narrativeDump(
   });
 }
 
-// Entity Arc — evolution-over-time of any node (ADR-081).
+// Entity Arc — evolution-over-time of any node (ADR-087).
 export type EntityArc = components["schemas"]["EntityArc"];
 export type ArcAppearance = components["schemas"]["ArcAppearance"];
 
@@ -801,7 +801,7 @@ export const NARRATIVE_TAGS = {
   CHARACTER: "narrative:character",
   THEME: "narrative:theme",
   LOCATION: "narrative:location",
-  // Canon audit (ADR-077): story-specific role types that previously had no
+  // Canon audit (ADR-083): story-specific role types that previously had no
   // first-class representation. Symbols/metaphors recur and accrete meaning;
   // factions are authority/underground structures; open questions are the
   // writer's unresolved threads. All are taggable structure/permanent nodes,
@@ -835,7 +835,7 @@ export function getCoverage(hubId: string): Promise<CoverageResponse> {
   return request(`/api/v1/projects/${hubId}/coverage`);
 }
 
-// Open Threads & Pending Payoffs dashboard (ADR-083).
+// Open Threads & Pending Payoffs dashboard (ADR-089).
 export type ProjectThreads = components["schemas"]["ProjectThreads"];
 export type ThreadItem = components["schemas"]["ThreadItem"];
 export type TensionThread = components["schemas"]["TensionThread"];

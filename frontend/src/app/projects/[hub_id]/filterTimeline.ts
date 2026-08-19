@@ -6,7 +6,7 @@
  * that's too thin — a writer also wants to find scenes by title/story-time
  * and to focus on prose-pipeline state (e.g. "show me what's still planned").
  *
- * Design choice (ADR-076): prose-status and text filters DIM rather than HIDE,
+ * Design choice (ADR-082): prose-status and text filters DIM rather than HIDE,
  * matching the existing character-highlight philosophy. Hiding events would
  * leave gaps in the FOLLOWS_FROM connector chain and lose the writer's sense
  * of where a beat sits on the axis. Everything stays on the canvas; the

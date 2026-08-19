@@ -584,7 +584,7 @@ function EdgePanel({
                   ×
                 </button>
               </div>
-              {/* Edge-note authoring loop (ADR-082). */}
+              {/* Edge-note authoring loop (ADR-088). */}
               <div className="pl-4">
                 <EdgeNoteEditor
                   edgeId={e.id}
@@ -1299,9 +1299,9 @@ export default function NodePage() {
           {(node.tags ?? []).some(
             (t) => t.name === "narrative:open-question",
           ) && <LifecycleStatusControl node={node} onChange={reload} />}
-          {/* Relationship Explorer — connections grouped by role (ADR-078). */}
+          {/* Relationship Explorer — connections grouped by role (ADR-084). */}
           <ConnectionsByRole detail={node} />
-          {/* Entity Arc — how this entity evolved over time (ADR-081). Hides
+          {/* Entity Arc — how this entity evolved over time (ADR-087). Hides
               itself when there's no sequence worth showing. */}
           <EntityArc nodeId={nodeId} />
           {node.type !== "fleeting" && (

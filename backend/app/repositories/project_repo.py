@@ -30,7 +30,7 @@ from app.models import (
 )
 from app.models.node import NodeRef
 
-# Lifecycle status tags that mark a node as an unresolved thread (ADR-080/083).
+# Lifecycle status tags that mark a node as an unresolved thread (ADR-086/083).
 _OPEN_STATUS_TAGS = ("status:open", "status:developing")
 _TENSION_EDGE_TYPES = ("CONTRADICTS", "QUESTIONS")
 
@@ -234,7 +234,7 @@ async def count_project_notes(db: aiosqlite.Connection, scope: ProjectScope) -> 
 async def project_member_ids(
     db: aiosqlite.Connection, hub_node_id: str, scope: ProjectScope
 ) -> set[str]:
-    """Node ids considered part of the project (ADR-083): pinned nodes, nodes
+    """Node ids considered part of the project (ADR-089): pinned nodes, nodes
     carrying any project tag, and story events on the project's timelines (so
     narrative scenes count even though they're attached via COLLECTS, not
     tags)."""
@@ -272,7 +272,7 @@ async def assemble_threads(
     db: aiosqlite.Connection, hub_node_id: str, scope: ProjectScope
 ) -> ProjectThreads:
     """Open threads (status:open/developing nodes + unresolved tensions) and
-    pending payoffs (planned story events) within the project scope. ADR-083."""
+    pending payoffs (planned story events) within the project scope. ADR-089."""
     members = await project_member_ids(db, hub_node_id, scope)
     if not members:
         return ProjectThreads(open_questions=[], pending_payoffs=[], unresolved_tensions=[])

@@ -1,4 +1,4 @@
-"""Open Threads & Pending Payoffs dashboard (ADR-083)."""
+"""Open Threads & Pending Payoffs dashboard (ADR-089)."""
 
 from app.models import EdgeCreate, PermanentCreate, StructureCreate, TagCreate
 from app.repositories import edge_repo, node_repo, project_repo, tag_repo, timeline_repo

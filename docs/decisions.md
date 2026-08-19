@@ -4965,7 +4965,7 @@ its own ADR.
 
 ---
 
-## ADR-076 — Timeline full-screen mode, shared axis + zoom, dim-not-hide filters
+## ADR-082 — Timeline full-screen mode, shared axis + zoom, dim-not-hide filters
 
 **Status:** Accepted
 
@@ -5031,7 +5031,7 @@ character-highlight.
 
 ---
 
-## ADR-077 — Story-specific narrative role types via reserved tags (symbol, faction, open-question)
+## ADR-083 — Story-specific narrative role types via reserved tags (symbol, faction, open-question)
 
 **Status:** Accepted
 
@@ -5078,7 +5078,7 @@ were also unrepresented.
 
 ---
 
-## ADR-078 — Relationship Explorer: role metadata on edge summaries + ConnectionsByRole
+## ADR-084 — Relationship Explorer: role metadata on edge summaries + ConnectionsByRole
 
 **Status:** Accepted
 
@@ -5137,7 +5137,7 @@ not a narrative feature.
 
 ---
 
-## ADR-079 — Typed timeline layers via reserved `layer:*` tags
+## ADR-085 — Typed timeline layers via reserved `layer:*` tags
 
 **Status:** Accepted
 
@@ -5159,7 +5159,7 @@ kind from its tags and powers the filter.
 
 - Consistent with the established reserved-tag convention; additive and
   extensible without migrations.
-- Surfacing `timeline_tags` (like ADR-078's neighbor tags) avoids a per-lane
+- Surfacing `timeline_tags` (like ADR-084's neighbor tags) avoids a per-lane
   fetch.
 
 **Consequences:**
@@ -5171,7 +5171,7 @@ kind from its tags and powers the filter.
 
 ---
 
-## ADR-080 — Lifecycle status via reserved `status:*` tags; question resolution reuses ADR-059
+## ADR-086 — Lifecycle status via reserved `status:*` tags; question resolution reuses ADR-059
 
 **Status:** Accepted
 
@@ -5210,11 +5210,11 @@ already built and tested.
 
 ---
 
-## ADR-081 — Entity Arc: derived evolution-over-time (`GET /nodes/{id}/arc`)
+## ADR-087 — Entity Arc: derived evolution-over-time (`GET /nodes/{id}/arc`)
 
 **Status:** Accepted
 
-**Context:** After the Relationship Explorer (ADR-078) the app answers "what is
+**Context:** After the Relationship Explorer (ADR-084) the app answers "what is
 X connected to" but not "how has X *changed*". Meaning in a serious knowledge
 base is a trajectory: a symbol accretes interpretations, a research concept's
 understanding deepens, a character develops, an open question moves toward
@@ -5249,17 +5249,17 @@ gets a chronological arc.
 - Ordering across mixed story/non-story appearances is bucketed (events first by
   position, then others by date) rather than interleaved on a single axis —
   the two clocks aren't directly comparable; documented in `ordering_basis`.
-- A coarse single status (ADR-080) plus the arc gives "trajectory" without a
+- A coarse single status (ADR-086) plus the arc gives "trajectory" without a
   full event-sourced history table, which remains out of scope.
 
 ---
 
-## ADR-082 — Edge-note authoring loop (`PATCH /edges/{id}` + inline editor)
+## ADR-088 — Edge-note authoring loop (`PATCH /edges/{id}` + inline editor)
 
 **Status:** Accepted
 
 **Context:** Edge notes are high-value context — they feed EntityArc
-interpretation entries (ADR-081), ConnectionsByRole "why" labels (ADR-078), and
+interpretation entries (ADR-087), ConnectionsByRole "why" labels (ADR-084), and
 RAG edge context. Notes could be set at *creation* (node detail, graph
 ConnectPanel) but never *edited* afterward, and there was no API to change a
 note. So the richest signal in the graph could not be refined as understanding
@@ -5292,11 +5292,11 @@ puts editing exactly where the relationship is shown.
 
 ---
 
-## ADR-083 — Open Threads & Pending Payoffs dashboard (`GET /projects/{hub_id}/threads`)
+## ADR-089 — Open Threads & Pending Payoffs dashboard (`GET /projects/{hub_id}/threads`)
 
 **Status:** Accepted
 
-**Context:** ADR-080/081 gave per-node lifecycle status and per-entity arcs, but
+**Context:** ADR-086/081 gave per-node lifecycle status and per-entity arcs, but
 there was no project-level view of "what still needs attention." A writer or
 researcher wants one place answering: which questions are still open, which
 tensions are unresolved, and which set-ups haven't paid off yet. This is generic
@@ -5306,7 +5306,7 @@ situational awareness, not a narrative feature.
 returning three buckets, all scoped to the project:
 
 - **Open questions** — nodes carrying a `status:open` / `status:developing` tag
-  (ADR-080 lifecycle).
+  (ADR-086 lifecycle).
 - **Unresolved tensions** — `CONTRADICTS` / `QUESTIONS` edges with
   `resolved_at IS NULL` (ADR-059) touching a project member.
 - **Pending payoffs** — story events with `prose_status = 'planned'` (set up,

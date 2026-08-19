@@ -1,4 +1,4 @@
-"""Entity Arc — generic evolution-over-time view (Phase C, ADR-081).
+"""Entity Arc — generic evolution-over-time view (Phase C, ADR-087).
 
 An "entity" is any node (a symbol, character, theme, world rule, open question,
 research concept, learning topic — anything). Its *arc* is the ordered sequence
