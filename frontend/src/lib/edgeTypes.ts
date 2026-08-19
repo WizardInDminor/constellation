@@ -31,6 +31,20 @@ export const EDGE_TYPES: EdgeType[] = [
   "FOLLOWS_FROM",
   // Narrative (ADR-052 Slice 4 addendum).
   "EXPLAINS",
+  // Canon symbolic / resonance verbs (ADR-077).
+  "HOLDS_OPEN",
+  "REFUSES_TO_NAME",
+  "CARRIES_CHARGE_FOR",
+  "FORESHADOWS",
+  "MIRRORS",
+  "INVERSION_OF",
+  "PROTOTYPE_OF",
+  "AMPLIFIES",
+  "CORRUPTS",
+  "DESTABILIZES",
+  "STABILIZES",
+  "PROTECTS",
+  "THREATENS",
 ];
 
 // Tension-bearing edge types — the only types on which the "mark resolved"
@@ -59,6 +73,20 @@ export const EDGE_COLORS: Record<EdgeType, string> = {
   REGIME_OF: "bg-fuchsia-100 text-fuchsia-700",
   FOLLOWS_FROM: "bg-lime-100 text-lime-700",
   EXPLAINS: "bg-amber-100 text-amber-800",
+  // Canon symbolic / resonance verbs (ADR-077).
+  HOLDS_OPEN: "bg-violet-100 text-violet-700",
+  REFUSES_TO_NAME: "bg-stone-100 text-stone-700",
+  CARRIES_CHARGE_FOR: "bg-red-100 text-red-800",
+  FORESHADOWS: "bg-indigo-100 text-indigo-800",
+  MIRRORS: "bg-purple-100 text-purple-800",
+  INVERSION_OF: "bg-fuchsia-100 text-fuchsia-800",
+  PROTOTYPE_OF: "bg-teal-100 text-teal-800",
+  AMPLIFIES: "bg-orange-100 text-orange-800",
+  CORRUPTS: "bg-rose-100 text-rose-800",
+  DESTABILIZES: "bg-red-100 text-red-700",
+  STABILIZES: "bg-green-100 text-green-800",
+  PROTECTS: "bg-emerald-100 text-emerald-800",
+  THREATENS: "bg-red-200 text-red-900",
 };
 
 export interface EdgeTypeMeta {
@@ -194,6 +222,96 @@ export const EDGE_TYPE_META: Record<EdgeType, EdgeTypeMeta> = {
       "A (lore) provides backdrop/history/cause that explains B (character/location/event).",
     example:
       "Use from a lore note to a character whose behavior the lore makes sense of, or to a location whose atmosphere the lore underwrites.",
+  },
+  // Canon symbolic / resonance verbs (ADR-077). Nuance lives in the edge note.
+  HOLDS_OPEN: {
+    label: "Holds open",
+    directional: true,
+    description:
+      "A sustains B's openness / unresolvedness rather than closing or naming it.",
+    example:
+      "Michael → HOLDS_OPEN → Final Shared Moment: he preserves the channel, he doesn't project truth.",
+  },
+  REFUSES_TO_NAME: {
+    label: "Refuses to name",
+    directional: true,
+    description:
+      "A deliberately withholds a name/definition from B, keeping it load-bearing.",
+    example:
+      "Use when a character or scene declines to pin down a mystery that must stay unnamed.",
+  },
+  CARRIES_CHARGE_FOR: {
+    label: "Carries charge for",
+    directional: true,
+    description: "A holds emotional/symbolic charge on behalf of B.",
+    example:
+      "Use from a charged image to the theme or character it electrifies.",
+  },
+  FORESHADOWS: {
+    label: "Foreshadows",
+    directional: true,
+    description: "A plants or anticipates what B later pays off.",
+    example: "Use from an early image/scene to the later moment it prefigures.",
+  },
+  MIRRORS: {
+    label: "Mirrors",
+    directional: false,
+    description:
+      "A and B reflect each other — parallel structure, inverted or echoed.",
+    example: "Use between two scenes or images that rhyme across the story.",
+  },
+  INVERSION_OF: {
+    label: "Inversion of",
+    directional: false,
+    description:
+      "A is the inverse/negative of B — same shape, opposite valence.",
+    example:
+      "Use between a symbol and its dark counterpart (natural light / artificial light).",
+  },
+  PROTOTYPE_OF: {
+    label: "Prototype of",
+    directional: true,
+    description: "A is an early/partial version that B fully realizes.",
+    example:
+      "The Clearing → PROTOTYPE_OF → Final Shared Moment: the first, smaller instance of the later thing.",
+  },
+  AMPLIFIES: {
+    label: "Amplifies",
+    directional: true,
+    description: "A intensifies or magnifies B.",
+    example:
+      "Use when a force, character, or image turns up the intensity of another.",
+  },
+  CORRUPTS: {
+    label: "Corrupts",
+    directional: true,
+    description: "A degrades, distorts, or colonizes B.",
+    example: "Use when a regime or force spoils something that was whole.",
+  },
+  DESTABILIZES: {
+    label: "Destabilizes",
+    directional: true,
+    description: "A undermines the stability of B.",
+    example: "Use when an event or force pushes a state toward collapse.",
+  },
+  STABILIZES: {
+    label: "Stabilizes",
+    directional: true,
+    description: "A holds B steady against collapse or drift.",
+    example: "Use when a character or rule keeps a fragile state intact.",
+  },
+  PROTECTS: {
+    label: "Protects",
+    directional: true,
+    description: "A shields or guards B.",
+    example: "Use when a character or force defends something vulnerable.",
+  },
+  THREATENS: {
+    label: "Threatens",
+    directional: true,
+    description: "A endangers or menaces B.",
+    example:
+      "Use when a force, institution, or character imperils another node.",
   },
 };
 

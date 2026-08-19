@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import (
     activity,
     admin,
+    builder,
+    canon,
     config,
     discover,
     edges,
@@ -49,6 +51,8 @@ app.include_router(discover.router, prefix=_v1_prefix)
 app.include_router(admin.router, prefix=_v1_prefix)
 app.include_router(activity.router, prefix=_v1_prefix)
 app.include_router(projects.router, prefix=_v1_prefix)
+app.include_router(canon.router, prefix=_v1_prefix)
+app.include_router(builder.router, prefix=_v1_prefix)
 
 
 @app.get("/health")

@@ -13,6 +13,7 @@ from app.models import (
     RecentEdge,
     TagRef,
 )
+from app.models.canon import OpenThreadEdge
 
 _SELECT_COLUMNS = (
     "id, from_id, to_id, type, note, classifier_rationale, "
@@ -292,6 +293,40 @@ async def list_recent(
         RecentEdge(
             id=r["id"],
             type=r["type"],
+            created_at=r["created_at"],
+            from_node=NodeRef(id=r["from_id"], title=r["from_title"], type=r["from_type"]),
+            to_node=NodeRef(id=r["to_id"], title=r["to_title"], type=r["to_type"]),
+        )
+        for r in rows
+    ]
+
+
+async def list_open_tensions(db: aiosqlite.Connection, *, limit: int = 100) -> list[OpenThreadEdge]:
+    """Unresolved tension edges (ADR-076 Open Threads view).
+
+    Returns CONTRADICTS / QUESTIONS edges with `resolved_at IS NULL` — the
+    tensions the author is still sitting with — newest first, with both endpoint
+    titles and the edge note. Excludes edges whose endpoints are soft-deleted.
+    """
+    cursor = await db.execute(
+        """SELECT e.id, e.type, e.created_at, e.note,
+                  fn.id AS from_id, fn.title AS from_title, fn.type AS from_type,
+                  tn.id AS to_id,   tn.title AS to_title,   tn.type AS to_type
+           FROM edges e
+           JOIN nodes fn ON fn.id = e.from_id AND fn.deleted_at IS NULL
+           JOIN nodes tn ON tn.id = e.to_id   AND tn.deleted_at IS NULL
+           WHERE e.type IN ('CONTRADICTS', 'QUESTIONS')
+             AND e.resolved_at IS NULL
+           ORDER BY e.created_at DESC
+           LIMIT ?""",
+        (limit,),
+    )
+    rows = await cursor.fetchall()
+    return [
+        OpenThreadEdge(
+            id=r["id"],
+            type=r["type"],
+            note=r["note"],
             created_at=r["created_at"],
             from_node=NodeRef(id=r["from_id"], title=r["from_title"], type=r["from_type"]),
             to_node=NodeRef(id=r["to_id"], title=r["to_title"], type=r["to_type"]),

@@ -1,5 +1,31 @@
 from app.models.activity import ActivityFeed, RecentEdge
 from app.models.arc import ArcAppearance, EntityArc
+from app.models.builder import (
+    PIPELINE_STAGES,
+    BriefCharacter,
+    BriefLocation,
+    CreativeBrief,
+    DocKind,
+    PipelineStage,
+    ProductionCreate,
+    ProductionDetail,
+    ProductionDocDetail,
+    ProductionDocSummary,
+    ProductionDocUpdate,
+    ProductionStatus,
+    ProductionSummary,
+    PromoteDocResponse,
+    StageRun,
+    StageRunStatus,
+)
+from app.models.canon import (
+    CanonAskRequest,
+    CanonAskResponse,
+    CanonView,
+    CanonViewResponse,
+    OpenThreadEdge,
+    OpenThreadsResponse,
+)
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
 from app.models.discover import (
@@ -120,6 +146,22 @@ ProjectDetail.model_rebuild()
 __all__ = [
     "ActivityFeed",
     "RecentEdge",
+    "PIPELINE_STAGES",
+    "BriefCharacter",
+    "BriefLocation",
+    "CreativeBrief",
+    "DocKind",
+    "PipelineStage",
+    "ProductionCreate",
+    "ProductionDetail",
+    "ProductionDocDetail",
+    "ProductionDocSummary",
+    "ProductionDocUpdate",
+    "ProductionStatus",
+    "ProductionSummary",
+    "PromoteDocResponse",
+    "StageRun",
+    "StageRunStatus",
     "Paginated",
     "ConfigEntry",
     "ConfigUpdate",
@@ -205,6 +247,12 @@ __all__ = [
     "BridgeClassification",
     "ClassifyBridgeRequest",
     "TriangleCandidate",
+    "CanonAskRequest",
+    "CanonAskResponse",
+    "CanonView",
+    "CanonViewResponse",
+    "OpenThreadEdge",
+    "OpenThreadsResponse",
     "CorpusStats",
     "AdminStatus",
     "EmbeddingJob",

@@ -118,6 +118,11 @@ export function getNode(id: string): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`);
 }
 
+// Canon uncertainty vocabularies (ADR-076), extracted from the generated schema.
+export type CanonStatus = NonNullable<NodeDetail["canon_status"]>;
+export type NodeStatusValue = NonNullable<NodeDetail["node_status"]>;
+export type Charge = NonNullable<NodeDetail["charge"]>;
+
 export function updateNode(
   id: string,
   patch: {
@@ -131,6 +136,12 @@ export function updateNode(
     story_time?: string | null;
     prose_status?: string | null;
     manuscript_location?: string | null;
+    // Canon uncertainty metadata (ADR-076). Same semantics: null clears.
+    canon_status?: CanonStatus | null;
+    node_status?: NodeStatusValue | null;
+    charge?: Charge | null;
+    do_not_name_yet?: boolean | null;
+    confidence?: number | null;
   },
 ): Promise<NodeDetail> {
   return request(`/api/v1/nodes/${id}`, {
@@ -170,6 +181,12 @@ export interface ListNodesFilters {
   noOutgoing?: boolean;
   noEdges?: boolean;
   summaryMaxLength?: number;
+  // Canon uncertainty filters (ADR-076).
+  canonStatus?: CanonStatus;
+  nodeStatus?: NodeStatusValue;
+  chargeIn?: Charge[];
+  doNotNameYet?: boolean;
+  noScene?: boolean;
 }
 
 export function listNodes(
@@ -189,6 +206,12 @@ export function listNodes(
   if (filters.summaryMaxLength !== undefined) {
     params.set("summary_max_length", String(filters.summaryMaxLength));
   }
+  if (filters.canonStatus) params.set("canon_status", filters.canonStatus);
+  if (filters.nodeStatus) params.set("node_status", filters.nodeStatus);
+  if (filters.chargeIn)
+    for (const c of filters.chargeIn) params.append("charge_in", c);
+  if (filters.doNotNameYet) params.set("do_not_name_yet", "true");
+  if (filters.noScene) params.set("no_scene", "true");
   return request(`/api/v1/nodes?${params}`);
 }
 
@@ -219,6 +242,28 @@ export function createStructureNode(data: {
 export function searchNodes(q: string, limit = 10): Promise<NodeRef[]> {
   const params = new URLSearchParams({ q, limit: String(limit) });
   return request(`/api/v1/nodes/search?${params}`);
+}
+
+// ── Canon views (ADR-076) ─────────────────────────────────────────────────────
+export type CanonView = components["schemas"]["CanonAskRequest"]["view"];
+export type CanonViewResponse = components["schemas"]["CanonViewResponse"];
+export type CanonAskResponse = components["schemas"]["CanonAskResponse"];
+export type OpenThreadsResponse = components["schemas"]["OpenThreadsResponse"];
+export type OpenThreadEdge = components["schemas"]["OpenThreadEdge"];
+
+export function getCanonView(view: CanonView): Promise<CanonViewResponse> {
+  return request(`/api/v1/canon/views/${view}`);
+}
+
+export function getOpenThreads(): Promise<OpenThreadsResponse> {
+  return request("/api/v1/canon/open-threads");
+}
+
+export function canonAsk(view: CanonView): Promise<CanonAskResponse> {
+  return request("/api/v1/canon/ask", {
+    method: "POST",
+    body: JSON.stringify({ view }),
+  });
 }
 
 // Tags
