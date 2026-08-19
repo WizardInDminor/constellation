@@ -4965,6 +4965,436 @@ its own ADR.
 
 ---
 
+## ADR-082 — Timeline full-screen mode, shared axis + zoom, dim-not-hide filters
+
+**Status:** Accepted
+
+**Context:** The narrative timeline (ADR-066) renders inside the workspace
+center column, sandwiched between the 260 px left rail and 280 px right rail —
+roughly half the viewport on a laptop. For a trilogy-scale story world with
+hundreds of events across several parallel layers (external plot, a dream
+progression, a history 50 years prior), that column is far too cramped. Three
+concrete defects surfaced in the Canon stress-test audit:
+
+1. No way to give the timeline the full screen.
+2. A fixed zoom (`POSITION_SCALE = 0.4`) with no control — a long story runs
+   off-canvas with no way to compress, and dense regions can't be expanded.
+3. Each lane computed its **own** `minPos`/`maxPos`/`canvasWidth` and lived in
+   its **own** horizontal scroll container, so parallel lanes neither aligned
+   on a common axis nor scrolled together. A writer could not see "where the
+   dream beat falls relative to the external scene".
+
+Filtering was also thin: only a lane-visibility toggle and a single
+character-highlight.
+
+**Decision:**
+
+- Add a **full-screen mode**: a toggle promotes the timeline into a
+  `fixed inset-0 z-40` overlay (Esc to exit). State is local to the panel; no
+  routing change.
+- Introduce **discrete zoom levels** (`ZOOM_LEVELS`, default index → 0.4, the
+  prior constant) with −/percentage/+ controls. The percentage label resets to
+  default on click.
+- Compute **one shared position range** across all visible lanes and pass it
+  plus the active zoom scale to every lane, so lanes use identical
+  x-coordinates and width. Wrap all lanes in a **single** horizontal scroll
+  container; lane headers are `sticky left-0` so labels stay visible. Result:
+  parallel timelines align and scroll together.
+- Broaden filtering with a **prose-status chip set** and a **free-text search**
+  over title + story_time. These, plus the existing character-highlight, **dim**
+  non-matching events rather than **hiding** them.
+
+**Rationale:**
+
+- Dim-not-hide matches the existing character-highlight philosophy (ADR-066 /
+  philosophy doc §6.8) and avoids leaving gaps in the FOLLOWS_FROM connector
+  chain or losing the writer's sense of where a beat sits on the axis.
+- A shared axis is the minimum needed for parallel-timeline comparison, which is
+  the entire point of having parallel lanes.
+- Discrete zoom levels (vs. continuous) keep the control trivial and the axis
+  math integer-clean for the cross-lane drag hit-test.
+- The geometry (`sharedPositionRange`, `canvasWidth`, `positionToX`/
+  `xToPosition`, `zoomScale`) and the filter predicate (`eventDimmed`,
+  `visibleLanes`) are extracted as pure functions in `timelineLayout.ts` /
+  `filterTimeline.ts` and unit-tested, following the repo convention
+  (`filterGraph.ts`, `filterPool.ts`).
+
+**Consequences:**
+
+- A single-lane project renders identically to before (range still floors at 0,
+  ceils at 1000; default zoom unchanged).
+- Cross-lane drag continues to work: each lane registers a `clientX →
+  discourse_position` converter built from the shared range + scale.
+- No backend change. Lane "kind" (dream vs external vs historical) is still
+  expressed only by the timeline structure-node's title; a typed `kind` column
+  remains a candidate for a future pass and is noted as a remaining gap.
+
+---
+
+## ADR-083 — Story-specific narrative role types via reserved tags (symbol, faction, open-question)
+
+**Status:** Accepted
+
+**Context:** Slice 5 (ADR-065) modeled narrative roles — character, theme,
+location, lore — as reserved `narrative:*` tag names on structure/permanent
+nodes rather than as new node types, deliberately avoiding schema churn. The
+Canon audit found three high-value roles with **no** representation at all:
+**symbols/metaphors** (which recur and accrete meaning — a central concern for
+the project), **factions** (authority structures / underground groups), and
+**open questions** (the writer's unresolved threads). Ability and Artifact/Text
+were also unrepresented.
+
+**Decision:** Extend the reserved-tag vocabulary rather than the schema:
+
+- `narrative:symbol`, `narrative:faction`, `narrative:open-question` — surfaced
+  as new workspace tabs (Symbols, Factions, Open questions) reusing the existing
+  `NarrativeRoleList` (list + quick-create + Ctrl-edit). Symbols/factions are
+  `structure` nodes; open questions are `permanent`.
+- `narrative:lore-ability`, `narrative:lore-artifact` — added as quick-create
+  categories under the existing World / Lore tab (no new tab).
+
+**Rationale:**
+
+- Consistent with ADR-065's decision to use tags, not types: a node's "role" is
+  a classification, and tags already drive the list views and quick-create.
+- Purely additive and UI-only: tags are created on demand via the existing
+  `createTag` flow; no migration, no model change.
+- Symbols and open questions link into scenes via ordinary typed edges
+  (`ELABORATES`, `EXPLAINS`, `COLLECTS`, `QUESTIONS`), so a symbol's node-detail
+  page already answers "which scenes use this symbol" through its edge list.
+
+**Consequences:**
+
+- The scene-context assembler (`timeline_repo`) does not yet special-case
+  symbols/factions/open-questions — they appear as generic arc-notes in scene
+  context, not in dedicated buckets. Promoting them to first-class
+  scene-context groups is a small backend follow-up, recorded as a remaining
+  gap.
+- Backend `timeline_repo` narrative-tag constants and the frontend
+  `NARRATIVE_TAGS` map can drift; they are mirrored by convention. A future pass
+  should add the new constants backend-side if scene-context surfacing is built.
+- The workspace tab bar now carries 13 tabs and wraps; acceptable for a
+  power-user planning tool.
+
+---
+
+## ADR-084 — Relationship Explorer: role metadata on edge summaries + ConnectionsByRole
+
+**Status:** Accepted
+
+**Context:** Constellation stores rich typed relationships but exposed them
+poorly. The node detail page grouped *outgoing* edges by edge type and listed
+*incoming* edges flat — useful for a researcher reading author-stance verbs,
+useless for answering "what is this connected to, and what role does each
+connection play?". A symbol can't show "the scenes I appear in"; a claim can't
+show "the observations that demonstrate me". The blocker was data shape:
+`EdgeSummary.neighbor` was a bare `NodeRef` (id/title/type), so the frontend
+could not tell a Character from a Symbol from a Source without an N+1 fetch per
+neighbor. This is a **general** knowledge-graph need (Canon is the validator),
+not a narrative feature.
+
+**Decision:**
+
+- Denormalise two fields onto `EdgeSummary` (additive, defaulted): the
+  neighbor's `neighbor_tags: list[TagRef]` and `neighbor_is_story_event: bool`.
+  `get_outgoing` / `get_incoming` select the story flag and bulk-fetch neighbor
+  tags in one query (`_neighbor_tags_bulk`), so a node's full neighbourhood is
+  categorisable from a single `GET /nodes/{id}` with no extra round-trips —
+  which is the explicit Phase-B backend requirement.
+- Add a pure, generic grouping module `lib/connectionsByRole.ts`
+  (`roleForConnection`, `groupConnectionsByRole`, `connectionsFromDetail`,
+  `connectionReason`). Role assignment degrades gracefully: story-event →
+  Scenes; reserved `narrative:*` tag → Characters/Symbols/World Rules/…; else
+  the node's base type → Sources/Maps & Structures/Notes/…. So it is equally
+  useful for a research corpus and a dense story world.
+- Add a reusable `ConnectionsByRole` component (collapsible groups, counts,
+  direction-aware "why" labels, resolved badges) and mount it on the node
+  detail page. The `EdgePanel` editor is retained (no functionality removed).
+
+**Rationale:**
+
+- Denormalising onto the summary (vs. a new endpoint or a graph query) is the
+  smallest additive change that removes the N+1; the fields are cheap and
+  already in the same row join.
+- A pure grouping helper keeps the role taxonomy testable and reusable across
+  surfaces (node detail now; workspace/graph later).
+- The "Demonstrated In" relabel for world-rules is pushed to the **caller** via
+  a `labelOverrides` option, keeping the core helper domain-agnostic — an
+  evidence/consequence framing that generalises (a hypothesis is "supported
+  by" its evidence).
+
+**Consequences:**
+
+- The *read* side of the Open-Question and Scene-metadata objectives now works
+  for free: a question node's related scenes, and a scene's connected open
+  questions, both render through `ConnectionsByRole`.
+- `bulk` tag fetch is duplicated in `edge_repo` rather than reusing
+  `node_repo`'s private helper, to avoid a `node_repo → edge_repo → node_repo`
+  import cycle.
+- Other `EdgeSummary` consumers are unaffected (fields default empty/false).
+  After `pnpm types` the new fields appear in the generated API types
+  automatically.
+
+---
+
+## ADR-085 — Typed timeline layers via reserved `layer:*` tags
+
+**Status:** Accepted
+
+**Context:** Parallel timelines (ADR-065) are structure nodes; their "kind"
+(external plot vs. a dream progression vs. a history 50 years prior) was
+expressed only in the lane title — a naming convention, not data. The audit
+asked for typed lane classifications that are filterable and visually distinct,
+and extensible.
+
+**Decision:** Classify a timeline by a reserved `layer:<kind>` tag on its
+structure node (mirrors the `narrative:*` role-tag pattern; no schema change).
+Seed kinds: `external`, `historical`, `dream`, `metaphysical`, `character-arc`,
+`theme-arc`; the set is open. Expose the timeline node's tags on `TimelineLane`
+(`timeline_tags`) so the frontend can derive the kind, colour/label each lane,
+and filter lanes by kind. A pure `timelineLayers.ts` helper resolves a lane's
+kind from its tags and powers the filter.
+
+**Rationale:**
+
+- Consistent with the established reserved-tag convention; additive and
+  extensible without migrations.
+- Surfacing `timeline_tags` (like ADR-084's neighbor tags) avoids a per-lane
+  fetch.
+
+**Consequences:**
+
+- Lanes without a `layer:*` tag fall back to an "Unspecified" kind and remain
+  fully usable — backward compatible.
+- A future pass could let the New-timeline dialog pick a kind directly
+  (currently the tag is applied like any other narrative role tag).
+
+---
+
+## ADR-086 — Lifecycle status via reserved `status:*` tags; question resolution reuses ADR-059
+
+**Status:** Accepted
+
+**Context:** Phase B Objective 2 asks for an Open-Question lifecycle (Open /
+Developing / Resolved) plus create/complicate/hint/resolve relationships. Two
+ways to model it: (a) add first-class edge types
+(`CREATES_QUESTION`/`HINTS_AT`/`COMPLICATES`/`RESOLVES`) and a status column, or
+(b) reuse what exists. The product direction (confirmed with the user) is to
+prefer additive, graph-native changes and avoid backend complexity.
+
+**Decision:** Reuse existing primitives.
+
+- **Relationship side:** a question relates to scenes/notes via the existing
+  `QUESTIONS` edge; "resolved by X" is the edge's resolved-state
+  (`resolved_at` / `resolved_by_node_id`, ADR-059) — surfaced in the
+  Relationship Explorer. No new edge types; `RESOLVES` stays intentionally
+  absent (ADR-059).
+- **Node side:** a coarse lifecycle status is a reserved `status:{open,
+  developing,resolved}` tag (mirrors `narrative:*` / `layer:*`). A generic
+  `lib/lifecycleStatus.ts` parses it; `LifecycleStatusControl` sets it (rewrites
+  the node's tag set); the Explorer shows the status badge on connected
+  questions. Generic across domains (research hypotheses, etc.).
+
+**Rationale:** Adding edge types means a CHECK-constraint table rebuild
+migration and would reverse ADR-059. Tags + the existing resolved-state give the
+full lifecycle with zero schema change and reuse the resolution semantics
+already built and tested.
+
+**Consequences:**
+
+- "Complicate / hint at" nuance is not separately typed; such links use
+  `QUESTIONS`/`ELABORATES` with an edge `note`. If finer verbs are needed later,
+  that is a deliberate ADR-059 reversal, not an accident.
+- Status is a single coarse state per node; richer history (when it moved
+  open→resolved) is not tracked — acceptable for the lifecycle's intent.
+
+---
+
+## ADR-087 — Entity Arc: derived evolution-over-time (`GET /nodes/{id}/arc`)
+
+**Status:** Accepted
+
+**Context:** After the Relationship Explorer (ADR-084) the app answers "what is
+X connected to" but not "how has X *changed*". Meaning in a serious knowledge
+base is a trajectory: a symbol accretes interpretations, a research concept's
+understanding deepens, a character develops, an open question moves toward
+resolution. This is a **generic** knowledge-system capability — Entity Evolution
+Tracking — not a narrative SymbolArc feature.
+
+**Decision:** Add a read-only derivation, `GET /nodes/{id}/arc`, returning an
+`EntityArc`: the entity's connected nodes as ordered *appearances*, each
+carrying the **edge note** as its interpretation at that point.
+
+- **Ordering is derived, not stored.** Story-event appearances sort by their
+  timeline `discourse_position` (the narrative clock); everything else sorts by
+  the connected node's `created_at` (the knowledge clock). `ordering_basis`
+  reports `timeline` / `chronological` / `mixed`.
+- **Future payoff points** are derived: a connected story event with
+  `prose_status = 'planned'` is `is_pending`.
+- Pure ordering helpers (`ordering_basis`, `sort_appearance_rows`) are unit
+  tested; assembly is one SQL query (no N+1). Frontend `EntityArc` component
+  renders a vertical stepper and hides itself when there's no sequence worth
+  showing.
+
+**Rationale:** Everything needed already exists — edges, edge notes, timeline
+positions, timestamps — so evolution is a *view*, not new state. No schema
+change. Generic by construction: a research concept with no story events still
+gets a chronological arc.
+
+**Consequences:**
+
+- "Interpretation" reuses the edge `note`; entities whose links have no notes
+  show appearances without meaning text (still ordered). Encouraging note-on-
+  link authoring increases arc richness.
+- Ordering across mixed story/non-story appearances is bucketed (events first by
+  position, then others by date) rather than interleaved on a single axis —
+  the two clocks aren't directly comparable; documented in `ordering_basis`.
+- A coarse single status (ADR-086) plus the arc gives "trajectory" without a
+  full event-sourced history table, which remains out of scope.
+
+---
+
+## ADR-088 — Edge-note authoring loop (`PATCH /edges/{id}` + inline editor)
+
+**Status:** Accepted
+
+**Context:** Edge notes are high-value context — they feed EntityArc
+interpretation entries (ADR-087), ConnectionsByRole "why" labels (ADR-084), and
+RAG edge context. Notes could be set at *creation* (node detail, graph
+ConnectPanel) but never *edited* afterward, and there was no API to change a
+note. So the richest signal in the graph could not be refined as understanding
+grew.
+
+**Decision:**
+
+- Add `PATCH /edges/{id}` (`EdgeUpdate{note}`, `edge_repo.update_note`): set or
+  clear an edge's note. `note: null` clears; omitting leaves unchanged.
+- Add a reusable, generic `EdgeNoteEditor` (inline: shows the note or a subtle
+  "+ add note" prompt; click to edit; ⌘↵/Esc). Mounted on every relationship
+  row of the node detail page (outgoing and incoming). Saving refreshes the
+  page so EntityArc / ConnectionsByRole pick up the change immediately.
+- Centralise generic copy (`EDGE_NOTE_LABEL`, `EDGE_NOTE_PLACEHOLDER`) used by
+  the editor, the node-detail add form, and the graph ConnectPanel. Copy is
+  deliberately domain-neutral ("evidence, cause, example, dependency, a shift in
+  meaning") so it reads well for research, learning, project, and story nodes.
+
+**Rationale:** A note is just a column on `edges`; a PATCH is the minimal
+additive change. An inline editor keeps the prompt lightweight (no modal) and
+puts editing exactly where the relationship is shown.
+
+**Consequences:**
+
+- The graph EdgePanel (dark-themed, read-oriented) was left as-is; creation
+  there still flows through ConnectPanel. The node detail page is the canonical
+  create+edit surface.
+- Notes remain free text; no structured templating. The generic placeholder
+  nudges toward useful content without constraining it.
+
+---
+
+## ADR-089 — Open Threads & Pending Payoffs dashboard (`GET /projects/{hub_id}/threads`)
+
+**Status:** Accepted
+
+**Context:** ADR-086/081 gave per-node lifecycle status and per-entity arcs, but
+there was no project-level view of "what still needs attention." A writer or
+researcher wants one place answering: which questions are still open, which
+tensions are unresolved, and which set-ups haven't paid off yet. This is generic
+situational awareness, not a narrative feature.
+
+**Decision:** Add a derived, read-only dashboard `GET /projects/{hub_id}/threads`
+returning three buckets, all scoped to the project:
+
+- **Open questions** — nodes carrying a `status:open` / `status:developing` tag
+  (ADR-086 lifecycle).
+- **Unresolved tensions** — `CONTRADICTS` / `QUESTIONS` edges with
+  `resolved_at IS NULL` (ADR-059) touching a project member.
+- **Pending payoffs** — story events with `prose_status = 'planned'` (set up,
+  not yet written).
+
+Project membership (`project_member_ids`) = pinned nodes ∪ nodes tagged with a
+project tag ∪ story events on timelines COLLECTS-linked from the hub. The last
+term ensures narrative scenes count even though they attach via COLLECTS, not
+tags. Surfaced as a workspace "Threads" tab.
+
+**Rationale:** Everything is derived from existing state (status tags, resolved
+edges, prose_status); no schema change. Membership reuses the established
+pinned/tag notion, extended minimally for timeline-attached events. Corpus-wide
+queries filtered to the member set are fine at single-user scale and avoid giant
+`IN (…)` clauses.
+
+**Consequences:**
+
+- A project with no scope tags, no pins, and no timelines yields an empty
+  dashboard — expected; membership is what scopes it.
+- Pending payoffs are narrative-specific by nature (they need story events);
+  research/learning projects simply show none, which is correct.
+- The three buckets are independent lists, not a unified priority queue;
+  ranking/sorting across buckets is a future enhancement.
+
+---
+
+## ADR-090 — Two lifecycle axes coexist: `node_status` (Canon epistemics) vs. `status:*` tags (question lifecycle)
+
+**Status:** Accepted
+
+**Context:** ADR-076 and ADR-086 were designed on parallel branches and both
+model "how settled is this?". ADR-076 added a `node_status` column
+(`emerging | stable | contradicted | retired | unresolved`) alongside
+`canon_status`, via migration `0011`. ADR-086 modelled an Open-Question
+lifecycle as reserved `status:{open,developing,resolved}` tags, deliberately
+without a schema change. Merging the two branches puts both controls on the same
+node-detail page, and both feed "what is still open?" surfaces. Left
+undocumented, the next contributor cannot tell which one to write to.
+
+**Decision:** Keep both. They are two different axes, and the boundary is:
+
+- **`canon_status` / `node_status` (ADR-076) — the epistemic axis.** How
+  settled, how charged, how committed *the author* is about a node: is it canon
+  or speculative, is it emerging or retired, must it stay unnamed. Stored as
+  columns because Canon's saved views filter on it and RAG context assembly
+  emits it as a structured `Status:` line. Set from the node-detail Canon panel.
+- **`status:{open,developing,resolved}` (ADR-086) — the workflow axis.** Where a
+  question sits in the author's working queue, independent of domain. Stored as
+  reserved tags because it is generic across narrative, research, and learning
+  projects and needs no migration. Set from `LifecycleStatusControl`, read by
+  the Relationship Explorer and the project Threads dashboard.
+
+The two "still open" endpoints stay separate for the same reason:
+`GET /canon/open-threads` is the Canon-specific, corpus-wide view built on
+`node_status`; `GET /projects/{hub_id}/threads` is the generic, project-scoped
+dashboard built on `status:*` tags plus `prose_status`. Both include unresolved
+tension edges (ADR-059) — that overlap is accepted.
+
+**Rationale:**
+
+- Collapsing them either way loses something real. Folding `status:*` into
+  `node_status` costs ADR-086 its no-migration, domain-generic property and
+  binds the workflow queue to Canon's vocabulary. Folding `node_status` into
+  tags would supersede a shipped, indexed, RAG-integrated column and reverse
+  ADR-076 for no functional gain.
+- The overlap is narrow and nameable — `node_status='unresolved'` and
+  `status:open` both mean "not settled" — which is small enough to document
+  rather than refactor.
+- Both mechanisms are already built, tested, and shipped. A unification pass is
+  cheap to do later and expensive to get wrong now.
+
+**Consequences:**
+
+- The node-detail page shows two status controls. Their labels and helper copy
+  must make the axes read as distinct ("Canon status" / "Charge" vs. "Lifecycle
+  status"); if users conflate them, that is a copy problem to fix here, not a
+  reason to drop one.
+- A node can be `node_status='unresolved'` without a `status:open` tag, and vice
+  versa. Neither surface is a superset of the other, and nothing reconciles
+  them — deliberate, since they answer different questions.
+- New "what is still open?" surfaces must pick an axis explicitly and say which
+  in a comment, rather than querying both and unioning.
+- Unifying the two open-threads endpoints behind one scoped query is a
+  reasonable future ADR. Until then, neither is deprecated.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

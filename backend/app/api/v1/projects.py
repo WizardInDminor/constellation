@@ -38,6 +38,7 @@ from app.models import (
     ProjectScope,
     ProjectScopeUpdate,
     ProjectSummary,
+    ProjectThreads,
     SceneContextResponse,
     StructureCreate,
     TimelineResponse,
@@ -470,6 +471,16 @@ class CoverageResponse(BaseModel):
     """
 
     tags: list[CoverageTag]
+
+
+@router.get("/{hub_id}/threads")
+async def get_threads(hub_id: str, db: DB) -> ProjectThreads:
+    """Open threads & pending payoffs across the project (ADR-089)."""
+    await _require_project(db, hub_id)
+    scope = await project_repo.get_scope(db, hub_id)
+    if scope is None:
+        raise HTTPException(404, "Project scope not found")
+    return await project_repo.assemble_threads(db, hub_id, scope)
 
 
 @router.get("/{hub_id}/coverage")

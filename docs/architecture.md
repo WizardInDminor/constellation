@@ -487,6 +487,7 @@ POST   /nodes/permanent             # create permanent directly
 POST   /nodes/literature            # create literature note (requires source_id)
 POST   /nodes/structure             # create MOC / structure note
 GET    /nodes/{id}                  # NodeDetail with edges + neighbors
+GET    /nodes/{id}/arc              # EntityArc: evolution-over-time (ADR-087)
 PATCH  /nodes/{id}
 DELETE /nodes/{id}                  # soft delete
 GET    /nodes                       # paginated list with filters
@@ -496,6 +497,7 @@ GET    /nodes                       # paginated list with filters
 
 ```
 POST   /edges                       # create edge with type + optional note
+PATCH  /edges/{id}                   # edit the relationship note (ADR-088)
 DELETE /edges/{id}
 POST   /edges/{id}/resolve          # mark tension edge resolved (ADR-059)
 DELETE /edges/{id}/resolve          # clear resolved state
@@ -576,6 +578,7 @@ PATCH  /projects/{hub_id}/sessions/{id}       # progress notes, blockers, or clo
 GET    /projects/{hub_id}/sessions/{id}/wrap  # nodes/edges/fleetings created during the session
 POST   /projects/{hub_id}/sessions/{id}/attach-node  # idempotent session-attribution row
 GET    /projects/{hub_id}/coverage            # per-tag note count + avg edge count (thin-to-dense)
+GET    /projects/{hub_id}/threads             # open threads + pending payoffs (ADR-089)
 POST   /projects/{hub_id}/learning-map        # ADR-070: phased plan with AI-suggested sources
 GET    /projects/{hub_id}/timeline            # ADR-065: lanes (events + act spans); lazy-creates default
 POST   /projects/{hub_id}/timelines           # Slice 5: create parallel timeline structure node
@@ -598,9 +601,31 @@ character/lore/location/theme quick-create flows:
 - `narrative:character` — character structure nodes
 - `narrative:theme` — theme structure nodes
 - `narrative:location` — location structure nodes
+- `narrative:symbol` — recurring symbol / metaphor structure nodes (ADR-083)
+- `narrative:faction` — faction / authority / underground structure nodes (ADR-083)
+- `narrative:open-question` — unresolved-thread permanent notes (ADR-083)
 - `narrative:lore-world-rule`, `narrative:lore-history`,
   `narrative:lore-power`, `narrative:lore-fabric`,
-  `narrative:lore-backstory`, `narrative:lore-secret` — lore categories
+  `narrative:lore-backstory`, `narrative:lore-secret`,
+  `narrative:lore-ability`, `narrative:lore-artifact` — lore categories
+  (the last two added in ADR-083)
+- `layer:<kind>` — timeline lane classification (ADR-085): `layer:external`,
+  `layer:historical`, `layer:dream`, `layer:metaphysical`,
+  `layer:character-arc`, `layer:theme-arc` (open set). Applied to a timeline
+  structure node; surfaced on `TimelineLane.timeline_tags`.
+- `status:{open,developing,resolved}` — generic lifecycle status (ADR-086),
+  used by Open Questions (and any node tracking an unresolved→resolved
+  trajectory). Relationship-level resolution stays on the `QUESTIONS` edge's
+  resolved-state (ADR-059). This is the *workflow* axis and is distinct from the
+  `canon_status` / `node_status` columns (ADR-076), which carry the *epistemic*
+  axis; ADR-090 documents which to write to. Likewise
+  `GET /projects/{hub_id}/threads` (project-scoped, tag-driven) and
+  `GET /canon/open-threads` (corpus-wide, column-driven) are separate views by
+  design.
+
+`EdgeSummary` denormalises `neighbor_tags` + `neighbor_is_story_event`
+(ADR-084) so the Relationship Explorer (`ConnectionsByRole`) can group a node's
+connections by role from a single `GET /nodes/{id}` — no per-neighbor fetch.
 
 The Notes list (`GET /nodes`) gains `hide_story_events: bool` (ADR-064)
 in addition to the existing B2 filter predicates.

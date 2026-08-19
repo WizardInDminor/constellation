@@ -296,6 +296,18 @@ export function deleteEdge(edgeId: string): Promise<void> {
   return request(`/api/v1/edges/${edgeId}`, { method: "DELETE" });
 }
 
+// ADR-088: the edge-note authoring loop. Edit why a relationship exists / what
+// it means; `note: null` clears it.
+export function updateEdge(
+  edgeId: string,
+  data: { note: string | null },
+): Promise<EdgeDetail> {
+  return request(`/api/v1/edges/${edgeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ADR-059: resolve a tension edge (CONTRADICTS / QUESTIONS only). The optional
 // `resolved_by_node_id` points to a synthesis note that supersedes the
 // tension. POST is idempotent; DELETE clears the resolved state.
@@ -775,12 +787,28 @@ export function narrativeDump(
   });
 }
 
+// Entity Arc — evolution-over-time of any node (ADR-087).
+export type EntityArc = components["schemas"]["EntityArc"];
+export type ArcAppearance = components["schemas"]["ArcAppearance"];
+
+export function getEntityArc(id: string): Promise<EntityArc> {
+  return request(`/api/v1/nodes/${id}/arc`);
+}
+
 // Reserved narrative tag names — mirror backend constants. Used by the
 // character/theme/lore/location list views to identify narrative-role nodes.
 export const NARRATIVE_TAGS = {
   CHARACTER: "narrative:character",
   THEME: "narrative:theme",
   LOCATION: "narrative:location",
+  // Canon audit (ADR-083): story-specific role types that previously had no
+  // first-class representation. Symbols/metaphors recur and accrete meaning;
+  // factions are authority/underground structures; open questions are the
+  // writer's unresolved threads. All are taggable structure/permanent nodes,
+  // linked into scenes via ordinary typed edges — no schema change required.
+  SYMBOL: "narrative:symbol",
+  FACTION: "narrative:faction",
+  OPEN_QUESTION: "narrative:open-question",
   LORE_PREFIX: "narrative:lore-",
   LORE_WORLD_RULE: "narrative:lore-world-rule",
   LORE_HISTORY: "narrative:lore-history",
@@ -788,6 +816,9 @@ export const NARRATIVE_TAGS = {
   LORE_FABRIC: "narrative:lore-fabric",
   LORE_BACKSTORY: "narrative:lore-backstory",
   LORE_SECRET: "narrative:lore-secret",
+  // Additional lore subtypes surfaced as quick-create categories.
+  LORE_ABILITY: "narrative:lore-ability",
+  LORE_ARTIFACT: "narrative:lore-artifact",
 } as const;
 
 // Slice 2 additions
@@ -802,6 +833,15 @@ export type LearningMapPhaseSource =
 
 export function getCoverage(hubId: string): Promise<CoverageResponse> {
   return request(`/api/v1/projects/${hubId}/coverage`);
+}
+
+// Open Threads & Pending Payoffs dashboard (ADR-089).
+export type ProjectThreads = components["schemas"]["ProjectThreads"];
+export type ThreadItem = components["schemas"]["ThreadItem"];
+export type TensionThread = components["schemas"]["TensionThread"];
+
+export function getProjectThreads(hubId: string): Promise<ProjectThreads> {
+  return request(`/api/v1/projects/${hubId}/threads`);
 }
 
 export function getSessionWrap(

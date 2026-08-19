@@ -1,4 +1,5 @@
 from app.models.activity import ActivityFeed, RecentEdge
+from app.models.arc import ArcAppearance, EntityArc
 from app.models.builder import (
     PIPELINE_STAGES,
     BriefCharacter,
@@ -40,6 +41,7 @@ from app.models.edge import (
     EdgeResolveRequest,
     EdgeSummary,
     EdgeType,
+    EdgeUpdate,
     NeighborResult,
 )
 from app.models.embedding_job import (
@@ -118,6 +120,7 @@ from app.models.source import (
 )
 from app.models.stats import CorpusStats
 from app.models.tag import TagCreate, TagRef, TagUpdate
+from app.models.threads import ProjectThreads, TensionThread, ThreadItem
 from app.models.timeline import (
     ActSpan,
     ActSpanCreate,
@@ -202,6 +205,7 @@ __all__ = [
     "EdgeDetail",
     "EdgeResolveRequest",
     "EdgeSummary",
+    "EdgeUpdate",
     "EdgeType",
     "NeighborResult",
     "RESOLVABLE_EDGE_TYPES",
@@ -256,4 +260,9 @@ __all__ = [
     "EmbeddingJobList",
     "EmbeddingJobStatus",
     "RetryAllResponse",
+    "ArcAppearance",
+    "EntityArc",
+    "ProjectThreads",
+    "TensionThread",
+    "ThreadItem",
 ]

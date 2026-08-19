@@ -1,7 +1,7 @@
 import pytest
 
-from app.models import EdgeCreate, FleetingCreate
-from app.repositories import edge_repo, node_repo
+from app.models import EdgeCreate, FleetingCreate, PermanentCreate, TagCreate
+from app.repositories import edge_repo, node_repo, tag_repo
 
 
 async def _two_nodes(db):
@@ -153,6 +153,54 @@ async def test_classifier_rationale_appears_in_neighbor_and_summary_views(db):
     incoming = await edge_repo.get_incoming(db, b.id)
     assert len(incoming) == 1
     assert incoming[0].classifier_rationale == rationale
+
+
+async def test_update_note_edits_and_clears(db):
+    """ADR-088: the edge-note authoring loop can set and clear a note."""
+    a, b = await _two_nodes(db)
+    edge = await edge_repo.create(db, EdgeCreate(from_id=a.id, to_id=b.id, type="SUPPORTS"))
+    assert edge.note is None
+
+    updated = await edge_repo.update_note(db, edge.id, "evidence from the 1943 log")
+    assert updated is not None
+    assert updated.note == "evidence from the 1943 log"
+
+    cleared = await edge_repo.update_note(db, edge.id, None)
+    assert cleared is not None
+    assert cleared.note is None
+
+
+async def test_update_note_missing_returns_none(db):
+    assert await edge_repo.update_note(db, "ghost", "x") is None
+
+
+async def test_edge_summary_carries_neighbor_tags_and_story_flag(db):
+    """ADR-084: EdgeSummary denormalises neighbor tags + is_story_event so the
+    Relationship Explorer can group connections by role without N+1 fetches."""
+    # A symbol-tagged structure node connected to a story-event scene.
+    symbol = await node_repo.create_permanent(
+        db, PermanentCreate(title="Fire", content="recurring symbol")
+    )
+    scene = await node_repo.create_story_event(
+        db, title="Cathedral Dream", content="fire fills the nave"
+    )
+    tag = await tag_repo.create(db, TagCreate(name="narrative:symbol"))
+    await db.execute("INSERT INTO node_tags(node_id, tag_id) VALUES (?, ?)", (symbol.id, tag.id))
+    await edge_repo.create(db, EdgeCreate(from_id=symbol.id, to_id=scene.id, type="ELABORATES"))
+
+    # From the symbol's side, the scene neighbor reports the story-event flag.
+    outgoing = await edge_repo.get_outgoing(db, symbol.id)
+    assert len(outgoing) == 1
+    assert outgoing[0].neighbor.id == scene.id
+    assert outgoing[0].neighbor_is_story_event is True
+    assert outgoing[0].neighbor_tags == []
+
+    # From the scene's side, the symbol neighbor reports its narrative:symbol tag.
+    incoming = await edge_repo.get_incoming(db, scene.id)
+    assert len(incoming) == 1
+    assert incoming[0].neighbor.id == symbol.id
+    assert incoming[0].neighbor_is_story_event is False
+    assert [t.name for t in incoming[0].neighbor_tags] == ["narrative:symbol"]
 
 
 # ── Canon symbolic / resonance verbs (ADR-077) ──────────────────────────────

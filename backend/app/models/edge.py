@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.models.node import NodeRef
+from app.models.tag import TagRef
 
 EdgeType = Literal[
     # Author-stance verbs — the original vocabulary.
@@ -55,7 +56,14 @@ RESOLVABLE_EDGE_TYPES: frozenset[str] = frozenset({"CONTRADICTS", "QUESTIONS"})
 
 
 class EdgeSummary(BaseModel):
-    """An edge as seen from a specific node's detail view."""
+    """An edge as seen from a specific node's detail view.
+
+    `neighbor_tags` and `neighbor_is_story_event` are denormalised onto the
+    summary (ADR-084) so the frontend Relationship Explorer can group a node's
+    connections by role — Characters, Symbols, Scenes, etc. for narrative
+    projects; Sources, Structures, etc. generally — without an N+1 fetch per
+    neighbor. They default empty/false so existing consumers are unaffected.
+    """
 
     id: str
     type: EdgeType
@@ -65,6 +73,8 @@ class EdgeSummary(BaseModel):
     resolved_by_node_id: str | None = None
     created_at: datetime
     neighbor: NodeRef
+    neighbor_tags: list[TagRef] = []
+    neighbor_is_story_event: bool = False
 
 
 class EdgeDetail(BaseModel):
@@ -85,6 +95,17 @@ class EdgeCreate(BaseModel):
     type: EdgeType
     note: str | None = None
     classifier_rationale: str | None = None
+
+
+class EdgeUpdate(BaseModel):
+    """Edit a relationship's note — the edge-note authoring loop (ADR-088).
+
+    Generic: the note explains why a link exists / what the connection means,
+    feeding EntityArc, ConnectionsByRole, and RAG edge context. `None` clears
+    the note; omitting the field leaves it unchanged.
+    """
+
+    note: str | None = None
 
 
 class EdgeResolveRequest(BaseModel):

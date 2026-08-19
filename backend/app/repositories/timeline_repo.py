@@ -27,6 +27,10 @@ from app.models import (
     TimelineEvent,
     TimelineLane,
 )
+from app.repositories import tag_repo
+
+# ADR-085: reserved prefix classifying a timeline lane's kind.
+TIMELINE_LAYER_PREFIX = "layer:"
 
 # Reserved tag names that identify narrative-role nodes (Slice 5).
 # Used by Scene Context View, character filtering, and theme-density.
@@ -328,7 +332,8 @@ async def assemble_timeline(db: aiosqlite.Connection, project_hub_id: str) -> li
     for t in timelines:
         events = await lane_events(db, t.id)
         spans = await list_act_spans(db, t.id)
-        lanes.append(TimelineLane(timeline=t, events=events, act_spans=spans))
+        tags = await tag_repo.get_tags_for_node(db, t.id)
+        lanes.append(TimelineLane(timeline=t, events=events, act_spans=spans, timeline_tags=tags))
     return lanes
 
 

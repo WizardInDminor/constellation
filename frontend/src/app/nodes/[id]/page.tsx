@@ -18,6 +18,9 @@ import {
   ragQuery,
 } from "@/lib/api";
 import { NoteContent } from "@/components/NoteContent";
+import { ConnectionsByRole } from "@/components/ConnectionsByRole";
+import { EntityArc } from "@/components/EntityArc";
+import { LifecycleStatusControl } from "@/components/LifecycleStatusControl";
 import { MarkdownTextarea } from "@/components/MarkdownTextarea";
 import { exportMermaidPngFromContainer } from "@/components/MermaidBlock";
 import type {
@@ -32,10 +35,12 @@ import type {
   Charge,
 } from "@/lib/api";
 import { NodePicker } from "@/components/NodePicker";
+import { EdgeNoteEditor } from "@/components/EdgeNoteEditor";
 import {
   EDGE_TYPES,
   EDGE_COLORS,
   EDGE_TYPE_META,
+  EDGE_NOTE_PLACEHOLDER,
   directionGlyph,
 } from "@/lib/edgeTypes";
 
@@ -527,7 +532,7 @@ function EdgePanel({
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Why does this connection exist? (optional)"
+                placeholder={EDGE_NOTE_PLACEHOLDER}
                 aria-label="Connection note"
                 rows={2}
                 className="textarea"
@@ -558,34 +563,34 @@ function EdgePanel({
             {EDGE_TYPE_META[t].label}
           </span>
           {byType[t].map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between pl-2 group"
-            >
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="text-xs text-gray-400 shrink-0">
-                  {directionGlyph(t)}
-                </span>
-                <Link
-                  href={`/nodes/${e.neighbor.id}`}
-                  className="text-sm text-indigo-700 hover:underline truncate"
-                >
-                  {e.neighbor.title}
-                </Link>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {e.note && (
-                  <span className="text-xs text-gray-400 italic hidden group-hover:inline truncate max-w-32">
-                    {e.note}
+            <div key={e.id} className="pl-2 group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {directionGlyph(t)}
                   </span>
-                )}
+                  <Link
+                    href={`/nodes/${e.neighbor.id}`}
+                    className="text-sm text-indigo-700 hover:underline truncate"
+                  >
+                    {e.neighbor.title}
+                  </Link>
+                </div>
                 <button
                   onClick={() => handleDelete(e.id)}
                   aria-label={`Remove connection to ${e.neighbor.title}`}
-                  className="text-sm leading-none text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  className="text-sm leading-none text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 shrink-0"
                 >
                   ×
                 </button>
+              </div>
+              {/* Edge-note authoring loop (ADR-088). */}
+              <div className="pl-4">
+                <EdgeNoteEditor
+                  edgeId={e.id}
+                  note={e.note}
+                  onSaved={onRefresh}
+                />
               </div>
             </div>
           ))}
@@ -598,27 +603,33 @@ function EdgePanel({
             Referenced by
           </span>
           {node.incoming_edges.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between pl-2 group"
-            >
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="text-xs text-gray-400 shrink-0">
-                  {EDGE_TYPE_META[e.type].directional ? "←" : "↔"}
-                </span>
-                <Link
-                  href={`/nodes/${e.neighbor.id}`}
-                  className="text-sm text-gray-600 hover:text-indigo-700 hover:underline truncate"
+            <div key={e.id} className="pl-2 group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {EDGE_TYPE_META[e.type].directional ? "←" : "↔"}
+                  </span>
+                  <Link
+                    href={`/nodes/${e.neighbor.id}`}
+                    className="text-sm text-gray-600 hover:text-indigo-700 hover:underline truncate"
+                  >
+                    {e.neighbor.title}
+                  </Link>
+                </div>
+                <span
+                  className={`badge shrink-0 ${EDGE_COLORS[e.type]}`}
+                  title={EDGE_TYPE_META[e.type].description}
                 >
-                  {e.neighbor.title}
-                </Link>
+                  {EDGE_TYPE_META[e.type].label}
+                </span>
               </div>
-              <span
-                className={`badge shrink-0 ${EDGE_COLORS[e.type]}`}
-                title={EDGE_TYPE_META[e.type].description}
-              >
-                {EDGE_TYPE_META[e.type].label}
-              </span>
+              <div className="pl-4">
+                <EdgeNoteEditor
+                  edgeId={e.id}
+                  note={e.note}
+                  onSaved={onRefresh}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -1283,6 +1294,16 @@ export default function NodePage() {
 
         {/* Sidebar */}
         <div className="flex flex-col gap-6">
+          {/* Lifecycle status — Open Questions (and any node carrying a
+              status:* tag) track open → developing → resolved. */}
+          {(node.tags ?? []).some(
+            (t) => t.name === "narrative:open-question",
+          ) && <LifecycleStatusControl node={node} onChange={reload} />}
+          {/* Relationship Explorer — connections grouped by role (ADR-084). */}
+          <ConnectionsByRole detail={node} />
+          {/* Entity Arc — how this entity evolved over time (ADR-087). Hides
+              itself when there's no sequence worth showing. */}
+          <EntityArc nodeId={nodeId} />
           {node.type !== "fleeting" && (
             <div className="card p-4">
               <SourcePanel node={node} onChange={reload} />

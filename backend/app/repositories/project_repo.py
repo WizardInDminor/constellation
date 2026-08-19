@@ -21,11 +21,18 @@ from app.models import (
     ProjectScope,
     ProjectScopeUpdate,
     ProjectSummary,
+    ProjectThreads,
+    TensionThread,
+    ThreadItem,
     WorkSession,
     WorkSessionCreate,
     WorkSessionUpdate,
 )
 from app.models.node import NodeRef
+
+# Lifecycle status tags that mark a node as an unresolved thread (ADR-086/083).
+_OPEN_STATUS_TAGS = ("status:open", "status:developing")
+_TENSION_EDGE_TYPES = ("CONTRADICTS", "QUESTIONS")
 
 # ---------------------------------------------------------------------------
 # project_scopes
@@ -222,6 +229,126 @@ async def count_project_notes(db: aiosqlite.Connection, scope: ProjectScope) -> 
         for r in rows:
             seen.add(r["node_id"])
     return len(seen)
+
+
+async def project_member_ids(
+    db: aiosqlite.Connection, hub_node_id: str, scope: ProjectScope
+) -> set[str]:
+    """Node ids considered part of the project (ADR-089): pinned nodes, nodes
+    carrying any project tag, and story events on the project's timelines (so
+    narrative scenes count even though they're attached via COLLECTS, not
+    tags)."""
+    members: set[str] = set(scope.pinned_node_ids)
+
+    if scope.tag_ids:
+        placeholders = ",".join("?" * len(scope.tag_ids))
+        cursor = await db.execute(
+            f"""SELECT DISTINCT nt.node_id FROM node_tags nt
+                JOIN nodes n ON n.id = nt.node_id
+                WHERE nt.tag_id IN ({placeholders})
+                  AND n.deleted_at IS NULL""",  # noqa: S608
+            scope.tag_ids,
+        )
+        for r in await cursor.fetchall():
+            members.add(r["node_id"])
+
+    # Story events on timelines COLLECTS-linked from the hub.
+    cursor = await db.execute(
+        """SELECT DISTINCT etp.event_node_id
+           FROM edges e
+           JOIN event_timeline_positions etp ON etp.timeline_node_id = e.to_id
+           JOIN nodes n ON n.id = etp.event_node_id
+           WHERE e.from_id = ? AND e.type = 'COLLECTS'
+             AND n.deleted_at IS NULL""",
+        (hub_node_id,),
+    )
+    for r in await cursor.fetchall():
+        members.add(r["event_node_id"])
+
+    return members
+
+
+async def assemble_threads(
+    db: aiosqlite.Connection, hub_node_id: str, scope: ProjectScope
+) -> ProjectThreads:
+    """Open threads (status:open/developing nodes + unresolved tensions) and
+    pending payoffs (planned story events) within the project scope. ADR-089."""
+    members = await project_member_ids(db, hub_node_id, scope)
+    if not members:
+        return ProjectThreads(open_questions=[], pending_payoffs=[], unresolved_tensions=[])
+
+    # Open questions/threads: nodes carrying an open lifecycle status tag.
+    status_placeholders = ",".join("?" * len(_OPEN_STATUS_TAGS))
+    cursor = await db.execute(
+        f"""SELECT n.id, n.title, n.type, n.created_at, t.name AS status_tag
+            FROM nodes n
+            JOIN node_tags nt ON nt.node_id = n.id
+            JOIN tags t ON t.id = nt.tag_id
+            WHERE t.name IN ({status_placeholders})
+              AND n.deleted_at IS NULL
+            ORDER BY n.created_at DESC""",  # noqa: S608
+        _OPEN_STATUS_TAGS,
+    )
+    open_questions = [
+        ThreadItem(
+            node=NodeRef(id=r["id"], title=r["title"], type=r["type"]),
+            status=r["status_tag"].split(":", 1)[1],
+            created_at=r["created_at"],
+        )
+        for r in await cursor.fetchall()
+        if r["id"] in members
+    ]
+
+    # Pending payoffs: planned (not-yet-written) story events.
+    cursor = await db.execute(
+        """SELECT id, title, type, created_at, prose_status
+           FROM nodes
+           WHERE is_story_event = 1 AND prose_status = 'planned'
+             AND deleted_at IS NULL
+           ORDER BY created_at DESC""",
+    )
+    pending_payoffs = [
+        ThreadItem(
+            node=NodeRef(id=r["id"], title=r["title"], type=r["type"]),
+            prose_status=r["prose_status"],
+            created_at=r["created_at"],
+        )
+        for r in await cursor.fetchall()
+        if r["id"] in members
+    ]
+
+    # Unresolved tensions: CONTRADICTS/QUESTIONS edges, not resolved, with at
+    # least one endpoint in the project.
+    tension_placeholders = ",".join("?" * len(_TENSION_EDGE_TYPES))
+    cursor = await db.execute(
+        f"""SELECT e.id AS edge_id, e.type, e.note,
+                   fn.id AS from_id, fn.title AS from_title, fn.type AS from_type,
+                   tn.id AS to_id, tn.title AS to_title, tn.type AS to_type
+            FROM edges e
+            JOIN nodes fn ON fn.id = e.from_id AND fn.deleted_at IS NULL
+            JOIN nodes tn ON tn.id = e.to_id AND tn.deleted_at IS NULL
+            WHERE e.type IN ({tension_placeholders})
+              AND e.resolved_at IS NULL
+            ORDER BY e.created_at DESC""",  # noqa: S608
+        _TENSION_EDGE_TYPES,
+    )
+    unresolved_tensions = [
+        TensionThread(
+            edge_id=r["edge_id"],
+            type=r["type"],
+            note=r["note"],
+            from_node=NodeRef(id=r["from_id"], title=r["from_title"], type=r["from_type"]),
+            to_node=NodeRef(id=r["to_id"], title=r["to_title"], type=r["to_type"]),
+        )
+        for r in await cursor.fetchall()
+        if r["from_id"] in members or r["to_id"] in members
+    ]
+
+    return ProjectThreads(
+        open_questions=open_questions,
+        pending_payoffs=pending_payoffs,
+        unresolved_tensions=unresolved_tensions,
+    )
 
 
 async def coverage_per_tag(db: aiosqlite.Connection, tag_ids: list[str]) -> list[dict]:
