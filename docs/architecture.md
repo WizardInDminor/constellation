@@ -616,7 +616,12 @@ character/lore/location/theme quick-create flows:
 - `status:{open,developing,resolved}` — generic lifecycle status (ADR-086),
   used by Open Questions (and any node tracking an unresolved→resolved
   trajectory). Relationship-level resolution stays on the `QUESTIONS` edge's
-  resolved-state (ADR-059).
+  resolved-state (ADR-059). This is the *workflow* axis and is distinct from the
+  `canon_status` / `node_status` columns (ADR-076), which carry the *epistemic*
+  axis; ADR-090 documents which to write to. Likewise
+  `GET /projects/{hub_id}/threads` (project-scoped, tag-driven) and
+  `GET /canon/open-threads` (corpus-wide, column-driven) are separate views by
+  design.
 
 `EdgeSummary` denormalises `neighbor_tags` + `neighbor_is_story_event`
 (ADR-084) so the Relationship Explorer (`ConnectionsByRole`) can group a node's

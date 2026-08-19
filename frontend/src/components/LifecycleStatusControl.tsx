@@ -9,6 +9,12 @@
  * node's tag set. The relationship-level "what resolved it" lives on the
  * QUESTIONS edge's resolved-state (ADR-059) and shows in the Relationship
  * Explorer.
+ *
+ * This is the *workflow* axis — where a question sits in the author's queue.
+ * It is deliberately distinct from the Canon panel's `canon_status` /
+ * `node_status` columns (ADR-076), which record the *epistemic* axis: how
+ * settled and how charged the idea itself is. ADR-090 documents the boundary,
+ * which is why the heading below is qualified rather than a bare "Status".
  */
 
 import { useState } from "react";
@@ -62,7 +68,7 @@ export function LifecycleStatusControl({
 
   return (
     <div className="card p-4">
-      <h3 className="section-label">Status</h3>
+      <h3 className="section-label">Lifecycle status</h3>
       <div className="mt-2 flex flex-wrap gap-2">
         {LIFECYCLE_STATUSES.map((s) => {
           const active = s === current;

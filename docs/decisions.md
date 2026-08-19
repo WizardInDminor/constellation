@@ -5334,6 +5334,67 @@ queries filtered to the member set are fine at single-user scale and avoid giant
 
 ---
 
+## ADR-090 — Two lifecycle axes coexist: `node_status` (Canon epistemics) vs. `status:*` tags (question lifecycle)
+
+**Status:** Accepted
+
+**Context:** ADR-076 and ADR-086 were designed on parallel branches and both
+model "how settled is this?". ADR-076 added a `node_status` column
+(`emerging | stable | contradicted | retired | unresolved`) alongside
+`canon_status`, via migration `0011`. ADR-086 modelled an Open-Question
+lifecycle as reserved `status:{open,developing,resolved}` tags, deliberately
+without a schema change. Merging the two branches puts both controls on the same
+node-detail page, and both feed "what is still open?" surfaces. Left
+undocumented, the next contributor cannot tell which one to write to.
+
+**Decision:** Keep both. They are two different axes, and the boundary is:
+
+- **`canon_status` / `node_status` (ADR-076) — the epistemic axis.** How
+  settled, how charged, how committed *the author* is about a node: is it canon
+  or speculative, is it emerging or retired, must it stay unnamed. Stored as
+  columns because Canon's saved views filter on it and RAG context assembly
+  emits it as a structured `Status:` line. Set from the node-detail Canon panel.
+- **`status:{open,developing,resolved}` (ADR-086) — the workflow axis.** Where a
+  question sits in the author's working queue, independent of domain. Stored as
+  reserved tags because it is generic across narrative, research, and learning
+  projects and needs no migration. Set from `LifecycleStatusControl`, read by
+  the Relationship Explorer and the project Threads dashboard.
+
+The two "still open" endpoints stay separate for the same reason:
+`GET /canon/open-threads` is the Canon-specific, corpus-wide view built on
+`node_status`; `GET /projects/{hub_id}/threads` is the generic, project-scoped
+dashboard built on `status:*` tags plus `prose_status`. Both include unresolved
+tension edges (ADR-059) — that overlap is accepted.
+
+**Rationale:**
+
+- Collapsing them either way loses something real. Folding `status:*` into
+  `node_status` costs ADR-086 its no-migration, domain-generic property and
+  binds the workflow queue to Canon's vocabulary. Folding `node_status` into
+  tags would supersede a shipped, indexed, RAG-integrated column and reverse
+  ADR-076 for no functional gain.
+- The overlap is narrow and nameable — `node_status='unresolved'` and
+  `status:open` both mean "not settled" — which is small enough to document
+  rather than refactor.
+- Both mechanisms are already built, tested, and shipped. A unification pass is
+  cheap to do later and expensive to get wrong now.
+
+**Consequences:**
+
+- The node-detail page shows two status controls. Their labels and helper copy
+  must make the axes read as distinct ("Canon status" / "Charge" vs. "Lifecycle
+  status"); if users conflate them, that is a copy problem to fix here, not a
+  reason to drop one.
+- A node can be `node_status='unresolved'` without a `status:open` tag, and vice
+  versa. Neither surface is a superset of the other, and nothing reconciles
+  them — deliberate, since they answer different questions.
+- New "what is still open?" surfaces must pick an axis explicitly and say which
+  in a comment, rather than querying both and unioning.
+- Unifying the two open-threads endpoints behind one scoped query is a
+  reasonable future ADR. Until then, neither is deprecated.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
