@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
@@ -25,7 +25,7 @@ async def upsert(
         (source_id,),
     )
     record_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(days=_TTL_DAYS)
     candidates_json = json.dumps([c.model_dump() for c in chunks])
     await db.execute(

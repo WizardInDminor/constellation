@@ -32,11 +32,15 @@ from app.models import (
 # Used by Scene Context View, character filtering, and theme-density.
 # Implemented as tags rather than a new column to avoid a Slice 5 schema
 # migration; the structural decision (tags-as-narrative-roles) is recorded
-# in ADR-065's "Consequences" section and the build plan.
-NARRATIVE_TAG_CHARACTER = "narrative:character"
-NARRATIVE_TAG_THEME = "narrative:theme"
-NARRATIVE_TAG_LOCATION = "narrative:location"
-NARRATIVE_TAG_LORE_PREFIX = "narrative:lore-"  # narrative:lore-world-rule, etc.
+# in ADR-065's "Consequences" section and the build plan. As of Phase C2 the
+# authoritative vocabulary lives in app/models/narrative.py (ADR-086);
+# re-exported here for existing call sites.
+from app.models.narrative import (  # noqa: E402  (kept near the docs above)
+    NARRATIVE_TAG_CHARACTER,
+    NARRATIVE_TAG_LOCATION,
+    NARRATIVE_TAG_LORE_PREFIX,
+    NARRATIVE_TAG_THEME,
+)
 
 # ---------------------------------------------------------------------------
 # event_timeline_positions

@@ -14,11 +14,45 @@ from app.providers.base import EmbeddingProvider, GenerationProvider
 logger = logging.getLogger(__name__)
 
 _db: aiosqlite.Connection | None = None
+_embedding_provider: EmbeddingProvider | None = None
+_generation_provider: GenerationProvider | None = None
 
 
 def get_db() -> aiosqlite.Connection:
     assert _db is not None, "Database not initialized"
     return _db
+
+
+def get_embedding_provider() -> EmbeddingProvider:
+    """The active embedding provider — the single authority (ADR-091).
+
+    All consumers read through here: route dependencies (core/deps.py), the
+    embedding worker, and the MCP tools. Hot-swaps go through
+    `set_active_providers` only."""
+    assert _embedding_provider is not None, "Providers not initialized"
+    return _embedding_provider
+
+
+def get_generation_provider() -> GenerationProvider:
+    """The active generation provider — single authority (ADR-091)."""
+    assert _generation_provider is not None, "Providers not initialized"
+    return _generation_provider
+
+
+def set_active_providers(
+    app: FastAPI, embed: EmbeddingProvider, gen: GenerationProvider
+) -> None:
+    """Swap the active providers everywhere at once (ADR-091).
+
+    Called at startup and by PATCH /config on provider/model changes. The
+    module registry is authoritative; `app.state` is mirrored only for
+    introspection — readers must use the getters above, or the MCP tools
+    and the worker would drift from the routes on a hot-reload."""
+    global _embedding_provider, _generation_provider
+    _embedding_provider = embed
+    _generation_provider = gen
+    app.state.embedding_provider = embed
+    app.state.generation_provider = gen
 
 
 async def _run_migrations(db: aiosqlite.Connection) -> None:
@@ -107,7 +141,7 @@ async def _embedding_worker(app: FastAPI) -> None:
             if cooldown_until is not None and cooldown_until > now:
                 continue
 
-            result = await embedding_service.drain_jobs(get_db(), app.state.embedding_provider)
+            result = await embedding_service.drain_jobs(get_db(), get_embedding_provider())
             if result.cooldown_seconds:
                 app.state.cooldown_until = datetime.now(UTC) + timedelta(
                     seconds=result.cooldown_seconds
@@ -121,15 +155,14 @@ async def _embedding_worker(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _db
+    global _db, _embedding_provider, _generation_provider
     settings = get_settings()
     _db = await open_database(settings.db_path)
     await _run_migrations(_db)
     logger.info("Database ready: %s", settings.db_path)
 
     embed_provider, gen_provider = await _load_providers(_db, settings)
-    app.state.embedding_provider = embed_provider
-    app.state.generation_provider = gen_provider
+    set_active_providers(app, embed_provider, gen_provider)
     logger.info(
         "Providers loaded: embed=%s gen=%s",
         embed_provider.model_id,
@@ -142,7 +175,14 @@ async def lifespan(app: FastAPI):
 
     worker = asyncio.create_task(_embedding_worker(app))
 
-    yield
+    # MCP streamable-HTTP transport (Phase C4, ADR-089). The /mcp mount in
+    # main.py delegates to a transport app rebuilt here on every startup,
+    # because a session manager instance can only be run once. Imported here
+    # (not at module top) to keep core import-light for non-server tooling.
+    from app.mcp.server import start_transport
+
+    async with start_transport().run():
+        yield
 
     worker.cancel()
     try:
@@ -152,3 +192,5 @@ async def lifespan(app: FastAPI):
 
     await _db.close()
     _db = None
+    _embedding_provider = None
+    _generation_provider = None

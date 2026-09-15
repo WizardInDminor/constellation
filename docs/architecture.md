@@ -752,3 +752,114 @@ shift-click with a `selectedNodes: Set<string>` in page state (see ADR-041).
 - Export to Obsidian/markdown vault format (nice to have, deferred)
 - Image/PDF attachments on notes (deferred)
 - Voice capture (deferred — interesting but complex)
+---
+
+## 9. Shared workflow core (Track C Phase C1 — ADR-084/085/086)
+
+The proposal-before-truth lifecycle shared by the UI and (from Phase C4/C5)
+the MCP tool surface. Target design: `docs/direction/`; migration map:
+`docs/build/direction-roadmap.md`.
+
+### Tables (migration 0014)
+
+```
+provenance_records   # who/what created a thing (human | ai_client | system | import)
+proposals            # suggested changes awaiting resolution; payload JSON carries
+                     # type-specific substance + proposed related_objects links
+proposal_revisions   # snapshot per edit; revision 1 = original (AT-032)
+decisions            # accepted in-project choices; supersession chain (AT-005)
+activity_events      # append-only event log; INTEGER id doubles as cursor (ADR-085)
+```
+
+Statuses are CHECK-constrained (`captured → proposed → under_review →
+accepted | rejected | superseded | archived`); type vocabularies are
+Pydantic-enforced (ADR-084 § 2).
+
+### API
+
+```
+POST   /proposals                    # create (AI material lands here, never in canon)
+GET    /proposals?project_hub_id=&status=&proposal_type=
+GET    /proposals/{id}               # detail: payload, provenance, revisions
+PATCH  /proposals/{id}               # edit while unresolved; appends a revision
+POST   /proposals/{id}/transition    # lifecycle move; accept materializes truth
+GET    /proposals/{id}/revisions
+POST   /decisions                    # record; supersedes_decision_id flips the old row
+GET    /decisions, GET /decisions/{id}
+GET    /activity/changes?after=<cursor>&project_hub_id=   # get_recent_changes
+```
+
+Workflow routes return the structured error envelope
+`{"error": {code, message, retryable, details}}` (`app/core/errors.py`).
+
+### Acceptance materialization
+
+`proposal_service._materialize` is the only path from proposal to accepted
+truth: node-producing types create a permanent node with
+`canon_status='provisional'` (scene → story-event node), role types receive
+their reserved `narrative:*` tag (ADR-086), proposed `related_objects`
+become real edges anchored on the new node, and the node is embedded. AI
+clients can never set `accepted` — the transition is service/UI-side only,
+and MCP write scopes (Phase C5) exclude it.
+
+### Event emission
+
+Write paths call `activity_service.emit(...)` after their own persistence:
+proposal lifecycle, decisions, node create/delete, edge create/resolve,
+builder doc promotion. `GET /activity/changes` pages with `after=<id>`;
+clients that store `next_cursor` see every subsequent event exactly once
+(AT-024).
+
+---
+
+## 10. Context builders (Track C Phase C2 — ADR-087)
+
+Task-shaped, versioned AI-ready context envelopes
+(`app/services/context_builder_service.py`, models in
+`app/models/context.py`). All consumers — HTTP routes, the workspace UI,
+and (from Phase C4) MCP tools — use these builders; none assembles domain
+context independently (direction pack ADR-004).
+
+```
+GET /projects/{hub_id}/context                      # StoryProjectContext
+GET /projects/{hub_id}/context/character/{node_id}  # CharacterDossier
+GET /projects/{hub_id}/context/scene/{event_id}     # SceneContextEnvelope
+GET /projects/{hub_id}/context/changes?after=       # RecentChangesContext
+```
+
+Every envelope carries `context_type`, `context_version`, `generated_at`,
+and `warnings`, and strictly separates **accepted** / **development** /
+**proposed** sections (AT-010). Assembly is always live — deleting an edge
+between two calls changes the result (pytest-protected). The reserved
+narrative role vocabulary lives in `app/models/narrative.py` (ADR-086);
+`timeline_repo` re-exports it.
+
+---
+
+## 11. MCP tool surface (Track C Phase C4 — ADR-089)
+
+External AI clients reach Constellation through an MCP server mounted
+in-process at `/mcp` (streamable HTTP, stateless + JSON responses), gated by
+static per-client bearer tokens from `.env`:
+
+```
+MCP_TOKENS="s3cret1|ChatGPT|read,s3cret2|Claude Code|read+write"
+```
+
+Layering (pack ADR-003, pytest-enforced): MCP tool → application service /
+context builder → repository. No SQL, no business logic, no independent
+context assembly in `app/mcp/`.
+
+Read tools (scope `read`): `get_server_info`, `list_projects`,
+`search_story`, `get_story_project_context`, `get_character_dossier`,
+`get_scene_context`, `get_recent_changes`, `list_open_threads`. Per-token
+sliding-window rate limit; unauthenticated or unconfigured requests get the
+structured error envelope. Write tools arrive in Phase C5 behind the
+`write` scope.
+
+Write tools (Phase C5, ADR-090 — scope `write`): `create_story_proposal`,
+`update_proposal`, `link_proposal_to_objects`, `create_development_note`
+(lands as a `speculative` node); `record_story_decision` requires the
+separate `decisions` scope. There is deliberately no MCP path to proposal
+acceptance — that lives only in the review UI. Provenance is bound from the
+token identity; clients cannot impersonate each other.

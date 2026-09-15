@@ -21,7 +21,18 @@ from app.models import (
     TimelinePositionUpdate,
 )
 from app.repositories import edge_repo, node_repo, source_repo, timeline_repo
-from app.services import embedding_service
+from app.services import activity_service, embedding_service
+
+
+async def _emit_node_created(db, node: NodeDetail) -> None:
+    """Phase C1 (ADR-085): record node creation in the activity event log."""
+    await activity_service.emit(
+        db,
+        event_type="node.created",
+        object_type="node",
+        object_id=node.id,
+        summary=f"{node.type.capitalize()} note created: {node.title}",
+    )
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
@@ -44,7 +55,9 @@ async def search_nodes(
 
 @router.post("/fleeting", status_code=201)
 async def create_fleeting(data: FleetingCreate, db: DB) -> NodeDetail:
-    return await node_repo.create_fleeting(db, data)
+    node = await node_repo.create_fleeting(db, data)
+    await _emit_node_created(db, node)
+    return node
 
 
 @router.post("/permanent", status_code=201)
@@ -54,6 +67,7 @@ async def create_permanent(data: PermanentCreate, db: DB, provider: EmbedProvide
     except IntegrityError as exc:
         raise HTTPException(422, str(exc))
     await embedding_service.embed_or_queue(db, node.id, provider)
+    await _emit_node_created(db, node)
     # Re-fetch so the response reflects the embedding_model written by embed_or_queue
     return await node_repo.get_by_id(db, node.id) or node
 
@@ -65,6 +79,7 @@ async def create_literature(data: LiteratureCreate, db: DB, provider: EmbedProvi
     except IntegrityError as exc:
         raise HTTPException(422, str(exc))
     await embedding_service.embed_or_queue(db, node.id, provider)
+    await _emit_node_created(db, node)
     return await node_repo.get_by_id(db, node.id) or node
 
 
@@ -72,6 +87,7 @@ async def create_literature(data: LiteratureCreate, db: DB, provider: EmbedProvi
 async def create_structure(data: StructureCreate, db: DB, provider: EmbedProvider) -> NodeDetail:
     node = await node_repo.create_structure(db, data)
     await embedding_service.embed_or_queue(db, node.id, provider)
+    await _emit_node_created(db, node)
     return await node_repo.get_by_id(db, node.id) or node
 
 
@@ -144,6 +160,7 @@ async def create_story_event(data: StoryEventCreate, db: DB, provider: EmbedProv
                 pass
 
     await embedding_service.embed_or_queue(db, event.id, provider)
+    await _emit_node_created(db, event)
     return await node_repo.get_by_id(db, event.id) or event
 
 
@@ -254,9 +271,17 @@ async def update_node(
 
 @router.delete("/{node_id}", status_code=204)
 async def delete_node(node_id: str, db: DB) -> None:
+    node = await node_repo.get_by_id(db, node_id)
     deleted = await node_repo.soft_delete(db, node_id)
     if not deleted:
         raise HTTPException(404, "Node not found")
+    await activity_service.emit(
+        db,
+        event_type="node.deleted",
+        object_type="node",
+        object_id=node_id,
+        summary=f"Note deleted: {node.title if node else node_id}",
+    )
 
 
 @router.post("/{node_id}/process")

@@ -24,7 +24,7 @@ node_modules/
 .next/
 
 # Generated
-frontend/src/lib/api-types.ts
+# frontend/src/lib/api-types.ts is committed as of ADR-083 (offline typecheck)
 
 # MkDocs
 site/

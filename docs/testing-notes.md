@@ -170,3 +170,5 @@ streaming log of the backend while it is running from my tmuxinator workflow.
 ## 5/15/26 - Observations from testing.
 
 - When resolving a contradicts edge the UI updates properly, but as soon as the selection is changed and you click back on that edge it does not appear resolved.  Need to verify resolution is actually writing properly.
+
+- (Migrated from stray `testin-notes.md`, now removed): editing/removing sources was requested due to duplicate sources pointing at one file path — since addressed by the Edit/delete sources work on `/sources` (see above).

@@ -7,7 +7,6 @@ No async, no DB, no provider calls — independently unit-testable.
 import re
 from dataclasses import dataclass
 
-
 _MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 _HEADING_RE = re.compile(r"(?m)^(#{2,3}) (.+)")
 _SPLIT_RE = re.compile(

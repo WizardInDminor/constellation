@@ -1151,7 +1151,12 @@ WYSIWYG, no preview-while-editing.
   as-is — markdown rendering is purely a view concern).
 - If the user pastes content with HTML or a markdown construct that `remark-gfm`
   doesn't handle, it falls back to verbatim text, which is the safe default.
-## ADR-034 — Virtual source nodes in the graph visualization
+## ADR-034b — Virtual source nodes in the graph visualization
+
+> Numbering note: ADR-034 was accidentally used twice; this later entry is
+> retroactively designated **ADR-034b** (the bridge-candidates ADR above keeps
+> plain ADR-034). Existing references to "ADR-034" for virtual source nodes
+> (e.g. in `docs/testing-notes.md`) mean this entry.
 
 **Status:** Accepted
 
@@ -1194,7 +1199,11 @@ while allowing the graph view to model computed entities that don't exist in the
 
 ---
 
-## ADR-035 — Auto-tag and auto-hub note on import acceptance are frontend-only, non-atomic
+## ADR-035b — Auto-tag and auto-hub note on import acceptance are frontend-only, non-atomic
+
+> Numbering note: ADR-035 was accidentally used twice; this later entry is
+> retroactively designated **ADR-035b** (the scoped-RAG ADR above keeps plain
+> ADR-035).
 
 **Status:** Accepted
 
@@ -4962,6 +4971,401 @@ its own ADR.
 - Whole-doc nodes are coarse; the B5 entity-level promotion review is the
   planned refinement, and until then users can decompose promoted docs with
   the existing suggest/process tooling.
+
+---
+
+## ADR-082: Adopt the Constellation Direction Pack via a two-track roadmap
+
+**Status:** Accepted (documentation decision; implementation decisions D1–D7
+remain proposed pending user review)
+
+**Context:** A direction pack was authored outside the repo defining the
+target state: Constellation as an authoritative creative + software workspace
+with a shared proposal-before-truth workflow core, story context builders, and
+an MCP tool surface for external AI clients. The repo needed a durable home
+for the target documents and a migration map grounded in actual repo paths,
+without disturbing the in-flight Builder Pipeline track.
+
+**Decision:**
+
+1. The direction pack is committed verbatim under `docs/direction/`
+   (13 files, `01_PRODUCT_CHARTER.md` … `12_EXAMPLE_DATA_CONTRACTS.md`).
+2. Planning documents live under `docs/build/`: `current-system-map.md`
+   (verified inventory), `constellation-gap-analysis.md` (target vs. current),
+   `direction-roadmap.md` (phased plan, Phases C0–C10).
+3. Work proceeds on two decoupled tracks: **Track B** (Builder Pipeline,
+   existing plan, unchanged) and **Track C** (collaboration core: workflow
+   model → context builders → review UI → MCP read → MCP write).
+4. Design decisions required by Track C (entity representation, proposed-link
+   storage, MCP topology/auth, development-note mapping, promote unification,
+   mode vocabulary) are drafted as D1–D7 in the gap analysis and roadmap and
+   will be recorded as ADR-083+ only after user approval. No Track C
+   implementation begins before D1/D2 are settled.
+5. `docs/build-plan.md` is marked historical; `CLAUDE.md` points at the
+   roadmap.
+
+**Rationale:** The pack's own integration plan mandates inspect-then-adapt
+("adapt the design to the repository", additive migrations, no parallel
+architecture). A committed, path-accurate map is the smallest artifact that
+lets any future session act on the direction without re-deriving it, while
+keeping the human as the approval authority for the actual design choices.
+
+**Consequences:**
+
+- Future sessions have a single entry point for direction work
+  (`docs/build/direction-roadmap.md`) and a numbering ledger (next migration
+  `0014`, next ADR `083`).
+- The direction pack in-repo is a snapshot; if the source pack is revised,
+  `docs/direction/` must be updated deliberately, not assumed current.
+- Two known deviations from the pack are recorded in the gap analysis
+  (forward-only migrations vs. AT-041; node-substrate vs. per-type tables,
+  pending D1).
+
+---
+
+## ADR-083: Commit the generated OpenAPI TypeScript types
+
+**Status:** Accepted
+
+**Context:** `frontend/src/lib/api-types.ts` (the `openapi-typescript` output)
+was gitignored, so a fresh checkout could not typecheck or build until the
+backend was running on :8000 and `pnpm types` had been executed. Hand-written
+fallback types had begun accumulating in `api.ts` to paper over the gap.
+
+**Decision:** Commit `frontend/src/lib/api-types.ts` to the repository. The
+`pnpm types` workflow is unchanged (regenerate against the live backend after
+API changes), but the regenerated file is committed with the change that
+caused it. The spec can also be dumped offline via
+`python -c "import json; from app.main import app; print(json.dumps(app.openapi()))"`
+and fed to `openapi-typescript` when a live server is inconvenient.
+
+**Rationale:** A checkout that typechecks standalone is worth more than
+avoiding generated-file diffs; the diff is a feature — backend API changes
+become visible in frontend PRs. Committing the generated `.ts` (rather than a
+committed `openapi.json` + build step) keeps `pnpm` workflows untouched.
+
+**Consequences:**
+
+- Fresh checkouts typecheck and `vitest` runs without a backend.
+- `pnpm types` output must be committed alongside backend API changes; a
+  stale committed file shows up as a visible diff on the next regeneration.
+- The hand-written fallback types in `api.ts` can be retired as codegen
+  catches up.
+
+---
+
+## ADR-084: Shared workflow core — proposals, provenance, revisions, decisions
+
+**Status:** Accepted
+
+**Context:** Track C Phase C1 (direction pack Phase 1). The app already lives
+by proposal-before-truth in four ad-hoc flows (pending ingests, bridge
+classification, suggest flows, builder promote) but had no shared lifecycle,
+no provenance, no revisions, and no first-class decisions. The direction pack
+fixes the status machine (captured → proposed → under_review →
+accepted / rejected / superseded / archived) and requires provenance on
+every write. This ADR also settles roadmap decision points **D1-adjacent
+schema shape, D2** (proposed links) and the structured-error model.
+
+**Decision:**
+
+1. Migration `0014_workflow_core.sql` adds `provenance_records`, `proposals`,
+   `proposal_revisions`, `decisions`, `activity_events` (see ADR-085). All
+   additive; no existing table touched.
+2. **Statuses are CHECK-constrained; type vocabularies are model-enforced.**
+   The state machine is fixed by the pack, but `proposal_type` /
+   `decision_type` / event types will grow — and the edges table needed four
+   full table-recreates to grow its CHECK vocabulary. Pydantic `Literal`s own
+   the type vocabularies.
+3. **Proposed links live inside the proposal payload** (D2) as
+   `related_objects` and are materialized as real edges only on acceptance.
+   The `edges` table remains 100% accepted truth (pack AT-002) with no status
+   column.
+4. The transition table `ALLOWED_TRANSITIONS` (`app/models/proposal.py`) is
+   the pack's list verbatim; `proposal_service.transition` is the only
+   enforcement point. Convenience: accepting from `proposed` auto-hops
+   through `under_review` (both persisted) so the inbox is one click.
+5. Acceptance materialization (`proposal_service._materialize`): node-producing
+   types create a permanent node with `canon_status='provisional'` (promote
+   precedent, ADR-081); `scene` creates a story-event node (ADR-064 pattern);
+   role types get their reserved `narrative:*` tag (ADR-086); edge proposals
+   create the edge. AI output still never lands as `canon`.
+6. Revisions: revision 1 written at creation, every edit appends the new
+   content; original and edited versions stay queryable (AT-032).
+7. Decisions supersede at creation time: inserting with
+   `supersedes_decision_id` flips the old row to `superseded` in the same
+   commit (AT-005). Software/architecture decisions stay in this file
+   (pack ADR-006).
+8. Structured errors (`app/core/errors.py`): workflow routes return the
+   pack's envelope `{"error": {code, message, retryable, details}}` via a
+   `WorkflowError` handler; pre-existing routes migrate opportunistically.
+9. Composite operations commit sequentially per repo call (house pattern,
+   ADR-035b precedent); the status flip is last so a crash mid-acceptance
+   leaves the proposal unresolved rather than half-accepted-and-resolved.
+
+**Consequences:**
+
+- One lifecycle for the UI (C3) and MCP (C4/C5) to share; AT-001…AT-005,
+  AT-024, AT-032 covered by `tests/test_workflow_core.py` and
+  `tests/test_routes_proposals.py`.
+- The four legacy proposal-like flows are untouched; they migrate onto the
+  core incrementally (builder promote unification is deferred to C7, D6).
+- Payload contracts per proposal_type are conventions for now; they harden
+  as MCP write tools land.
+
+---
+
+## ADR-085: Append-only activity event log with integer cursor
+
+**Status:** Accepted
+
+**Context:** The pack's `get_recent_changes` needs cross-client, exactly-once
+visibility with a continuation cursor. The existing `/activity` feed derives
+from timestamps and cannot express "events since I last looked."
+
+**Decision:** `activity_events` is append-only, with an
+`INTEGER PRIMARY KEY AUTOINCREMENT` id — a deliberate exception to the UUID
+house style: the monotone id doubles as the pagination cursor
+(`WHERE id > ?`), with no timestamp-tie ambiguity. `activity_service.emit`
+is the single emission entry point; write paths call it after their own
+persistence succeeds (event insert is a separate commit — losing an event on
+a crash is acceptable; losing a write is not). Instrumented in C1: proposal
+lifecycle, decisions, node create/delete, edge create/resolve, builder
+promote. `GET /api/v1/activity/changes?after=<cursor>` returns
+`{events, next_cursor}`. `project_hub_id` is nullable — corpus-level events
+carry NULL and appear only in unfiltered queries.
+
+**Consequences:** Cross-client AT-024 holds (verified in tests). The legacy
+timestamp-derived `/activity` feed remains for the Home page; it can migrate
+to the event log later. Event rows are never updated or deleted.
+
+---
+
+## ADR-086: Story entities stay on the node substrate with reserved role tags
+
+**Status:** Accepted (settles roadmap decision point D1)
+
+**Context:** The direction pack's domain model lists explicit story objects
+(Character, Scene, Location, Theme, WorldRule…) and warns against "arbitrary
+untyped nodes." Constellation's story domain already exists as nodes with
+flags (`is_story_event`, ADR-064) and reserved `narrative:*` role tags
+(consumed by scene context, timeline, canon views, RAG). The pack's own
+integration plan permits keeping a generic pattern the repo already follows
+when the tradeoff is explicitly reviewed — this is that review.
+
+**Decision:** Keep the node+flag+role-tag substrate as the story domain
+model. The reserved role vocabulary (`narrative:character`,
+`narrative:theme`, `narrative:location`, `narrative:lore-*`) IS the type
+system; Phase C1 acceptance applies these tags, and Phase C2 context
+builders read them. No per-entity tables.
+
+**Rationale:** Per-type tables would fork every existing surface (timeline,
+scene context, graph, RAG, canon views, embedding pipeline) into two data
+paths — tripping the pack's own stop clause about breaking existing views —
+for a benefit (typed columns) the payload conventions and role tags already
+approximate. The substrate is also what makes "everything lands in the
+graph" true: a character is searchable, embeddable, linkable like any note.
+
+**Consequences:**
+
+- Typed richness (e.g. character sheet fields) continues to arrive as
+  connected nodes and edges (the Phase 10 character-sheet design), not
+  columns.
+- If a role accumulates truly structural fields the way story events did,
+  the ADR-064 escape hatch (flag → formal type) remains available per role.
+- The role vocabulary needs a single authoritative constant module by C2 so
+  timeline_repo and proposal acceptance can't drift.
+
+---
+
+## ADR-087: Context builders own AI-facing shapes via versioned envelopes
+
+**Status:** Accepted
+
+**Context:** Track C Phase C2 (direction pack Phase 2 + ADR-004): MCP tools,
+the workspace UI, and HTTP routes must consume identical, task-shaped
+context — never assemble domain context independently. Phase 9 already
+proved the pattern with Scene Context View's live assembly.
+
+**Decision:**
+
+1. `app/services/context_builder_service.py` owns four builders:
+   `build_character_dossier`, `build_story_project_context`,
+   `build_scene_context` (wraps `timeline_repo.assemble_scene_context` —
+   never reimplements it), `build_recent_changes_context`.
+2. Envelopes (`app/models/context.py`) declare `context_type` +
+   `context_version` ("1.0") and strictly separate **accepted** /
+   **development** / **proposed** sections (AT-010). Unresolved tension
+   edges are development material; open proposals referencing the subject
+   appear only under `proposed`.
+3. Routes: `GET /projects/{hub_id}/context[/character/{id}|/scene/{id}|/changes]`.
+4. The reserved role vocabulary moves to `app/models/narrative.py` as the
+   single authoritative module (ADR-086 consequence); `timeline_repo`
+   re-exports for existing call sites, and proposal acceptance imports the
+   same constants.
+5. Everything is assembled live on every call — "the order of creation is
+   invisible" now also holds for dossiers (pytest-protected: deleting an
+   edge between two calls changes the dossier).
+6. Known v1 limitation, recorded in the envelope's `warnings`: open threads
+   in project context are corpus-wide until project-scoped tension filtering
+   lands with the C6 workbench workflows. Dossier classification does
+   per-neighbor lookups (N+1) — acceptable at personal scale, revisit if
+   dossiers exceed ~100 edges.
+
+**Consequences:** Phase C4's MCP read tools (`get_character_dossier`,
+`get_scene_context`, `get_story_project_context`, `get_recent_changes`)
+become thin adapters over these builders. Envelope changes require a
+`context_version` bump.
+
+---
+
+## ADR-088: Component-level frontend testing via Testing Library
+
+**Status:** Accepted
+
+**Context:** Track C Phase C3 (and the long-standing Phase 10 priority #4):
+the 42 existing frontend tests were all pure-function; every visual surface
+was verified only by hand. The proposal inbox is the first new surface that
+must ship with automated regression coverage, and MCP write tools (C5) will
+depend on this review surface behaving correctly.
+
+**Decision:** Add `@testing-library/react` + `@testing-library/jest-dom` +
+`@testing-library/user-event` to the existing Vitest/jsdom setup
+(`src/test/setup.ts` registers jest-dom matchers and auto-cleanup). Pattern
+for page tests: `vi.mock("@/lib/api")` at the module boundary (no MSW —
+the flat api.ts module is the natural seam), mock `next/navigation` where
+pages use it, and mock heavyweight render components (NoteContent,
+MarkdownTextarea) when the test targets behavior, not markdown rendering.
+New UI surfaces ship with component tests from now on; back-filling the
+Phase 9 surfaces remains scheduled work, not part of this phase.
+
+**Consequences:** First 8 component tests cover the proposal inbox and
+detail pages (AT-030/031/032 at the UI layer). `pnpm lint` was discovered
+to be unconfigured (next lint prompts for setup) — recorded as a known gap,
+deliberately not adopted mid-phase.
+
+---
+
+## ADR-089: MCP server — in-process streamable HTTP with static bearer tokens
+
+**Status:** Accepted (settles roadmap decision points D3 and D4)
+
+**Context:** Track C Phase C4 (direction pack Phase 3): external AI clients
+need read access to authoritative state. The repo had no MCP code and no
+auth — the pack's stop clause ("authentication or project isolation missing
+would make MCP writes unsafe") applied. Constraints: one module-global
+SQLite connection, single-user product served on localhost/Tailscale.
+
+**Decision:**
+
+1. **Topology (D3): in-process.** The official `mcp` SDK (2.x,
+   `MCPServer`) is mounted on the FastAPI app at `/mcp` via streamable
+   HTTP (`stateless_http` + `json_response`). One process, one SQLite
+   writer, one lifecycle; tools call the same services/context builders as
+   the HTTP routes. A session manager instance is single-run, so the
+   lifespan rebuilds the transport app behind a stable `_TransportMount`
+   on every startup.
+2. **Auth (D4): static per-client bearer tokens** in `.env`
+   (`MCP_TOKENS="token|Client Name|read+write,..."`). An ASGI middleware
+   authenticates, maps token → client identity (a contextvar tools read
+   for scope checks and, in C5, provenance), and enforces a per-token
+   sliding-window rate limit (`MCP_RATE_LIMIT_PER_MINUTE`, default 120).
+   No tokens configured = the endpoint answers 403 for everything.
+   Deliberately not OAuth at this product's scale.
+3. **Read scope separation:** every read tool requires the `read` scope;
+   `write` exists in the vocabulary but no write tool is registered until
+   C5.
+4. **Tools v1** (all thin adapters; a pytest asserts the package contains
+   no SQL): `get_server_info`, `list_projects`, `search_story`,
+   `get_story_project_context`, `get_character_dossier`,
+   `get_scene_context`, `get_recent_changes`, `list_open_threads`.
+5. Known limitation, stated in tool docs and result warnings:
+   `search_story` and `list_open_threads` are corpus-wide in v1;
+   project-scoped filtering arrives with C6. DNS-rebinding host validation
+   is disabled on the transport — the deployment story is
+   localhost/Tailscale behind token auth (revisit if that changes).
+
+**Consequences:** AT-020 parity is pytest-verified (tool output equals the
+internal service output). MCP clients configure
+`http://<host>:8000/mcp/` with an `Authorization: Bearer <token>` header.
+Provenance binding for writes (client name from the token) is ready for C5.
+
+---
+
+## ADR-090: Controlled MCP write tools
+
+**Status:** Accepted (settles roadmap decision point D5)
+
+**Context:** Track C Phase C5 (direction pack Phase 4) — the milestone:
+a full collaboration loop where an AI client proposes, the human reviews in
+the app, and a second client retrieves the resolution.
+
+**Decision:**
+
+1. Five write tools in `app/mcp/write.py`, all behind the `write` scope:
+   `create_story_proposal`, `update_proposal` (appends revisions, never
+   moves status), `link_proposal_to_objects` (payload links only — edges
+   materialize solely on acceptance, AT-002), `create_development_note`,
+   and `record_story_decision` — the last behind a separate `decisions`
+   scope granted per client deliberately, with an explicit
+   only-when-user-approved instruction in the tool description.
+2. **Acceptance is absent from the MCP surface entirely** (AT-023): there
+   is no transition tool; proposals become truth only through the review
+   UI/HTTP transition endpoint.
+3. **Provenance is derived from the token identity** (client name + mcp
+   client type), with optional caller-supplied conversation/message
+   references (AT-022) — a client cannot claim to be another client.
+4. **D5:** AI development notes become real permanent nodes with
+   `canon_status='speculative'` (service: `note_service.py`), embedded,
+   linked to their related objects, and event-logged — "everything lands in
+   the graph" without ever reading as accepted truth.
+
+**Consequences:** The direction pack's foundation success criteria are met
+and pytest-verified end to end over the real transports
+(`test_mcp_write.py::test_milestone_full_collaboration_loop`): MCP client A
+proposes a scene linked to existing objects → inbox shows it with client
+provenance → user edits + accepts → node + links materialize → MCP client B
+sees `proposal.created`/`proposal.accepted` via its stored cursor and the
+accepted scene in the character dossier; read-only clients are refused
+writes at the transport (AT-021).
+
+---
+
+## ADR-091: Single authority for active provider state
+
+**Status:** Accepted
+
+**Context:** Provider state had grown two stores that could diverge on a
+live config change. `PATCH /api/v1/config` hot-swaps providers but only
+updated `request.app.state.*`; the MCP tools introduced in Phase C4/C5 read
+the module-level `_embedding_provider` in `app.core.lifespan`, captured at
+startup. After an embedding-model switch, MCP `search_story` and
+`create_development_note` kept embedding with the **stale** provider while
+`queue_reembed_all` migrated the corpus to the new model — silently
+degrading MCP search and writing mixed-model vectors' queries. The worker
+read `app.state` (fresh), routes read `app.state` (fresh), MCP read the
+module global (stale): three readers, two stores.
+
+**Decision:** The module-level registry in `app.core.lifespan` is the
+single authority. `set_active_providers(app, embed, gen)` is the only
+mutation path — called at startup and by `PATCH /config` — and it mirrors
+into `app.state` for introspection only. All readers go through
+`get_embedding_provider()` / `get_generation_provider()`: the route
+dependencies in `core/deps.py`, the embedding worker loop, and the MCP
+tools. A new `_generation_provider` global gives generation the same
+treatment (the same divergence would have bitten future MCP generation
+tools).
+
+**Consequences:**
+
+- A live model change now reaches every consumer atomically; verified by
+  `tests/test_provider_hot_reload.py`, including an end-to-end MCP
+  regression: after `PATCH /config`, an MCP `search_story` call embeds
+  with the new provider instance and the stale one records zero calls.
+- `app.state.embedding_provider` remains populated but is a mirror;
+  anything new must read the getters, not `app.state`.
+- Test fixtures that monkeypatch `lifespan._embedding_provider` directly
+  (the MCP tool tests) keep working — they patch the authority itself.
 
 ---
 

@@ -1,84 +1,99 @@
 # Constellation
 
-A personal zettelkasten built as a typed knowledge graph with first-class AI
-integration. Notes are atomic. Edges are typed and directional (SUPPORTS,
-CONTRADICTS, ELABORATES, etc.). Every non-fleeting note is embedded at write
-time and indexed in both a vector store (sqlite-vec) and a full-text engine
-(FTS5). From that foundation the system does two things that most note tools
-don't: it finds non-obvious connections between your notes automatically, and
-it lets you ask questions that are answered by synthesizing across your own
-writing — with citations back to the specific notes that contributed.
+A personal knowledge and creative workspace built on a typed knowledge graph
+with first-class AI integration — and evolving toward a **creative operating
+system**: an authoritative project substrate that humans work in through a
+visual app and AI clients work in through controlled tools.
+
+The foundation is a zettelkasten: atomic notes, typed directional edges
+(SUPPORTS, CONTRADICTS, ELABORATES, … — 32 verbs including a symbolic/resonance
+vocabulary for creative work), every non-fleeting note embedded at write time
+and indexed in both a vector store (sqlite-vec) and a full-text engine (FTS5).
+On top of that sit mode-aware **project workspaces** (research / narrative /
+learning), a **narrative timeline** with parallel lanes and live scene-context
+assembly, **canon uncertainty metadata** (what is settled, emerging, charged,
+or deliberately unnamed), and the beginnings of a **builder pipeline** that
+turns ideas into staged, versioned productions.
 
 Single-user. Local-first data (one SQLite file). Cloud AI via Voyage
-(embeddings) and Anthropic Claude (generation), with a local Ollama fallback
-planned for Phase 7.
+(embeddings) and Anthropic Claude (generation).
+
+## Where it's heading
+
+The target state is documented in `docs/direction/` (product charter, domain
+model, MCP tool contract) and the migration map in
+`docs/build/direction-roadmap.md`: a shared proposal-before-truth workflow
+core, story context builders, and an MCP server so ChatGPT, Claude Code, and
+other agents can search, retrieve, and *propose* against the same durable
+state — with the human as the final approval authority. AI-created material
+never becomes accepted canon automatically.
 
 ## What's here
 
-| Path                    | What it is                                          |
-|-------------------------|-----------------------------------------------------|
-| `CLAUDE.md`             | Working reference. Auto-loaded by Claude Code.      |
-| `docs/architecture.md`  | Schema, project structure, API surface, patterns.   |
-| `docs/build-plan.md`    | Phased build plan with scope boundaries.            |
-| `docs/decisions.md`     | ADR-style log of design decisions.                  |
-| `backend/`              | FastAPI + SQLite + sqlite-vec.                      |
-| `frontend/`             | Next.js (App Router) + TypeScript + Tailwind.       |
+| Path                        | What it is                                              |
+|-----------------------------|---------------------------------------------------------|
+| `CLAUDE.md`                 | Working reference. Auto-loaded by Claude Code.          |
+| `docs/architecture.md`      | Schema, project structure, API surface, patterns.       |
+| `docs/decisions.md`         | ADR-style log of design decisions (ADR-001+).           |
+| `docs/direction/`           | The direction pack — target product & architecture.     |
+| `docs/build/`               | Current-system map, gap analysis, phased roadmap.       |
+| `docs/builder-pipeline-*`   | Builder Pipeline architecture + build plan (Track B).   |
+| `docs/handbook/`            | Architecture handbook (vision, principles).             |
+| `backend/`                  | FastAPI + aiosqlite + SQLite + sqlite-vec + FTS5.       |
+| `frontend/`                 | Next.js (App Router) + TypeScript + Tailwind.           |
 
-If you're orienting yourself, read `CLAUDE.md` first, then skim
+If you're orienting yourself, read `CLAUDE.md` first, then
+`docs/build/current-system-map.md` for what exists, then skim
 `docs/decisions.md` to understand why things are the way they are.
 
 ## Features
 
-**Capture**
-- Quick fleeting-note capture from the browser (Ctrl+K) or terminal (`con "thought"`)
-- Intentional capture dialog (Shift+Ctrl+K) for permanent and literature notes with tag assignment
-- Mobile capture from the iPhone via Tailscale + iOS Shortcuts — see `docs-site/user-guide/mobile-capture.md`
-- Systemd user service so the backend starts automatically on login
+**Capture & process**
+- Quick fleeting capture (Ctrl+K), intentional capture (Shift+Ctrl+K),
+  terminal capture (`con "thought"`), iOS capture via Tailscale + Shortcuts
+- Inbox with AI-assisted decomposition of fleeting notes into atomic permanents
+- Document ingest: import a file, chunk it, review AI-drafted literature notes
 
-**Process**
-- Inbox view lists unprocessed fleeting notes oldest-first
-- AI-assisted decomposition: Claude suggests 1–3 atomic permanent notes per fleeting note
-- Draft state persisted to `sessionStorage` so navigating away doesn't lose work
+**Link & discover**
+- Typed directional edges with per-edge "why" notes and AI classifier rationale
+- Resolvable tension edges (CONTRADICTS/QUESTIONS can be marked resolved)
+- Discover surfaces: orphans, stale notes, AI-classified bridges, triangles
+- Batch and cluster link suggestion flows
 
-**Link**
-- Typed, directional edges with an optional "why this edge exists" note
-- AI link suggestions: semantically similar candidates evaluated by Claude with edge-type reasoning
-- Node detail view shows incoming and outgoing edges grouped by type; click any to walk the graph
+**Search, Ask & synthesize**
+- Hybrid search (RRF over vectors + FTS5), semantic, fulltext, dedup
+- `/ask` RAG with graph expansion, edge-aware prompting (contradictions are
+  surfaced, not synthesized away), citations, scoped/date-filtered modes
+- `/synthesize` multi-note synthesis saved back into the graph
 
-**Search**
-- `POST /search/hybrid` — Reciprocal Rank Fusion over vector similarity + FTS5 (default)
-- `POST /search/semantic` — pure vector similarity
-- `POST /search/fulltext` — FTS5 keyword search; works offline, no API call
-- Search UI at `/search` with mode toggle; fulltext is one click from hybrid
+**Project workspaces** (`/projects`)
+- A project is a structure node + scope (pinned notes, tags, briefing, mode)
+- Modes set defaults, never gates: research / narrative / learning
+- Free-writing pad, intentional work sessions with resume briefings,
+  per-tag coverage, AI learning maps with web search
 
-**RAG queries**
-- `POST /rag/query` — embeds query → hybrid search → graph expansion (depth-1 BFS) → context assembly → Claude synthesis
-- Answer returned with `[Note N]` citations; frontend renders them as links back to source notes
-- Provenance panel shows which notes contributed and which graph edges were traversed
-- Query UI at `/ask` — the primary payoff of the system
+**Narrative tooling**
+- Custom SVG/Canvas timeline: parallel lanes, act spans, crossover scenes
+- Story Dump → extracted candidate nodes; prose status tracking
+- Scene Context View assembled live from the graph on every open
+- `/canon` uncertainty views: Images Carrying Charge, Emerging Truths,
+  Do Not Name Yet, open threads
 
-**Source management**
-- Sources (datasheets, books, articles, etc.) linked to literature notes
-- `GET /sources/{id}/open` launches `xdg-open` on the URL/file path
-- Inline source creation inside the capture dialog; no navigation required
-- Sources list at `/sources` with detail panel, "Open file" / "Open in browser" / "Copy path"
+**Builder pipeline** (Track B, in progress)
+- Idea → interpreted creative brief (11-stage pipeline; intake +
+  interpretation live), versioned production docs, explicit promote-to-canon
 
 **Graph visualization**
-- Force-directed canvas graph at `/graph` via `react-force-graph-2d`
-- Node color by type (fleeting/literature/permanent/structure), edge color by edge type (7 types)
-- Click any node → side panel with summary and "Open note →"; click any edge → panel with type, note, and endpoint links
-- Live client-side filters: node type toggles, edge type toggles, tag filter, hide-isolated toggle, title highlight search
-- Zoom in/out and fit-to-screen controls; auto-fits after the force simulation settles
+- Force-directed canvas at `/graph` with filters, node/edge panels, and
+  virtual source nodes
 
 ## Prerequisites
 
-- **Python** 3.11 or newer
-- **Node.js** 20 or newer + **pnpm**
-- **uv** for Python dependency management — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **SQLite** 3.41+ (for FTS5 + loadable extensions; modern macOS/Linux installs are fine)
-- **Voyage AI API key** — sign up at https://www.voyageai.com
-- **Anthropic API key** — get one at https://console.anthropic.com
-- **Ollama** (optional, for local provider mode) — https://ollama.com
+- **Python** 3.11+ and **uv** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Node.js** 20+ and **pnpm**
+- **SQLite** 3.41+ (FTS5 + loadable extensions)
+- **Voyage AI API key** — https://www.voyageai.com
+- **Anthropic API key** — https://console.anthropic.com
 
 ## Quick start
 
@@ -96,7 +111,7 @@ uv run uvicorn app.main:app --reload          # serves on :8000; migrations run 
 
 # 3. (Optional) Run backend as a systemd user service instead
 cp constellation.service ~/.config/systemd/user/
-systemctl --user enable --now constellation   # starts on login, no manual uvicorn needed
+systemctl --user enable --now constellation   # starts on login
 # Note: the service binds 0.0.0.0:8000 so the backend is reachable from
 # Tailscale peers (used by the iOS mobile-capture Shortcuts). On a publicly
 # reachable host, fall back to --host 127.0.0.1 — there is no auth layer.
@@ -104,17 +119,12 @@ systemctl --user enable --now constellation   # starts on login, no manual uvico
 # 4. Frontend (in a second terminal)
 cd frontend
 pnpm install
-pnpm types                                    # requires backend running; generates TS types
+pnpm types                                    # regenerate TS types (see note below)
 pnpm dev                                      # serves on :3000
 
 # 5. (Optional) Terminal capture — available after uv sync
 con "thought to capture"                      # posts a fleeting note from anywhere
 con -t "Title" -c "Content"                   # explicit flags
-# Needs the backend running. Add backend/.venv/bin to PATH or use `uv run con`.
-
-# 6. (Optional) Local AI mode — Phase 7, not yet wired
-ollama pull mxbai-embed-large
-ollama pull llama3.2
 ```
 
 Open http://localhost:3000 to use the app.
@@ -131,22 +141,23 @@ uv run ruff check . && uv run ruff format .   # lint + format
 # Frontend
 cd frontend
 pnpm dev
-pnpm types                                    # rerun after backend API changes
+pnpm types                                    # rerun after backend API changes (needs backend on :8000)
 pnpm test
 pnpm lint
 ```
 
+Generated API types (`frontend/src/lib/api-types.ts`) are committed, so a
+fresh checkout typechecks without a running backend; rerun `pnpm types` after
+backend API changes and commit the diff (see ADR-083).
+
 ## Backups
 
 Constellation stores everything in a single SQLite file (path configured by
-`DB_PATH` in `.env`, default `./data/constellation.db`). Back it up the same
-way you back up anything else important.
+`DB_PATH` in `.env`, default `./data/constellation.db`). Migrations are
+additive and forward-only — snapshot the DB file before upgrading.
 
 ```bash
-# Manual snapshot
 cp ./data/constellation.db ./backups/constellation-$(date +%Y%m%d-%H%M%S).db
-
-# Restic / Borg / Time Machine / rsync to a remote — all fine.
 ```
 
 The `data/` directory is gitignored. Don't commit your knowledge graph to
@@ -154,21 +165,17 @@ the same repo as the code.
 
 ## Project status
 
-Phases 0–6 complete. Core system is feature-complete and in active daily use. 170 backend tests passing.
+In active daily use. 528+ backend tests.
 
-| Phase | Status | What it delivered |
-|-------|--------|-------------------|
-| 0 — Foundation | ✅ | Repo skeleton, DB, migrations, both dev servers |
-| 1 — Core CRUD | ✅ | Full data layer, all repository and API routes |
-| 2 — Embeddings | ✅ | Provider abstraction, auto-embed on write, embedding job queue |
-| 3 — Capture & process | ✅ | Fleeting capture, inbox, AI-assisted decomposition into permanents |
-| 3.5 — CLI & resilience | ✅ | `con` terminal tool, systemd service, session-draft persistence |
-| 4 — Linking | ✅ | Edge creation UI, AI link suggestions, neighbor browsing |
-| 5 — Search & RAG | ✅ | Hybrid search, `/ask` RAG query UI, source management |
-| 6 — Visualization | ✅ | Force-directed graph at `/graph`, node/edge colors, filters, side panels |
-| 7 — Local provider | ⏳ | Ollama embedding + generation; offline mode via settings |
-
-**Up next (Phase 7, optional):** local provider path — swap Voyage and Claude for Ollama models via the settings page, with a re-embedding job that runs in the background. All provider calls already go through the abstraction layer; Phase 7 is adding the Ollama implementations and settings UI.
+| Track | Status |
+|-------|--------|
+| Zettelkasten core (Phases 0–6.5) | ✅ Complete — capture, process, link, search, RAG, graph, operability |
+| Edge semantics into RAG (Phase 8) | ✅ Complete — edge-aware prompting, resolved edges, scoped Ask, dedup |
+| Project Workspace + Narrative Timeline (Phase 9) | ✅ Complete |
+| Canon readiness (uncertainty metadata, edge vocabulary, views) | ✅ Complete |
+| Builder Pipeline (Track B) | 🔨 B0 complete; B1 (director planning + script + Builder UI) next |
+| Collaboration core → MCP (Track C) | 🔨 In progress — see `docs/build/direction-roadmap.md` |
+| Local provider (Ollama) | ⏸ Deferred indefinitely |
 
 ## License
 

@@ -3,7 +3,7 @@
 /**
  * A markdown-aware textarea with a lightweight Write/Preview toggle.
  *
- * Note entry is markdown-first (ADR-034), so every textarea where note content
+ * Note entry is markdown-first (ADR-073), so every textarea where note content
  * is written gains a small Write/Preview tab pair. "Write" is a plain textarea
  * (unchanged behavior); "Preview" renders the current value through
  * `<NoteContent>` so formatting and math can be verified inline. This is

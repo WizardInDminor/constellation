@@ -1,4 +1,9 @@
-from app.models.activity import ActivityFeed, RecentEdge
+from app.models.activity import (
+    ActivityEvent,
+    ActivityFeed,
+    RecentChangesResponse,
+    RecentEdge,
+)
 from app.models.builder import (
     PIPELINE_STAGES,
     BriefCharacter,
@@ -27,6 +32,7 @@ from app.models.canon import (
 )
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
+from app.models.decision import DecisionCreate, DecisionRecord, DecisionStatus
 from app.models.discover import (
     BridgeCandidate,
     BridgeClassification,
@@ -85,6 +91,26 @@ from app.models.project import (
     WorkSessionCreate,
     WorkSessionUpdate,
 )
+from app.models.proposal import (
+    ALLOWED_TRANSITIONS,
+    AcceptResult,
+    ProposalCreate,
+    ProposalDetail,
+    ProposalRevision,
+    ProposalStatus,
+    ProposalSummary,
+    ProposalTransitionRequest,
+    ProposalType,
+    ProposalUpdate,
+    RelatedObjectRef,
+)
+from app.models.provenance import (
+    SYSTEM_PROVENANCE,
+    UI_PROVENANCE,
+    ActorType,
+    ProvenanceCreate,
+    ProvenanceRecord,
+)
 from app.models.rag import (
     ClusterLinkProposal,
     ClusterSuggestRequest,
@@ -141,8 +167,29 @@ NodeDetail.model_rebuild()
 ProjectDetail.model_rebuild()
 
 __all__ = [
+    "ActivityEvent",
     "ActivityFeed",
+    "RecentChangesResponse",
     "RecentEdge",
+    "DecisionCreate",
+    "DecisionRecord",
+    "DecisionStatus",
+    "ALLOWED_TRANSITIONS",
+    "AcceptResult",
+    "ProposalCreate",
+    "ProposalDetail",
+    "ProposalRevision",
+    "ProposalStatus",
+    "ProposalSummary",
+    "ProposalTransitionRequest",
+    "ProposalType",
+    "ProposalUpdate",
+    "RelatedObjectRef",
+    "SYSTEM_PROVENANCE",
+    "UI_PROVENANCE",
+    "ActorType",
+    "ProvenanceCreate",
+    "ProvenanceRecord",
     "PIPELINE_STAGES",
     "BriefCharacter",
     "BriefLocation",
