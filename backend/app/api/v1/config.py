@@ -22,7 +22,7 @@ async def get_config(db: DB) -> list[ConfigEntry]:
 
 @router.patch("")
 async def update_config(data: ConfigUpdate, db: DB, request: Request) -> list[ConfigEntry]:
-    from app.core.lifespan import _load_providers
+    from app.core.lifespan import _load_providers, set_active_providers
     from app.services import embedding_service
 
     settings = get_settings()
@@ -38,8 +38,9 @@ async def update_config(data: ConfigUpdate, db: DB, request: Request) -> list[Co
 
     if data.model_fields_set:
         new_embed, new_gen = await _load_providers(db, settings)
-        request.app.state.embedding_provider = new_embed
-        request.app.state.generation_provider = new_gen
+        # Single-authority hot-swap (ADR-091): routes, the embedding worker,
+        # and the MCP tools all read the module registry this updates.
+        set_active_providers(request.app, new_embed, new_gen)
 
         new_entry = await config_repo.get(db, "embedding_model")
         new_embed_model = new_entry.value if new_entry else None

@@ -5331,6 +5331,44 @@ writes at the transport (AT-021).
 
 ---
 
+## ADR-091: Single authority for active provider state
+
+**Status:** Accepted
+
+**Context:** Provider state had grown two stores that could diverge on a
+live config change. `PATCH /api/v1/config` hot-swaps providers but only
+updated `request.app.state.*`; the MCP tools introduced in Phase C4/C5 read
+the module-level `_embedding_provider` in `app.core.lifespan`, captured at
+startup. After an embedding-model switch, MCP `search_story` and
+`create_development_note` kept embedding with the **stale** provider while
+`queue_reembed_all` migrated the corpus to the new model — silently
+degrading MCP search and writing mixed-model vectors' queries. The worker
+read `app.state` (fresh), routes read `app.state` (fresh), MCP read the
+module global (stale): three readers, two stores.
+
+**Decision:** The module-level registry in `app.core.lifespan` is the
+single authority. `set_active_providers(app, embed, gen)` is the only
+mutation path — called at startup and by `PATCH /config` — and it mirrors
+into `app.state` for introspection only. All readers go through
+`get_embedding_provider()` / `get_generation_provider()`: the route
+dependencies in `core/deps.py`, the embedding worker loop, and the MCP
+tools. A new `_generation_provider` global gives generation the same
+treatment (the same divergence would have bitten future MCP generation
+tools).
+
+**Consequences:**
+
+- A live model change now reaches every consumer atomically; verified by
+  `tests/test_provider_hot_reload.py`, including an end-to-end MCP
+  regression: after `PATCH /config`, an MCP `search_story` call embeds
+  with the new provider instance and the stale one records zero calls.
+- `app.state.embedding_provider` remains populated but is a mirror;
+  anything new must read the getters, not `app.state`.
+- Test fixtures that monkeypatch `lifespan._embedding_provider` directly
+  (the MCP tool tests) keep working — they patch the authority itself.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
