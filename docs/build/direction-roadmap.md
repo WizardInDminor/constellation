@@ -1,6 +1,11 @@
 # Direction Roadmap — From Current System to Direction-Pack Target
 
-**Status:** proposed (awaiting user review). 2026-09-15.
+**Status:** approved by the user 2026-09-15 ("run with this"); Track C
+Phases C0–C5 implemented the same day (see commits on PR #18 and
+ADR-082…090). D1–D7 were settled in ADR-086 (D1), ADR-084 (D2), ADR-089
+(D3/D4), ADR-090 (D5); D6/D7 remain deferred as planned. The ADR numbers
+below were provisional; the ledger in §7 records the final assignments.
+Phases C6+ remain to be planned in detail.
 **Inputs:** `docs/build/current-system-map.md`, `docs/build/constellation-gap-analysis.md`, `docs/direction/` (the target).
 **Governing principle** (from the pack): *share lifecycle and orchestration
 infrastructure, but preserve domain-specific language and behavior.*
@@ -210,6 +215,13 @@ C0 alignment (this PR + hygiene PR)
 
 ## 7. Numbering ledger
 
-- Next migration: `0014_workflow_core.sql`.
-- Next ADR: **ADR-082** (this document set) then 083+ as phases land.
+- Migration `0014_workflow_core.sql` — landed (C1). Next migration: `0015`.
+- ADRs as landed: 082 (adoption), 083 (committed api-types), 084 (workflow
+  core, D2), 085 (activity log), 086 (node substrate, D1), 087 (context
+  envelopes), 088 (frontend component testing), 089 (MCP topology + auth,
+  D3/D4), 090 (MCP write tools, D5). Next ADR: **091**.
 - Acceptance tests AT-xxx refer to `docs/direction/08_ACCEPTANCE_TESTS.md`.
+- Phase status: C0 ✅ · C1 ✅ · C2 ✅ · C3 ✅ · C4 ✅ · C5 ✅ (milestone) ·
+  C6+ pending detailed planning. Known carried limitations: corpus-wide
+  search/open-threads scoping (→ C6), builder promote unification (→ C7,
+  D6), Phase 9 UI surfaces still lack component tests (backfill).

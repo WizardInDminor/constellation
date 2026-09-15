@@ -70,7 +70,13 @@ async def get_server_info() -> dict:
                 "get_recent_changes",
                 "list_open_threads",
             ],
-            "write": [],
+            "write": [
+                "create_story_proposal",
+                "update_proposal",
+                "link_proposal_to_objects",
+                "create_development_note",
+            ],
+            "decisions": ["record_story_decision"],
         },
         "actor": {
             "client_name": identity.client_name,
@@ -227,3 +233,8 @@ def start_transport():
         ),
     )
     return mcp_server.session_manager
+
+
+# Controlled write tools (Phase C5, ADR-090) register themselves against
+# `mcp_server`; imported last so the instance exists.
+from app.mcp import write as _write_tools  # noqa: E402, F401

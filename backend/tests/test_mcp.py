@@ -78,7 +78,8 @@ async def test_get_server_info_reports_actor(mcp_env):
     assert info["server_name"] == "constellation"
     assert info["actor"]["client_name"] == "TestReader"
     assert "search_story" in info["capabilities"]["read"]
-    assert info["capabilities"]["write"] == []
+    assert "create_story_proposal" in info["capabilities"]["write"]
+    assert info["capabilities"]["decisions"] == ["record_story_decision"]
 
 
 async def test_list_projects_tool(mcp_env, story_project):

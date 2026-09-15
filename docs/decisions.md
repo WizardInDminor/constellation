@@ -5292,6 +5292,45 @@ Provenance binding for writes (client name from the token) is ready for C5.
 
 ---
 
+## ADR-090: Controlled MCP write tools
+
+**Status:** Accepted (settles roadmap decision point D5)
+
+**Context:** Track C Phase C5 (direction pack Phase 4) — the milestone:
+a full collaboration loop where an AI client proposes, the human reviews in
+the app, and a second client retrieves the resolution.
+
+**Decision:**
+
+1. Five write tools in `app/mcp/write.py`, all behind the `write` scope:
+   `create_story_proposal`, `update_proposal` (appends revisions, never
+   moves status), `link_proposal_to_objects` (payload links only — edges
+   materialize solely on acceptance, AT-002), `create_development_note`,
+   and `record_story_decision` — the last behind a separate `decisions`
+   scope granted per client deliberately, with an explicit
+   only-when-user-approved instruction in the tool description.
+2. **Acceptance is absent from the MCP surface entirely** (AT-023): there
+   is no transition tool; proposals become truth only through the review
+   UI/HTTP transition endpoint.
+3. **Provenance is derived from the token identity** (client name + mcp
+   client type), with optional caller-supplied conversation/message
+   references (AT-022) — a client cannot claim to be another client.
+4. **D5:** AI development notes become real permanent nodes with
+   `canon_status='speculative'` (service: `note_service.py`), embedded,
+   linked to their related objects, and event-logged — "everything lands in
+   the graph" without ever reading as accepted truth.
+
+**Consequences:** The direction pack's foundation success criteria are met
+and pytest-verified end to end over the real transports
+(`test_mcp_write.py::test_milestone_full_collaboration_loop`): MCP client A
+proposes a scene linked to existing objects → inbox shows it with client
+provenance → user edits + accepts → node + links materialize → MCP client B
+sees `proposal.created`/`proposal.accepted` via its stored cursor and the
+accepted scene in the character dossier; read-only clients are refused
+writes at the transport (AT-021).
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

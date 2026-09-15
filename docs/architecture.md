@@ -856,3 +856,10 @@ Read tools (scope `read`): `get_server_info`, `list_projects`,
 sliding-window rate limit; unauthenticated or unconfigured requests get the
 structured error envelope. Write tools arrive in Phase C5 behind the
 `write` scope.
+
+Write tools (Phase C5, ADR-090 — scope `write`): `create_story_proposal`,
+`update_proposal`, `link_proposal_to_objects`, `create_development_note`
+(lands as a `speculative` node); `record_story_decision` requires the
+separate `decisions` scope. There is deliberately no MCP path to proposal
+acceptance — that lives only in the review UI. Provenance is bound from the
+token identity; clients cannot impersonate each other.
