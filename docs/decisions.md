@@ -4965,6 +4965,55 @@ its own ADR.
 
 ---
 
+## ADR-082: Adopt the Constellation Direction Pack via a two-track roadmap
+
+**Status:** Accepted (documentation decision; implementation decisions D1–D7
+remain proposed pending user review)
+
+**Context:** A direction pack was authored outside the repo defining the
+target state: Constellation as an authoritative creative + software workspace
+with a shared proposal-before-truth workflow core, story context builders, and
+an MCP tool surface for external AI clients. The repo needed a durable home
+for the target documents and a migration map grounded in actual repo paths,
+without disturbing the in-flight Builder Pipeline track.
+
+**Decision:**
+
+1. The direction pack is committed verbatim under `docs/direction/`
+   (13 files, `01_PRODUCT_CHARTER.md` … `12_EXAMPLE_DATA_CONTRACTS.md`).
+2. Planning documents live under `docs/build/`: `current-system-map.md`
+   (verified inventory), `constellation-gap-analysis.md` (target vs. current),
+   `direction-roadmap.md` (phased plan, Phases C0–C10).
+3. Work proceeds on two decoupled tracks: **Track B** (Builder Pipeline,
+   existing plan, unchanged) and **Track C** (collaboration core: workflow
+   model → context builders → review UI → MCP read → MCP write).
+4. Design decisions required by Track C (entity representation, proposed-link
+   storage, MCP topology/auth, development-note mapping, promote unification,
+   mode vocabulary) are drafted as D1–D7 in the gap analysis and roadmap and
+   will be recorded as ADR-083+ only after user approval. No Track C
+   implementation begins before D1/D2 are settled.
+5. `docs/build-plan.md` is marked historical; `CLAUDE.md` points at the
+   roadmap.
+
+**Rationale:** The pack's own integration plan mandates inspect-then-adapt
+("adapt the design to the repository", additive migrations, no parallel
+architecture). A committed, path-accurate map is the smallest artifact that
+lets any future session act on the direction without re-deriving it, while
+keeping the human as the approval authority for the actual design choices.
+
+**Consequences:**
+
+- Future sessions have a single entry point for direction work
+  (`docs/build/direction-roadmap.md`) and a numbering ledger (next migration
+  `0014`, next ADR `083`).
+- The direction pack in-repo is a snapshot; if the source pack is revised,
+  `docs/direction/` must be updated deliberately, not assumed current.
+- Two known deviations from the pack are recorded in the gap analysis
+  (forward-only migrations vs. AT-041; node-substrate vs. per-type tables,
+  pending D1).
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

@@ -123,7 +123,13 @@ ollama pull llama3.2
 ## Where to look first
 
 - Designing a new feature? → `docs/architecture.md`
-- Starting a coding session? → `docs/build-plan.md` (find current phase)
+- Where is the project heading? → `docs/build/direction-roadmap.md` (phased
+  migration map toward the target in `docs/direction/`), with
+  `docs/build/current-system-map.md` and
+  `docs/build/constellation-gap-analysis.md` as its companions
+- Starting a coding session? → `docs/builder-pipeline-build-plan.md` (Track B)
+  or `docs/build/direction-roadmap.md` (Track C); `docs/build-plan.md` is
+  historical (Phases 0–7)
 - Facing a design choice? → `docs/decisions.md` (it's probably settled)
 - Made a design decision during implementation? → Add an ADR to
   `docs/decisions.md` immediately. Don't wait until phase end.

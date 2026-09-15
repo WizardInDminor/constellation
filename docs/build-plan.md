@@ -1,11 +1,17 @@
 # Build Plan
 
+> **Historical document.** This plan covers the original zettelkasten track
+> (Phases 0–7) and is complete: Phases 0–6.5 shipped (Phase 5 below is
+> mislabeled "Pending" — it shipped; see `/search` and `/ask`), and Phase 7
+> (Ollama) is deferred indefinitely. Phases 8–10 were planned and recorded
+> elsewhere (`docs/ux-build-plan.md`, `docs/constellation-phase9-wrap.md`,
+> `docs/constellation-chat-migration-phase10.md`). **Current work is tracked
+> in `docs/builder-pipeline-build-plan.md` (Track B) and
+> `docs/build/direction-roadmap.md` (Track C — collaboration core / MCP).**
+
 A phased plan for building Constellation. Each phase has a clear goal, a
 defined set of deliverables, and a "definition of done" — past which we
 move on rather than gold-plating.
-
-This document is the right place to start any new coding session. Find the
-current phase, read its scope, work within it.
 
 ---
 
