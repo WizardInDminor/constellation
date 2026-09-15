@@ -1151,7 +1151,12 @@ WYSIWYG, no preview-while-editing.
   as-is — markdown rendering is purely a view concern).
 - If the user pastes content with HTML or a markdown construct that `remark-gfm`
   doesn't handle, it falls back to verbatim text, which is the safe default.
-## ADR-034 — Virtual source nodes in the graph visualization
+## ADR-034b — Virtual source nodes in the graph visualization
+
+> Numbering note: ADR-034 was accidentally used twice; this later entry is
+> retroactively designated **ADR-034b** (the bridge-candidates ADR above keeps
+> plain ADR-034). Existing references to "ADR-034" for virtual source nodes
+> (e.g. in `docs/testing-notes.md`) mean this entry.
 
 **Status:** Accepted
 
@@ -1194,7 +1199,11 @@ while allowing the graph view to model computed entities that don't exist in the
 
 ---
 
-## ADR-035 — Auto-tag and auto-hub note on import acceptance are frontend-only, non-atomic
+## ADR-035b — Auto-tag and auto-hub note on import acceptance are frontend-only, non-atomic
+
+> Numbering note: ADR-035 was accidentally used twice; this later entry is
+> retroactively designated **ADR-035b** (the scoped-RAG ADR above keeps plain
+> ADR-035).
 
 **Status:** Accepted
 
@@ -5011,6 +5020,37 @@ keeping the human as the approval authority for the actual design choices.
 - Two known deviations from the pack are recorded in the gap analysis
   (forward-only migrations vs. AT-041; node-substrate vs. per-type tables,
   pending D1).
+
+---
+
+## ADR-083: Commit the generated OpenAPI TypeScript types
+
+**Status:** Accepted
+
+**Context:** `frontend/src/lib/api-types.ts` (the `openapi-typescript` output)
+was gitignored, so a fresh checkout could not typecheck or build until the
+backend was running on :8000 and `pnpm types` had been executed. Hand-written
+fallback types had begun accumulating in `api.ts` to paper over the gap.
+
+**Decision:** Commit `frontend/src/lib/api-types.ts` to the repository. The
+`pnpm types` workflow is unchanged (regenerate against the live backend after
+API changes), but the regenerated file is committed with the change that
+caused it. The spec can also be dumped offline via
+`python -c "import json; from app.main import app; print(json.dumps(app.openapi()))"`
+and fed to `openapi-typescript` when a live server is inconvenient.
+
+**Rationale:** A checkout that typechecks standalone is worth more than
+avoiding generated-file diffs; the diff is a feature — backend API changes
+become visible in frontend PRs. Committing the generated `.ts` (rather than a
+committed `openapi.json` + build step) keeps `pnpm` workflows untouched.
+
+**Consequences:**
+
+- Fresh checkouts typecheck and `vitest` runs without a backend.
+- `pnpm types` output must be committed alongside backend API changes; a
+  stale committed file shows up as a visible diff on the next regeneration.
+- The hand-written fallback types in `api.ts` can be retired as codegen
+  catches up.
 
 ---
 
