@@ -876,6 +876,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/activity/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Recent Changes
+         * @description Cursor-paged slice of the append-only event log (Phase C1, ADR-085;
+         *     direction pack `get_recent_changes`). Any client that stores the returned
+         *     cursor sees every subsequent event exactly once (AT-024).
+         */
+        get: operations["get_recent_changes_api_v1_activity_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activity": {
         parameters: {
             query?: never;
@@ -1374,6 +1396,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Proposals */
+        get: operations["list_proposals_api_v1_proposals_get"];
+        put?: never;
+        /**
+         * Create Proposal
+         * @description Create a proposal. AI-created material lands here with status
+         *     'proposed' — never directly in accepted truth (direction pack ADR-002).
+         */
+        post: operations["create_proposal_api_v1_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proposal */
+        get: operations["get_proposal_api_v1_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Proposal
+         * @description Edit mutable content while unresolved. Every applied edit appends a
+         *     revision, so the original and each edited version stay queryable
+         *     (AT-032).
+         */
+        patch: operations["update_proposal_api_v1_proposals__proposal_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/proposals/{proposal_id}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transition Proposal
+         * @description Apply one lifecycle transition (submit, accept, reject, supersede,
+         *     archive). Acceptance is the only path that materializes proposal content
+         *     into accepted truth.
+         */
+        post: operations["transition_proposal_api_v1_proposals__proposal_id__transition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proposals/{proposal_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Revisions */
+        get: operations["list_revisions_api_v1_proposals__proposal_id__revisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Decisions */
+        get: operations["list_decisions_api_v1_decisions_get"];
+        put?: never;
+        /**
+         * Record Decision
+         * @description Record an explicit accepted decision. Superseded decisions remain
+         *     queryable; the new decision references the old (AT-005).
+         */
+        post: operations["record_decision_api_v1_decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decisions/{decision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Decision */
+        get: operations["get_decision_api_v1_decisions__decision_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1395,6 +1540,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AcceptResult
+         * @description What acceptance materialized (direction pack AT-003).
+         */
+        AcceptResult: {
+            proposal: components["schemas"]["ProposalDetail"];
+            /** Created Node Id */
+            created_node_id?: string | null;
+            /** Created Edge Ids */
+            created_edge_ids?: string[];
+        };
         /** ActSpan */
         ActSpan: {
             /** Id */
@@ -1427,6 +1583,37 @@ export interface components {
             end_position: number;
             /** Color */
             color?: string | null;
+        };
+        /**
+         * ActivityEvent
+         * @description One row of the append-only project event log (Phase C1, ADR-085).
+         *
+         *     `id` is a monotonically increasing integer and doubles as the pagination
+         *     cursor for recent-changes queries.
+         */
+        ActivityEvent: {
+            /** Id */
+            id: number;
+            /** Project Hub Id */
+            project_hub_id?: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Object Type */
+            object_type: string;
+            /** Object Id */
+            object_id: string;
+            /** Summary */
+            summary: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            provenance?: components["schemas"]["ProvenanceRecord"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * ActivityFeed
@@ -1644,6 +1831,61 @@ export interface components {
             note_count: number;
             /** Avg Edges */
             avg_edges: number;
+        };
+        /** DecisionCreate */
+        DecisionCreate: {
+            /** Project Hub Id */
+            project_hub_id: string;
+            /** Statement */
+            statement: string;
+            /** Decision Type */
+            decision_type?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Implications */
+            implications?: string | null;
+            /** Supersedes Decision Id */
+            supersedes_decision_id?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            provenance: components["schemas"]["ProvenanceCreate"];
+        };
+        /** DecisionRecord */
+        DecisionRecord: {
+            /** Id */
+            id: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            /** Statement */
+            statement: string;
+            /** Decision Type */
+            decision_type?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Implications */
+            implications?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "superseded" | "archived";
+            /** Supersedes Decision Id */
+            supersedes_decision_id?: string | null;
+            /** Superseded By Decision Id */
+            superseded_by_decision_id?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            provenance?: components["schemas"]["ProvenanceRecord"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** DedupRequest */
         DedupRequest: {
@@ -2648,6 +2890,248 @@ export interface components {
             /** Edge Id */
             edge_id: string;
         };
+        /** ProposalCreate */
+        ProposalCreate: {
+            /** Project Hub Id */
+            project_hub_id: string;
+            /**
+             * Proposal Type
+             * @enum {string}
+             */
+            proposal_type: "scene" | "character" | "theme" | "location" | "world_rule" | "development_note" | "edge" | "general";
+            /** Title */
+            title: string;
+            /** Summary */
+            summary?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Related Objects */
+            related_objects?: components["schemas"]["RelatedObjectRef"][];
+            provenance: components["schemas"]["ProvenanceCreate"];
+            /**
+             * Status
+             * @default proposed
+             * @enum {string}
+             */
+            status: "captured" | "proposed";
+        };
+        /** ProposalDetail */
+        ProposalDetail: {
+            /** Id */
+            id: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            /**
+             * Proposal Type
+             * @enum {string}
+             */
+            proposal_type: "scene" | "character" | "theme" | "location" | "world_rule" | "development_note" | "edge" | "general";
+            /** Title */
+            title: string;
+            /** Summary */
+            summary?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "captured" | "proposed" | "under_review" | "accepted" | "rejected" | "superseded" | "archived";
+            /** Source Client Name */
+            source_client_name?: string | null;
+            /** Source Actor Type */
+            source_actor_type?: string | null;
+            /**
+             * Related Count
+             * @default 0
+             */
+            related_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Related Objects */
+            related_objects?: components["schemas"]["RelatedObjectRef"][];
+            source_provenance: components["schemas"]["ProvenanceRecord"];
+            resolution_provenance?: components["schemas"]["ProvenanceRecord"] | null;
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /** Accepted Node Id */
+            accepted_node_id?: string | null;
+            /** Superseded By Proposal Id */
+            superseded_by_proposal_id?: string | null;
+            /** Revisions */
+            revisions?: components["schemas"]["ProposalRevision"][];
+        };
+        /** ProposalRevision */
+        ProposalRevision: {
+            /** Id */
+            id: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /** Revision Number */
+            revision_number: number;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Related Objects */
+            related_objects?: components["schemas"]["RelatedObjectRef"][];
+            /** Change Summary */
+            change_summary?: string | null;
+            provenance?: components["schemas"]["ProvenanceRecord"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ProposalSummary */
+        ProposalSummary: {
+            /** Id */
+            id: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            /**
+             * Proposal Type
+             * @enum {string}
+             */
+            proposal_type: "scene" | "character" | "theme" | "location" | "world_rule" | "development_note" | "edge" | "general";
+            /** Title */
+            title: string;
+            /** Summary */
+            summary?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "captured" | "proposed" | "under_review" | "accepted" | "rejected" | "superseded" | "archived";
+            /** Source Client Name */
+            source_client_name?: string | null;
+            /** Source Actor Type */
+            source_actor_type?: string | null;
+            /**
+             * Related Count
+             * @default 0
+             */
+            related_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+        };
+        /** ProposalTransitionRequest */
+        ProposalTransitionRequest: {
+            /**
+             * To Status
+             * @enum {string}
+             */
+            to_status: "captured" | "proposed" | "under_review" | "accepted" | "rejected" | "superseded" | "archived";
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /** Superseded By Proposal Id */
+            superseded_by_proposal_id?: string | null;
+            provenance?: components["schemas"]["ProvenanceCreate"] | null;
+        };
+        /**
+         * ProposalUpdate
+         * @description Edit of mutable content. Every applied edit appends a revision.
+         */
+        ProposalUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Related Objects */
+            related_objects?: components["schemas"]["RelatedObjectRef"][] | null;
+            /** Change Summary */
+            change_summary?: string | null;
+            provenance?: components["schemas"]["ProvenanceCreate"] | null;
+        };
+        /**
+         * ProvenanceCreate
+         * @description Provenance supplied with a write. Only `actor_type` is required —
+         *     a human working in the UI needs nothing more; an MCP client supplies
+         *     client identity and conversation references.
+         */
+        ProvenanceCreate: {
+            /**
+             * Actor Type
+             * @enum {string}
+             */
+            actor_type: "human" | "ai_client" | "system" | "import";
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Client Type */
+            client_type?: string | null;
+            /** Client Name */
+            client_name?: string | null;
+            /** Source Session Id */
+            source_session_id?: string | null;
+            /** Source Conversation Id */
+            source_conversation_id?: string | null;
+            /** Source Message Reference */
+            source_message_reference?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+        };
+        /** ProvenanceRecord */
+        ProvenanceRecord: {
+            /**
+             * Actor Type
+             * @enum {string}
+             */
+            actor_type: "human" | "ai_client" | "system" | "import";
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Client Type */
+            client_type?: string | null;
+            /** Client Name */
+            client_name?: string | null;
+            /** Source Session Id */
+            source_session_id?: string | null;
+            /** Source Conversation Id */
+            source_conversation_id?: string | null;
+            /** Source Message Reference */
+            source_message_reference?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** RagRequest */
         RagRequest: {
             /** Query */
@@ -2676,6 +3160,19 @@ export interface components {
             edges_traversed: components["schemas"]["EdgeTraversed"][];
         };
         /**
+         * RecentChangesResponse
+         * @description Cursor-paged event slice (direction pack `get_recent_changes`).
+         *
+         *     `next_cursor` is the id of the last event returned; pass it back as
+         *     `after` to continue. None when the slice is empty.
+         */
+        RecentChangesResponse: {
+            /** Events */
+            events?: components["schemas"]["ActivityEvent"][];
+            /** Next Cursor */
+            next_cursor?: number | null;
+        };
+        /**
          * RecentEdge
          * @description An edge plus enough metadata to render 'A → TYPE → B' without lookups.
          */
@@ -2694,6 +3191,31 @@ export interface components {
             created_at: string;
             from_node: components["schemas"]["NodeRef"];
             to_node: components["schemas"]["NodeRef"];
+        };
+        /**
+         * RelatedObjectRef
+         * @description A proposed link from the proposal's subject to an existing node.
+         *
+         *     Proposed links live inside the proposal payload and are materialized as
+         *     real edges only on acceptance (ADR-084) — `edges` stays accepted truth,
+         *     satisfying direction pack AT-002.
+         */
+        RelatedObjectRef: {
+            /** Object Id */
+            object_id: string;
+            /**
+             * Relationship Type
+             * @enum {string}
+             */
+            relationship_type: "SUPPORTS" | "CONTRADICTS" | "ELABORATES" | "ANALOGOUS_TO" | "QUESTIONS" | "INSPIRED_BY" | "COLLECTS" | "CITES" | "BUILDS_ON" | "APPLIES_TO" | "MEASURES" | "EXTENDS" | "REFINES" | "SUPERSEDED_BY" | "SCOPED_TO" | "REGIME_OF" | "FOLLOWS_FROM" | "EXPLAINS" | "HOLDS_OPEN" | "REFUSES_TO_NAME" | "CARRIES_CHARGE_FOR" | "FORESHADOWS" | "MIRRORS" | "INVERSION_OF" | "PROTOTYPE_OF" | "AMPLIFIES" | "CORRUPTS" | "DESTABILIZES" | "STABILIZES" | "PROTECTS" | "THREATENS";
+            /**
+             * Direction
+             * @default outgoing
+             * @enum {string}
+             */
+            direction: "outgoing" | "incoming";
+            /** Note */
+            note?: string | null;
         };
         /** RetryAllResponse */
         RetryAllResponse: {
@@ -5054,6 +5576,41 @@ export interface operations {
             };
         };
     };
+    get_recent_changes_api_v1_activity_changes_get: {
+        parameters: {
+            query?: {
+                /** @description Event-id cursor; 0 = from start */
+                after?: number;
+                project_hub_id?: string | null;
+                object_types?: string[] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentChangesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_activity_api_v1_activity_get: {
         parameters: {
             query?: {
@@ -6031,6 +6588,302 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromoteDocResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_proposals_api_v1_proposals_get: {
+        parameters: {
+            query?: {
+                project_hub_id?: string | null;
+                status?: ("captured" | "proposed" | "under_review" | "accepted" | "rejected" | "superseded" | "archived")[] | null;
+                proposal_type?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_proposal_api_v1_proposals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_proposal_api_v1_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_proposal_api_v1_proposals__proposal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transition_proposal_api_v1_proposals__proposal_id__transition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_revisions_api_v1_proposals__proposal_id__revisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalRevision"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_decisions_api_v1_decisions_get: {
+        parameters: {
+            query?: {
+                project_hub_id?: string | null;
+                status?: ("accepted" | "superseded" | "archived")[] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_decision_api_v1_decisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_decision_api_v1_decisions__decision_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionRecord"];
                 };
             };
             /** @description Validation Error */

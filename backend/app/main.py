@@ -7,18 +7,21 @@ from app.api.v1 import (
     builder,
     canon,
     config,
+    decisions,
     discover,
     edges,
     graph,
     ingest,
     nodes,
     projects,
+    proposals,
     rag,
     search,
     sources,
     tags,
 )
 from app.core.config import get_settings
+from app.core.errors import WorkflowError, workflow_error_handler
 from app.core.lifespan import lifespan
 
 settings = get_settings()
@@ -53,6 +56,11 @@ app.include_router(activity.router, prefix=_v1_prefix)
 app.include_router(projects.router, prefix=_v1_prefix)
 app.include_router(canon.router, prefix=_v1_prefix)
 app.include_router(builder.router, prefix=_v1_prefix)
+app.include_router(proposals.router, prefix=_v1_prefix)
+app.include_router(decisions.router, prefix=_v1_prefix)
+
+# Structured error envelope for workflow-core routes (Phase C1, ADR-084).
+app.add_exception_handler(WorkflowError, workflow_error_handler)
 
 
 @app.get("/health")

@@ -10,6 +10,7 @@ from app.models import (
     EdgeResolveRequest,
 )
 from app.repositories import edge_repo, node_repo
+from app.services import activity_service
 
 router = APIRouter(prefix="/edges", tags=["edges"])
 
@@ -17,12 +18,20 @@ router = APIRouter(prefix="/edges", tags=["edges"])
 @router.post("", status_code=201)
 async def create_edge(data: EdgeCreate, db: DB) -> EdgeDetail:
     try:
-        return await edge_repo.create(db, data)
+        edge = await edge_repo.create(db, data)
     except IntegrityError as exc:
         detail = str(exc)
         if "UNIQUE" in detail:
             raise HTTPException(409, "Edge already exists between these nodes with this type")
         raise HTTPException(422, detail)
+    await activity_service.emit(
+        db,
+        event_type="edge.created",
+        object_type="edge",
+        object_id=edge.id,
+        summary=f"Edge created: {edge.type}",
+    )
+    return edge
 
 
 @router.delete("/{edge_id}", status_code=204)
@@ -56,6 +65,13 @@ async def resolve_edge(edge_id: str, data: EdgeResolveRequest, db: DB) -> EdgeDe
 
     updated = await edge_repo.resolve(db, edge_id, resolved_by_node_id=data.resolved_by_node_id)
     assert updated is not None  # existence already verified above
+    await activity_service.emit(
+        db,
+        event_type="edge.resolved",
+        object_type="edge",
+        object_id=edge_id,
+        summary=f"Tension resolved: {updated.type}",
+    )
     return updated
 
 

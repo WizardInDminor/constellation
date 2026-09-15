@@ -16,6 +16,31 @@ async def create(db: aiosqlite.Connection, data: TagCreate) -> TagRef:
     return TagRef(id=tag_id, name=data.name, color=data.color)
 
 
+async def get_by_name(db: aiosqlite.Connection, name: str) -> TagRef | None:
+    cursor = await db.execute("SELECT id, name, color FROM tags WHERE name = ?", (name,))
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    return TagRef(id=row["id"], name=row["name"], color=row["color"])
+
+
+async def get_or_create_by_name(db: aiosqlite.Connection, name: str) -> TagRef:
+    """Idempotent lookup-or-create, used for reserved role tags
+    (e.g. 'narrative:character') during proposal acceptance (Phase C1)."""
+    existing = await get_by_name(db, name)
+    if existing is not None:
+        return existing
+    return await create(db, TagCreate(name=name))
+
+
+async def attach_to_node(db: aiosqlite.Connection, node_id: str, tag_id: str) -> None:
+    await db.execute(
+        "INSERT OR IGNORE INTO node_tags(node_id, tag_id) VALUES (?, ?)",
+        (node_id, tag_id),
+    )
+    await db.commit()
+
+
 async def get_by_id(db: aiosqlite.Connection, tag_id: str) -> TagRef | None:
     cursor = await db.execute("SELECT id, name, color FROM tags WHERE id = ?", (tag_id,))
     row = await cursor.fetchone()

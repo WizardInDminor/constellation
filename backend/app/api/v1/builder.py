@@ -27,7 +27,7 @@ from app.models.builder import (
     PromoteDocResponse,
 )
 from app.repositories import builder_repo, edge_repo, node_repo, project_repo
-from app.services import director_service, embedding_service
+from app.services import activity_service, director_service, embedding_service
 
 router = APIRouter(prefix="/builder", tags=["builder"])
 
@@ -138,4 +138,13 @@ async def promote_doc(doc_id: str, db: DB, embed: EmbedProvider) -> PromoteDocRe
         ),
     )
     await builder_repo.mark_doc_promoted(db, doc_id, node.id)
+    await activity_service.emit(
+        db,
+        event_type="builder.doc_promoted",
+        object_type="production_doc",
+        object_id=doc_id,
+        summary=f"Builder doc promoted to canon: {node.title}",
+        project_hub_id=production.project_id,
+        metadata={"canon_node_id": node.id, "edge_id": edge.id},
+    )
     return PromoteDocResponse(doc_id=doc_id, canon_node_id=node.id, edge_id=edge.id)

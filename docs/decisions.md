@@ -5054,6 +5054,130 @@ committed `openapi.json` + build step) keeps `pnpm` workflows untouched.
 
 ---
 
+## ADR-084: Shared workflow core — proposals, provenance, revisions, decisions
+
+**Status:** Accepted
+
+**Context:** Track C Phase C1 (direction pack Phase 1). The app already lives
+by proposal-before-truth in four ad-hoc flows (pending ingests, bridge
+classification, suggest flows, builder promote) but had no shared lifecycle,
+no provenance, no revisions, and no first-class decisions. The direction pack
+fixes the status machine (captured → proposed → under_review →
+accepted / rejected / superseded / archived) and requires provenance on
+every write. This ADR also settles roadmap decision points **D1-adjacent
+schema shape, D2** (proposed links) and the structured-error model.
+
+**Decision:**
+
+1. Migration `0014_workflow_core.sql` adds `provenance_records`, `proposals`,
+   `proposal_revisions`, `decisions`, `activity_events` (see ADR-085). All
+   additive; no existing table touched.
+2. **Statuses are CHECK-constrained; type vocabularies are model-enforced.**
+   The state machine is fixed by the pack, but `proposal_type` /
+   `decision_type` / event types will grow — and the edges table needed four
+   full table-recreates to grow its CHECK vocabulary. Pydantic `Literal`s own
+   the type vocabularies.
+3. **Proposed links live inside the proposal payload** (D2) as
+   `related_objects` and are materialized as real edges only on acceptance.
+   The `edges` table remains 100% accepted truth (pack AT-002) with no status
+   column.
+4. The transition table `ALLOWED_TRANSITIONS` (`app/models/proposal.py`) is
+   the pack's list verbatim; `proposal_service.transition` is the only
+   enforcement point. Convenience: accepting from `proposed` auto-hops
+   through `under_review` (both persisted) so the inbox is one click.
+5. Acceptance materialization (`proposal_service._materialize`): node-producing
+   types create a permanent node with `canon_status='provisional'` (promote
+   precedent, ADR-081); `scene` creates a story-event node (ADR-064 pattern);
+   role types get their reserved `narrative:*` tag (ADR-086); edge proposals
+   create the edge. AI output still never lands as `canon`.
+6. Revisions: revision 1 written at creation, every edit appends the new
+   content; original and edited versions stay queryable (AT-032).
+7. Decisions supersede at creation time: inserting with
+   `supersedes_decision_id` flips the old row to `superseded` in the same
+   commit (AT-005). Software/architecture decisions stay in this file
+   (pack ADR-006).
+8. Structured errors (`app/core/errors.py`): workflow routes return the
+   pack's envelope `{"error": {code, message, retryable, details}}` via a
+   `WorkflowError` handler; pre-existing routes migrate opportunistically.
+9. Composite operations commit sequentially per repo call (house pattern,
+   ADR-035b precedent); the status flip is last so a crash mid-acceptance
+   leaves the proposal unresolved rather than half-accepted-and-resolved.
+
+**Consequences:**
+
+- One lifecycle for the UI (C3) and MCP (C4/C5) to share; AT-001…AT-005,
+  AT-024, AT-032 covered by `tests/test_workflow_core.py` and
+  `tests/test_routes_proposals.py`.
+- The four legacy proposal-like flows are untouched; they migrate onto the
+  core incrementally (builder promote unification is deferred to C7, D6).
+- Payload contracts per proposal_type are conventions for now; they harden
+  as MCP write tools land.
+
+---
+
+## ADR-085: Append-only activity event log with integer cursor
+
+**Status:** Accepted
+
+**Context:** The pack's `get_recent_changes` needs cross-client, exactly-once
+visibility with a continuation cursor. The existing `/activity` feed derives
+from timestamps and cannot express "events since I last looked."
+
+**Decision:** `activity_events` is append-only, with an
+`INTEGER PRIMARY KEY AUTOINCREMENT` id — a deliberate exception to the UUID
+house style: the monotone id doubles as the pagination cursor
+(`WHERE id > ?`), with no timestamp-tie ambiguity. `activity_service.emit`
+is the single emission entry point; write paths call it after their own
+persistence succeeds (event insert is a separate commit — losing an event on
+a crash is acceptable; losing a write is not). Instrumented in C1: proposal
+lifecycle, decisions, node create/delete, edge create/resolve, builder
+promote. `GET /api/v1/activity/changes?after=<cursor>` returns
+`{events, next_cursor}`. `project_hub_id` is nullable — corpus-level events
+carry NULL and appear only in unfiltered queries.
+
+**Consequences:** Cross-client AT-024 holds (verified in tests). The legacy
+timestamp-derived `/activity` feed remains for the Home page; it can migrate
+to the event log later. Event rows are never updated or deleted.
+
+---
+
+## ADR-086: Story entities stay on the node substrate with reserved role tags
+
+**Status:** Accepted (settles roadmap decision point D1)
+
+**Context:** The direction pack's domain model lists explicit story objects
+(Character, Scene, Location, Theme, WorldRule…) and warns against "arbitrary
+untyped nodes." Constellation's story domain already exists as nodes with
+flags (`is_story_event`, ADR-064) and reserved `narrative:*` role tags
+(consumed by scene context, timeline, canon views, RAG). The pack's own
+integration plan permits keeping a generic pattern the repo already follows
+when the tradeoff is explicitly reviewed — this is that review.
+
+**Decision:** Keep the node+flag+role-tag substrate as the story domain
+model. The reserved role vocabulary (`narrative:character`,
+`narrative:theme`, `narrative:location`, `narrative:lore-*`) IS the type
+system; Phase C1 acceptance applies these tags, and Phase C2 context
+builders read them. No per-entity tables.
+
+**Rationale:** Per-type tables would fork every existing surface (timeline,
+scene context, graph, RAG, canon views, embedding pipeline) into two data
+paths — tripping the pack's own stop clause about breaking existing views —
+for a benefit (typed columns) the payload conventions and role tags already
+approximate. The substrate is also what makes "everything lands in the
+graph" true: a character is searchable, embeddable, linkable like any note.
+
+**Consequences:**
+
+- Typed richness (e.g. character sheet fields) continues to arrive as
+  connected nodes and edges (the Phase 10 character-sheet design), not
+  columns.
+- If a role accumulates truly structural fields the way story events did,
+  the ADR-064 escape hatch (flag → formal type) remains available per role.
+- The role vocabulary needs a single authoritative constant module by C2 so
+  timeline_repo and proposal acceptance can't drift.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.
