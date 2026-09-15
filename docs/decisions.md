@@ -5178,6 +5178,47 @@ graph" true: a character is searchable, embeddable, linkable like any note.
 
 ---
 
+## ADR-087: Context builders own AI-facing shapes via versioned envelopes
+
+**Status:** Accepted
+
+**Context:** Track C Phase C2 (direction pack Phase 2 + ADR-004): MCP tools,
+the workspace UI, and HTTP routes must consume identical, task-shaped
+context — never assemble domain context independently. Phase 9 already
+proved the pattern with Scene Context View's live assembly.
+
+**Decision:**
+
+1. `app/services/context_builder_service.py` owns four builders:
+   `build_character_dossier`, `build_story_project_context`,
+   `build_scene_context` (wraps `timeline_repo.assemble_scene_context` —
+   never reimplements it), `build_recent_changes_context`.
+2. Envelopes (`app/models/context.py`) declare `context_type` +
+   `context_version` ("1.0") and strictly separate **accepted** /
+   **development** / **proposed** sections (AT-010). Unresolved tension
+   edges are development material; open proposals referencing the subject
+   appear only under `proposed`.
+3. Routes: `GET /projects/{hub_id}/context[/character/{id}|/scene/{id}|/changes]`.
+4. The reserved role vocabulary moves to `app/models/narrative.py` as the
+   single authoritative module (ADR-086 consequence); `timeline_repo`
+   re-exports for existing call sites, and proposal acceptance imports the
+   same constants.
+5. Everything is assembled live on every call — "the order of creation is
+   invisible" now also holds for dossiers (pytest-protected: deleting an
+   edge between two calls changes the dossier).
+6. Known v1 limitation, recorded in the envelope's `warnings`: open threads
+   in project context are corpus-wide until project-scoped tension filtering
+   lands with the C6 workbench workflows. Dossier classification does
+   per-neighbor lookups (N+1) — acceptable at personal scale, revisit if
+   dossiers exceed ~100 edges.
+
+**Consequences:** Phase C4's MCP read tools (`get_character_dossier`,
+`get_scene_context`, `get_story_project_context`, `get_recent_changes`)
+become thin adapters over these builders. Envelope changes require a
+`context_version` bump.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

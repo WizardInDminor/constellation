@@ -26,6 +26,7 @@ from app.core.errors import (
     ValidationFailed,
 )
 from app.models import EdgeCreate, PermanentCreate
+from app.models.narrative import PROPOSAL_ROLE_TAGS
 from app.models.proposal import (
     ALLOWED_TRANSITIONS,
     AcceptResult,
@@ -46,18 +47,6 @@ from app.repositories import (
     tag_repo,
 )
 from app.services import activity_service, embedding_service
-
-# Proposal types that materialize as a node on acceptance, and the reserved
-# role tag each receives (ADR-086; vocabulary owned by timeline_repo).
-_ROLE_TAGS: dict[str, str | None] = {
-    "scene": None,  # becomes a story-event node, no role tag
-    "character": "narrative:character",
-    "theme": "narrative:theme",
-    "location": "narrative:location",
-    "world_rule": "narrative:lore-world-rule",
-    "development_note": None,
-    "general": None,
-}
 
 _EDITABLE_STATUSES: frozenset[ProposalStatus] = frozenset(
     {"captured", "proposed", "under_review"}
@@ -310,7 +299,7 @@ async def _materialize(
             ),
         )
 
-    role_tag = _ROLE_TAGS.get(proposal.proposal_type)
+    role_tag = PROPOSAL_ROLE_TAGS.get(proposal.proposal_type)
     if role_tag is not None:
         tag = await tag_repo.get_or_create_by_name(db, role_tag)
         await tag_repo.attach_to_node(db, node.id, tag.id)

@@ -4,27 +4,6 @@ from app.models.activity import (
     RecentChangesResponse,
     RecentEdge,
 )
-from app.models.decision import DecisionCreate, DecisionRecord, DecisionStatus
-from app.models.proposal import (
-    ALLOWED_TRANSITIONS,
-    AcceptResult,
-    ProposalCreate,
-    ProposalDetail,
-    ProposalRevision,
-    ProposalStatus,
-    ProposalSummary,
-    ProposalTransitionRequest,
-    ProposalType,
-    ProposalUpdate,
-    RelatedObjectRef,
-)
-from app.models.provenance import (
-    SYSTEM_PROVENANCE,
-    UI_PROVENANCE,
-    ActorType,
-    ProvenanceCreate,
-    ProvenanceRecord,
-)
 from app.models.builder import (
     PIPELINE_STAGES,
     BriefCharacter,
@@ -53,6 +32,7 @@ from app.models.canon import (
 )
 from app.models.common import Paginated
 from app.models.config import ConfigEntry, ConfigUpdate
+from app.models.decision import DecisionCreate, DecisionRecord, DecisionStatus
 from app.models.discover import (
     BridgeCandidate,
     BridgeClassification,
@@ -110,6 +90,26 @@ from app.models.project import (
     WorkSession,
     WorkSessionCreate,
     WorkSessionUpdate,
+)
+from app.models.proposal import (
+    ALLOWED_TRANSITIONS,
+    AcceptResult,
+    ProposalCreate,
+    ProposalDetail,
+    ProposalRevision,
+    ProposalStatus,
+    ProposalSummary,
+    ProposalTransitionRequest,
+    ProposalType,
+    ProposalUpdate,
+    RelatedObjectRef,
+)
+from app.models.provenance import (
+    SYSTEM_PROVENANCE,
+    UI_PROVENANCE,
+    ActorType,
+    ProvenanceCreate,
+    ProvenanceRecord,
 )
 from app.models.rag import (
     ClusterLinkProposal,

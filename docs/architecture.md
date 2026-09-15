@@ -809,3 +809,27 @@ proposal lifecycle, decisions, node create/delete, edge create/resolve,
 builder doc promotion. `GET /activity/changes` pages with `after=<id>`;
 clients that store `next_cursor` see every subsequent event exactly once
 (AT-024).
+
+---
+
+## 10. Context builders (Track C Phase C2 — ADR-087)
+
+Task-shaped, versioned AI-ready context envelopes
+(`app/services/context_builder_service.py`, models in
+`app/models/context.py`). All consumers — HTTP routes, the workspace UI,
+and (from Phase C4) MCP tools — use these builders; none assembles domain
+context independently (direction pack ADR-004).
+
+```
+GET /projects/{hub_id}/context                      # StoryProjectContext
+GET /projects/{hub_id}/context/character/{node_id}  # CharacterDossier
+GET /projects/{hub_id}/context/scene/{event_id}     # SceneContextEnvelope
+GET /projects/{hub_id}/context/changes?after=       # RecentChangesContext
+```
+
+Every envelope carries `context_type`, `context_version`, `generated_at`,
+and `warnings`, and strictly separates **accepted** / **development** /
+**proposed** sections (AT-010). Assembly is always live — deleting an edge
+between two calls changes the result (pytest-protected). The reserved
+narrative role vocabulary lives in `app/models/narrative.py` (ADR-086);
+`timeline_repo` re-exports it.

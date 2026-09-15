@@ -1519,6 +1519,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{hub_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Story Project Context
+         * @description Project-level AI-ready context: mode, rosters, active decisions, open
+         *     threads, open proposals, recent changes.
+         */
+        get: operations["get_story_project_context_api_v1_projects__hub_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{hub_id}/context/character/{node_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Character Dossier
+         * @description Live character dossier with accepted / development / proposed strictly
+         *     separated (AT-010).
+         */
+        get: operations["get_character_dossier_api_v1_projects__hub_id__context_character__node_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{hub_id}/context/scene/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scene Context Envelope
+         * @description The Phase 9 live scene-context assembly wrapped in the versioned
+         *     envelope, plus unresolved proposals referencing the scene.
+         */
+        get: operations["get_scene_context_envelope_api_v1_projects__hub_id__context_scene__event_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{hub_id}/context/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Recent Changes Context */
+        get: operations["get_recent_changes_context_api_v1_projects__hub_id__context_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1716,6 +1796,60 @@ export interface components {
             /** Nodes */
             nodes: components["schemas"]["NodeSummary"][];
         };
+        /** CharacterDossier */
+        CharacterDossier: {
+            /**
+             * Context Type
+             * @default character_dossier
+             * @constant
+             */
+            context_type: "character_dossier";
+            /**
+             * Context Version
+             * @default 1.0
+             */
+            context_version: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            character: components["schemas"]["NodeDetail"];
+            accepted: components["schemas"]["CharacterDossierAccepted"];
+            development: components["schemas"]["CharacterDossierDevelopment"];
+            proposed: components["schemas"]["CharacterDossierProposed"];
+            /** Warnings */
+            warnings?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+        };
+        /** CharacterDossierAccepted */
+        CharacterDossierAccepted: {
+            /** Relationships */
+            relationships?: components["schemas"]["DossierRelationship"][];
+            /** Scene Appearances */
+            scene_appearances?: components["schemas"]["SceneAppearance"][];
+            /** Themes */
+            themes?: components["schemas"]["DossierRelationship"][];
+            /** Locations */
+            locations?: components["schemas"]["DossierRelationship"][];
+            /** Lore */
+            lore?: components["schemas"]["DossierRelationship"][];
+            /** Decisions */
+            decisions?: components["schemas"]["DecisionRecord"][];
+        };
+        /** CharacterDossierDevelopment */
+        CharacterDossierDevelopment: {
+            /** Notes */
+            notes?: components["schemas"]["DossierRelationship"][];
+            /** Open Threads */
+            open_threads?: components["schemas"]["OpenThreadEdge"][];
+        };
+        /** CharacterDossierProposed */
+        CharacterDossierProposed: {
+            /** Proposals */
+            proposals?: components["schemas"]["ProposalSummary"][];
+        };
         /** ChunkResult */
         ChunkResult: {
             /** Chunk Index */
@@ -1909,6 +2043,32 @@ export interface components {
             node: components["schemas"]["NodeSummary"];
             /** Similarity */
             similarity: number;
+        };
+        /**
+         * DossierRelationship
+         * @description One edge as seen from the dossier subject.
+         */
+        DossierRelationship: {
+            /** Edge Id */
+            edge_id: string;
+            /**
+             * Edge Type
+             * @enum {string}
+             */
+            edge_type: "SUPPORTS" | "CONTRADICTS" | "ELABORATES" | "ANALOGOUS_TO" | "QUESTIONS" | "INSPIRED_BY" | "COLLECTS" | "CITES" | "BUILDS_ON" | "APPLIES_TO" | "MEASURES" | "EXTENDS" | "REFINES" | "SUPERSEDED_BY" | "SCOPED_TO" | "REGIME_OF" | "FOLLOWS_FROM" | "EXPLAINS" | "HOLDS_OPEN" | "REFUSES_TO_NAME" | "CARRIES_CHARGE_FOR" | "FORESHADOWS" | "MIRRORS" | "INVERSION_OF" | "PROTOTYPE_OF" | "AMPLIFIES" | "CORRUPTS" | "DESTABILIZES" | "STABILIZES" | "PROTECTS" | "THREATENS";
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "outgoing" | "incoming";
+            other: components["schemas"]["NodeRef"];
+            /** Note */
+            note?: string | null;
+            /**
+             * Resolved
+             * @default false
+             */
+            resolved: boolean;
         };
         /** Draft */
         Draft: {
@@ -3159,6 +3319,31 @@ export interface components {
             /** Edges Traversed */
             edges_traversed: components["schemas"]["EdgeTraversed"][];
         };
+        /** RecentChangesContext */
+        RecentChangesContext: {
+            /**
+             * Context Type
+             * @default recent_changes
+             * @constant
+             */
+            context_type: "recent_changes";
+            /**
+             * Context Version
+             * @default 1.0
+             */
+            context_version: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            /** Events */
+            events?: components["schemas"]["ActivityEvent"][];
+            /** Next Cursor */
+            next_cursor?: number | null;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+        };
         /**
          * RecentChangesResponse
          * @description Cursor-paged event slice (direction pack `get_recent_changes`).
@@ -3222,6 +3407,15 @@ export interface components {
             /** Retried */
             retried: number;
         };
+        /** RoleRoster */
+        RoleRoster: {
+            /** Characters */
+            characters?: components["schemas"]["NodeRef"][];
+            /** Themes */
+            themes?: components["schemas"]["NodeRef"][];
+            /** Locations */
+            locations?: components["schemas"]["NodeRef"][];
+        };
         /** SaveAnswerRequest */
         SaveAnswerRequest: {
             /** Query */
@@ -3237,6 +3431,51 @@ export interface components {
             custom_prompt?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** SceneAppearance */
+        SceneAppearance: {
+            event: components["schemas"]["NodeRef"];
+            /** Story Time */
+            story_time?: string | null;
+            /** Prose Status */
+            prose_status?: string | null;
+            /**
+             * Edge Type
+             * @enum {string}
+             */
+            edge_type: "SUPPORTS" | "CONTRADICTS" | "ELABORATES" | "ANALOGOUS_TO" | "QUESTIONS" | "INSPIRED_BY" | "COLLECTS" | "CITES" | "BUILDS_ON" | "APPLIES_TO" | "MEASURES" | "EXTENDS" | "REFINES" | "SUPERSEDED_BY" | "SCOPED_TO" | "REGIME_OF" | "FOLLOWS_FROM" | "EXPLAINS" | "HOLDS_OPEN" | "REFUSES_TO_NAME" | "CARRIES_CHARGE_FOR" | "FORESHADOWS" | "MIRRORS" | "INVERSION_OF" | "PROTOTYPE_OF" | "AMPLIFIES" | "CORRUPTS" | "DESTABILIZES" | "STABILIZES" | "PROTECTS" | "THREATENS";
+            /** Edge Note */
+            edge_note?: string | null;
+        };
+        /**
+         * SceneContextEnvelope
+         * @description The live Scene Context assembly (never cached — philosophy §6.8)
+         *     wrapped in the versioned envelope, with unresolved proposals that
+         *     reference the scene appended.
+         */
+        SceneContextEnvelope: {
+            /**
+             * Context Type
+             * @default scene_context
+             * @constant
+             */
+            context_type: "scene_context";
+            /**
+             * Context Version
+             * @default 1.0
+             */
+            context_version: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            scene: components["schemas"]["SceneContextResponse"];
+            proposed: components["schemas"]["CharacterDossierProposed"];
+            /** Warnings */
+            warnings?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
         };
         /**
          * SceneContextItem
@@ -3508,6 +3747,43 @@ export interface components {
              * @default true
              */
             auto_follows_from: boolean;
+        };
+        /** StoryProjectContext */
+        StoryProjectContext: {
+            /**
+             * Context Type
+             * @default story_project_context
+             * @constant
+             */
+            context_type: "story_project_context";
+            /**
+             * Context Version
+             * @default 1.0
+             */
+            context_version: string;
+            /** Project Hub Id */
+            project_hub_id: string;
+            /** Project Mode */
+            project_mode: string;
+            hub: components["schemas"]["NodeDetail"];
+            /** Briefing Prompt */
+            briefing_prompt?: string | null;
+            roster: components["schemas"]["RoleRoster"];
+            /** Active Decisions */
+            active_decisions?: components["schemas"]["DecisionRecord"][];
+            /** Open Threads */
+            open_threads?: components["schemas"]["OpenThreadEdge"][];
+            /** Open Proposals */
+            open_proposals?: components["schemas"]["ProposalSummary"][];
+            /** Recent Changes */
+            recent_changes?: components["schemas"]["ActivityEvent"][];
+            /** Warnings */
+            warnings?: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
         };
         /** StructureCreate */
         StructureCreate: {
@@ -6884,6 +7160,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecisionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_project_context_api_v1_projects__hub_id__context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hub_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryProjectContext"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_character_dossier_api_v1_projects__hub_id__context_character__node_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hub_id: string;
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CharacterDossier"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scene_context_envelope_api_v1_projects__hub_id__context_scene__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hub_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneContextEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recent_changes_context_api_v1_projects__hub_id__context_changes_get: {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                hub_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentChangesContext"];
                 };
             };
             /** @description Validation Error */

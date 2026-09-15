@@ -7,6 +7,7 @@ from app.api.v1 import (
     builder,
     canon,
     config,
+    context,
     decisions,
     discover,
     edges,
@@ -58,6 +59,7 @@ app.include_router(canon.router, prefix=_v1_prefix)
 app.include_router(builder.router, prefix=_v1_prefix)
 app.include_router(proposals.router, prefix=_v1_prefix)
 app.include_router(decisions.router, prefix=_v1_prefix)
+app.include_router(context.router, prefix=_v1_prefix)
 
 # Structured error envelope for workflow-core routes (Phase C1, ADR-084).
 app.add_exception_handler(WorkflowError, workflow_error_handler)
