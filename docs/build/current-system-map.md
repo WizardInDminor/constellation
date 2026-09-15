@@ -1,6 +1,16 @@
 # Current System Map
 
 **Snapshot:** 2026-09-15, commit `8d51ca5` (merge of Builder Pipeline Slice B0).
+
+> **Update (same day, post-snapshot):** Track C Phases C0–C5 have since
+> landed on top of this snapshot (see `direction-roadmap.md` §7): the
+> workflow core (migration 0014: proposals / provenance / revisions /
+> decisions / activity events), context builders + versioned envelopes,
+> the `/proposals` review UI with the first frontend component tests, and
+> an authenticated MCP server at `/mcp` (8 read tools + 5 controlled write
+> tools). Backend tests 528 → 586; frontend 42 → 50. The §8 constraints
+> "no auth" and "no MCP" no longer hold for the MCP surface; the remaining
+> inventory below is otherwise still accurate.
 **Purpose:** the "where we are" half of the direction-pack migration map. Companion
 documents: `constellation-gap-analysis.md` and `direction-roadmap.md` in this
 directory; the target-state documents live in `docs/direction/`.
