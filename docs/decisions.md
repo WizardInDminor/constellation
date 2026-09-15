@@ -5219,6 +5219,33 @@ become thin adapters over these builders. Envelope changes require a
 
 ---
 
+## ADR-088: Component-level frontend testing via Testing Library
+
+**Status:** Accepted
+
+**Context:** Track C Phase C3 (and the long-standing Phase 10 priority #4):
+the 42 existing frontend tests were all pure-function; every visual surface
+was verified only by hand. The proposal inbox is the first new surface that
+must ship with automated regression coverage, and MCP write tools (C5) will
+depend on this review surface behaving correctly.
+
+**Decision:** Add `@testing-library/react` + `@testing-library/jest-dom` +
+`@testing-library/user-event` to the existing Vitest/jsdom setup
+(`src/test/setup.ts` registers jest-dom matchers and auto-cleanup). Pattern
+for page tests: `vi.mock("@/lib/api")` at the module boundary (no MSW —
+the flat api.ts module is the natural seam), mock `next/navigation` where
+pages use it, and mock heavyweight render components (NoteContent,
+MarkdownTextarea) when the test targets behavior, not markdown rendering.
+New UI surfaces ship with component tests from now on; back-filling the
+Phase 9 surfaces remains scheduled work, not part of this phase.
+
+**Consequences:** First 8 component tests cover the proposal inbox and
+detail pages (AT-030/031/032 at the UI layer). `pnpm lint` was discovered
+to be unconfigured (next lint prompts for setup) — recorded as a known gap,
+deliberately not adopted mid-phase.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

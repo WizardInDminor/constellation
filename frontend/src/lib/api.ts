@@ -83,6 +83,27 @@ export type BridgeCandidate = {
 };
 export type BridgeClassification =
   components["schemas"]["BridgeClassification"];
+// Track C Phase C1/C2 — workflow core + context envelopes (ADR-084/085/087)
+export type ProposalSummary = components["schemas"]["ProposalSummary"];
+export type ProposalDetail = components["schemas"]["ProposalDetail"];
+export type ProposalRevision = components["schemas"]["ProposalRevision"];
+export type ProposalCreate = components["schemas"]["ProposalCreate"];
+export type ProposalUpdate = components["schemas"]["ProposalUpdate"];
+export type ProposalTransitionRequest =
+  components["schemas"]["ProposalTransitionRequest"];
+export type AcceptResult = components["schemas"]["AcceptResult"];
+export type ProposalStatus = ProposalSummary["status"];
+export type ProposalType = ProposalSummary["proposal_type"];
+export type RelatedObjectRef = components["schemas"]["RelatedObjectRef"];
+export type ProvenanceRecord = components["schemas"]["ProvenanceRecord"];
+export type DecisionRecord = components["schemas"]["DecisionRecord"];
+export type DecisionCreate = components["schemas"]["DecisionCreate"];
+export type ActivityEvent = components["schemas"]["ActivityEvent"];
+export type RecentChangesResponse =
+  components["schemas"]["RecentChangesResponse"];
+export type CharacterDossier = components["schemas"]["CharacterDossier"];
+export type StoryProjectContext =
+  components["schemas"]["StoryProjectContext"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -856,4 +877,69 @@ export function ragScopedWithSession(
       session_id: opts.sessionId ?? null,
     }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Proposals & decisions (Track C — ADR-084)
+// ---------------------------------------------------------------------------
+
+export function getProposals(opts: {
+  projectHubId?: string;
+  statuses?: ProposalStatus[];
+  proposalType?: ProposalType;
+} = {}): Promise<ProposalSummary[]> {
+  const params = new URLSearchParams();
+  if (opts.projectHubId) params.set("project_hub_id", opts.projectHubId);
+  for (const s of opts.statuses ?? []) params.append("status", s);
+  if (opts.proposalType) params.set("proposal_type", opts.proposalType);
+  const qs = params.toString();
+  return request(`/api/v1/proposals${qs ? `?${qs}` : ""}`);
+}
+
+export function getProposal(id: string): Promise<ProposalDetail> {
+  return request(`/api/v1/proposals/${id}`);
+}
+
+export function updateProposal(
+  id: string,
+  body: ProposalUpdate,
+): Promise<ProposalDetail> {
+  return request(`/api/v1/proposals/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function transitionProposal(
+  id: string,
+  body: ProposalTransitionRequest,
+): Promise<AcceptResult> {
+  return request(`/api/v1/proposals/${id}/transition`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getDecisions(opts: {
+  projectHubId?: string;
+  statuses?: DecisionRecord["status"][];
+} = {}): Promise<DecisionRecord[]> {
+  const params = new URLSearchParams();
+  if (opts.projectHubId) params.set("project_hub_id", opts.projectHubId);
+  for (const s of opts.statuses ?? []) params.append("status", s);
+  const qs = params.toString();
+  return request(`/api/v1/decisions${qs ? `?${qs}` : ""}`);
+}
+
+export function getRecentChanges(opts: {
+  after?: number;
+  projectHubId?: string;
+  limit?: number;
+} = {}): Promise<RecentChangesResponse> {
+  const params = new URLSearchParams();
+  if (opts.after !== undefined) params.set("after", String(opts.after));
+  if (opts.projectHubId) params.set("project_hub_id", opts.projectHubId);
+  if (opts.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return request(`/api/v1/activity/changes${qs ? `?${qs}` : ""}`);
 }
