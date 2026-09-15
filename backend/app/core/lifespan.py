@@ -14,11 +14,20 @@ from app.providers.base import EmbeddingProvider, GenerationProvider
 logger = logging.getLogger(__name__)
 
 _db: aiosqlite.Connection | None = None
+_embedding_provider: EmbeddingProvider | None = None
 
 
 def get_db() -> aiosqlite.Connection:
     assert _db is not None, "Database not initialized"
     return _db
+
+
+def get_embedding_provider() -> EmbeddingProvider:
+    """Module-level access to the active embedding provider for callers that
+    run outside a request context (the MCP tools, Phase C4). Routes keep
+    using the app.state dependency."""
+    assert _embedding_provider is not None, "Providers not initialized"
+    return _embedding_provider
 
 
 async def _run_migrations(db: aiosqlite.Connection) -> None:
@@ -121,7 +130,7 @@ async def _embedding_worker(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _db
+    global _db, _embedding_provider
     settings = get_settings()
     _db = await open_database(settings.db_path)
     await _run_migrations(_db)
@@ -130,6 +139,7 @@ async def lifespan(app: FastAPI):
     embed_provider, gen_provider = await _load_providers(_db, settings)
     app.state.embedding_provider = embed_provider
     app.state.generation_provider = gen_provider
+    _embedding_provider = embed_provider
     logger.info(
         "Providers loaded: embed=%s gen=%s",
         embed_provider.model_id,
@@ -142,7 +152,14 @@ async def lifespan(app: FastAPI):
 
     worker = asyncio.create_task(_embedding_worker(app))
 
-    yield
+    # MCP streamable-HTTP transport (Phase C4, ADR-089). The /mcp mount in
+    # main.py delegates to a transport app rebuilt here on every startup,
+    # because a session manager instance can only be run once. Imported here
+    # (not at module top) to keep core import-light for non-server tooling.
+    from app.mcp.server import start_transport
+
+    async with start_transport().run():
+        yield
 
     worker.cancel()
     try:
@@ -152,3 +169,4 @@ async def lifespan(app: FastAPI):
 
     await _db.close()
     _db = None
+    _embedding_provider = None

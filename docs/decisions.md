@@ -5246,6 +5246,52 @@ deliberately not adopted mid-phase.
 
 ---
 
+## ADR-089: MCP server — in-process streamable HTTP with static bearer tokens
+
+**Status:** Accepted (settles roadmap decision points D3 and D4)
+
+**Context:** Track C Phase C4 (direction pack Phase 3): external AI clients
+need read access to authoritative state. The repo had no MCP code and no
+auth — the pack's stop clause ("authentication or project isolation missing
+would make MCP writes unsafe") applied. Constraints: one module-global
+SQLite connection, single-user product served on localhost/Tailscale.
+
+**Decision:**
+
+1. **Topology (D3): in-process.** The official `mcp` SDK (2.x,
+   `MCPServer`) is mounted on the FastAPI app at `/mcp` via streamable
+   HTTP (`stateless_http` + `json_response`). One process, one SQLite
+   writer, one lifecycle; tools call the same services/context builders as
+   the HTTP routes. A session manager instance is single-run, so the
+   lifespan rebuilds the transport app behind a stable `_TransportMount`
+   on every startup.
+2. **Auth (D4): static per-client bearer tokens** in `.env`
+   (`MCP_TOKENS="token|Client Name|read+write,..."`). An ASGI middleware
+   authenticates, maps token → client identity (a contextvar tools read
+   for scope checks and, in C5, provenance), and enforces a per-token
+   sliding-window rate limit (`MCP_RATE_LIMIT_PER_MINUTE`, default 120).
+   No tokens configured = the endpoint answers 403 for everything.
+   Deliberately not OAuth at this product's scale.
+3. **Read scope separation:** every read tool requires the `read` scope;
+   `write` exists in the vocabulary but no write tool is registered until
+   C5.
+4. **Tools v1** (all thin adapters; a pytest asserts the package contains
+   no SQL): `get_server_info`, `list_projects`, `search_story`,
+   `get_story_project_context`, `get_character_dossier`,
+   `get_scene_context`, `get_recent_changes`, `list_open_threads`.
+5. Known limitation, stated in tool docs and result warnings:
+   `search_story` and `list_open_threads` are corpus-wide in v1;
+   project-scoped filtering arrives with C6. DNS-rebinding host validation
+   is disabled on the transport — the deployment story is
+   localhost/Tailscale behind token auth (revisit if that changes).
+
+**Consequences:** AT-020 parity is pytest-verified (tool output equals the
+internal service output). MCP clients configure
+`http://<host>:8000/mcp/` with an `Authorization: Bearer <token>` header.
+Provenance binding for writes (client name from the token) is ready for C5.
+
+---
+
 ## How to add a new ADR
 
 1. Append a new section at the bottom with the next ADR number.

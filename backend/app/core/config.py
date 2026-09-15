@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     embedding_rate_limit_cooldown_seconds: int = 60
     embedding_drain_batch_size: int = 1
 
+    # MCP tool surface (Track C Phase C4, ADR-089).
+    # Comma-separated bearer tokens: "token|Client Name|scopes" with scopes
+    # joined by "+", e.g.
+    #   MCP_TOKENS="s3cret1|ChatGPT|read,s3cret2|Claude Code|read+write"
+    # Empty (the default) disables the /mcp endpoint entirely: every request
+    # is rejected before reaching the transport. Never commit real tokens —
+    # this lives in .env only.
+    mcp_tokens: str = ""
+    # Per-token sliding-window rate limit (calls per minute).
+    mcp_rate_limit_per_minute: int = 120
+
 
 @lru_cache
 def get_settings() -> Settings:

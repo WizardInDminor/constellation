@@ -833,3 +833,26 @@ and `warnings`, and strictly separates **accepted** / **development** /
 between two calls changes the result (pytest-protected). The reserved
 narrative role vocabulary lives in `app/models/narrative.py` (ADR-086);
 `timeline_repo` re-exports it.
+
+---
+
+## 11. MCP tool surface (Track C Phase C4 — ADR-089)
+
+External AI clients reach Constellation through an MCP server mounted
+in-process at `/mcp` (streamable HTTP, stateless + JSON responses), gated by
+static per-client bearer tokens from `.env`:
+
+```
+MCP_TOKENS="s3cret1|ChatGPT|read,s3cret2|Claude Code|read+write"
+```
+
+Layering (pack ADR-003, pytest-enforced): MCP tool → application service /
+context builder → repository. No SQL, no business logic, no independent
+context assembly in `app/mcp/`.
+
+Read tools (scope `read`): `get_server_info`, `list_projects`,
+`search_story`, `get_story_project_context`, `get_character_dossier`,
+`get_scene_context`, `get_recent_changes`, `list_open_threads`. Per-token
+sliding-window rate limit; unauthenticated or unconfigured requests get the
+structured error envelope. Write tools arrive in Phase C5 behind the
+`write` scope.
